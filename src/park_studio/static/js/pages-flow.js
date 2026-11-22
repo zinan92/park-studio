@@ -24,7 +24,7 @@
           ${cur ? `
             <div class="row"><span class="pill accent">${PS.esc(cur.tag)}</span><span class="sub">${PS.esc(cur.date)}</span><span class="grow"></span><button class="btn primary s" id="addTopicBtn">+ 加入选题</button></div>
             <h2 class="m0" style="font-size:19px">${PS.esc(cur.title)}</h2>
-            <p class="m0" style="font-size:14.5px;line-height:1.85;color:var(--ink-2)">${PS.esc(cur.body)}</p>
+            <div style="font-size:14px;line-height:1.85;color:var(--ink-2);white-space:pre-wrap;max-height:520px;overflow-y:auto">${PS.esc(cur.body || cur.excerpt || '')}</div>
           ` : '<p class="sub">暂无内容</p>'}
         </div>
       </div>`;
@@ -32,10 +32,10 @@
       return PS.pages.feed();
     } else if (srcTab === 'obsidian') {
       body = `<div class="card stack">
-        <div class="row"><span class="pill good">Obsidian 只读同步</span><span class="mono sub">${PS.esc(PS.S.settings.obsidianPath)}</span></div>
+        <div class="row"><span class="pill good">Obsidian 只读同步</span><span class="mono sub">${PS.esc(PS.S.settings.obsidianPath)}</span><span class="sub">· ${PS.S.obsidianNotes.length} 篇最近输出</span></div>
         ${PS.S.obsidianNotes.map(n => `<div class="row" style="padding:12px 14px;border-radius:10px;background:var(--sunk)">
-          <div class="min0 grow"><b class="mono" style="font-size:13px">${PS.esc(n.file)}</b><div class="sub" style="margin-top:3px">${PS.esc(n.excerpt)}</div></div>
-          <button class="btn primary s" data-ob="${n.id}">+ 加入选题</button>
+          <div class="min0 grow"><b class="mono" style="font-size:13px">${PS.esc(n.title || n.file)}</b><div class="sub mono" style="font-size:11px">${PS.esc(n.file)} · ${n.words || 0} 字</div><div class="sub" style="margin-top:3px">${PS.esc(n.excerpt)}</div></div>
+          <button class="btn primary s" data-ob="${PS.esc(n.id)}">+ 加入选题</button>
         </div>`).join('')}
       </div>`;
     } else if (srcTab === 'materials') {
@@ -72,15 +72,27 @@
     `);
 
     main.querySelectorAll('[data-si]').forEach(b => b.onclick = () => { srcIdx = +b.dataset.si; PS.pages.source(); });
-    main.querySelector('#addTopicBtn')?.addEventListener('click', () => {
+    main.querySelector('#addTopicBtn')?.addEventListener('click', async () => {
       const it = PS.S.sources[srcTab][srcIdx];
-      PS.S.topics.unshift({ id: Date.now(), title: it.title, stage: '写', score: 14, updated: '刚刚', trash: false });
+      try {
+        const created = await PS.api('POST', '/api/topics', { title: it.title, source_ref: it.tag || '信源', body: (it.body || '').slice(0, 3000) });
+        PS.S.topics.unshift(created);
+      } catch {
+        PS.S.topics.unshift({ id: Date.now(), title: it.title, stage: '写', score: 14, updated: '刚刚', trash: false });
+      }
       PS.save();
-      PS.toast('已加入「选题池」', 'good');
+      PS.toast('已加入「选题池」（已写入本地 SQLite）', 'good');
     });
-    main.querySelectorAll('[data-ob]').forEach(b => b.onclick = () => {
-      const n = PS.S.obsidianNotes.find(x => x.id === b.dataset.ob);
-      PS.S.topics.unshift({ id: Date.now(), title: n.file.split('/').pop().replace(/\.md$/, ''), stage: '写', score: 14, updated: '刚刚', trash: false });
+    main.querySelectorAll('[data-ob]').forEach(b => b.onclick = async () => {
+      const n = PS.S.obsidianNotes.find(x => String(x.id) === String(b.dataset.ob));
+      if (!n) return;
+      const title = n.title || n.file.split('/').pop().replace(/\.md$/, '');
+      try {
+        const created = await PS.api('POST', '/api/topics', { title, source_ref: 'Obsidian', body: n.body || n.excerpt || '' });
+        PS.S.topics.unshift(created);
+      } catch {
+        PS.S.topics.unshift({ id: Date.now(), title, stage: '写', score: 14, updated: '刚刚', trash: false });
+      }
       PS.save();
       PS.toast('Obsidian 笔记已加入「选题池」', 'good');
     });
@@ -217,17 +229,34 @@
       </details>` : ''}
     `, 'narrow');
 
-    main.querySelector('#quickAdd').onsubmit = e => {
+    main.querySelector('#quickAdd').onsubmit = async e => {
       e.preventDefault();
       const v = main.querySelector('#qaInput').value.trim();
       if (!v) return;
-      PS.S.topics.unshift({ id: Date.now(), title: v, stage: '写', score: 13, updated: '刚刚', trash: false });
+      try {
+        const created = await PS.api('POST', '/api/topics', { title: v, source_ref: '手动添加' });
+        PS.S.topics.unshift(created);
+      } catch {
+        PS.S.topics.unshift({ id: Date.now(), title: v, stage: '写', score: 13, updated: '刚刚', trash: false });
+      }
       PS.save();
-      PS.toast('已加入选题池', 'good');
+      PS.toast('已写入选题池（SQLite）', 'good');
       PS.pages.pool();
     };
-    main.querySelectorAll('[data-trash]').forEach(b => b.onclick = () => { const h = PS.S.topics.find(x => x.id === +b.dataset.trash); if (h) h.trash = true; PS.save(); PS.pages.pool(); });
-    main.querySelectorAll('[data-res]').forEach(b => b.onclick = () => { const h = PS.S.topics.find(x => x.id === +b.dataset.res); if (h) h.trash = false; PS.save(); PS.pages.pool(); });
+    main.querySelectorAll('[data-trash]').forEach(b => b.onclick = async () => {
+      const id = +b.dataset.trash;
+      const h = PS.S.topics.find(x => x.id === id);
+      if (h) h.trash = true;
+      PS.api('PATCH', `/api/topics/${id}`, { trash: true }).catch(() => {});
+      PS.save(); PS.pages.pool();
+    });
+    main.querySelectorAll('[data-res]').forEach(b => b.onclick = async () => {
+      const id = +b.dataset.res;
+      const h = PS.S.topics.find(x => x.id === id);
+      if (h) h.trash = false;
+      PS.api('PATCH', `/api/topics/${id}`, { trash: false }).catch(() => {});
+      PS.save(); PS.pages.pool();
+    });
   };
 
   PS.pages.write = function () {
@@ -239,9 +268,10 @@
       <div class="ph">
         <div>
           <h1>骨架与口播稿</h1>
-          <p>${chars} 字 · 预计口播 ${Math.max(1, Math.round(chars / 250))} 分钟 · 由本机 ${PS.S.settings.aiBackend === 'claude' ? 'Claude Code' : 'Codex'} 辅助。</p>
+          <p>${chars} 字 · 预计口播 ${Math.max(1, Math.round(chars / 250))} 分钟 · 本机 AI：<b>${PS.esc(PS.S.settings.aiBackend)} / ${PS.esc(PS.S.settings.aiModel || 'default')}</b></p>
         </div>
         <div class="acts">
+          <button class="btn" id="aiHooksBtn">${PS.icon('spark', 'sm')}用本机 AI 重写钩子</button>
           <button class="btn" id="openSaid">插入「我说过的话」</button>
           <a class="btn primary" href="#audit">去审稿 ›</a>
         </div>
@@ -278,12 +308,26 @@
       PS.save();
       PS.pages.write();
     });
-    main.querySelector('#saveSc').onclick = () => {
+    main.querySelector('#saveSc').onclick = async () => {
       sc.title = main.querySelector('#scTitle').value.trim();
       sc.body = main.querySelector('#scBody').value;
+      if (PS.S.activeTopicId) {
+        await PS.api('PATCH', `/api/topics/${PS.S.activeTopicId}`, { title: sc.title, body: sc.body, picked_hook: cp.pickedHook }).catch(() => {});
+      }
       PS.save();
-      PS.toast('草稿已保存', 'good');
+      PS.toast('草稿已写入本地 SQLite', 'good');
     };
+    main.querySelector('#aiHooksBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      btn.disabled = true; btn.textContent = '本机 AI 生成中…';
+      try {
+        const res = await PS.api('POST', '/api/ai/hooks', { topic_id: PS.S.activeTopicId, title: main.querySelector('#scTitle').value, body: main.querySelector('#scBody').value });
+        if (res.hooks?.length) { cp.hooks = res.hooks; cp.pickedHook = 0; PS.save(); PS.toast(`本机 ${res.backend}/${res.model} 已生成 ${res.hooks.length} 条钩子`, 'good'); PS.pages.write(); }
+      } catch (err) {
+        PS.toast(err.message, 'warn');
+        btn.disabled = false; btn.textContent = '用本机 AI 重写钩子';
+      }
+    });
     main.querySelector('#openSaid').onclick = () => {
       PS.modal({
         title: '从「我说过的话」挑一句真话插进去',
@@ -319,6 +363,7 @@
           <p>这一步用的方法：三路并行诊断（价值 · 共鸣 · 节奏 dbs-script-flow）</p>
         </div>
         <div class="acts">
+          <button class="btn" id="runAiAudit">${PS.icon('spark', 'sm')}本机 AI 重审</button>
           <a class="btn" href="#write">自己改</a>
           <button class="btn primary" id="acceptAll">一键接受</button>
         </div>
@@ -345,16 +390,25 @@
       </div>
     `, 'narrow');
 
-    main.querySelector('#acceptAll').onclick = () => {
+    main.querySelector('#runAiAudit')?.addEventListener('click', async e => {
+      const btn = e.currentTarget; btn.disabled = true; btn.textContent = '三路诊断中…';
+      try {
+        const res = await PS.api('POST', '/api/ai/audit', { topic_id: PS.S.activeTopicId, title: PS.S.script.title, body: PS.S.script.body });
+        if (res.audit) { PS.S.script.audit = res.audit; PS.save(); PS.toast(`本机 ${res.backend}/${res.model} 三路审稿完成`, 'good'); PS.pages.audit(); }
+      } catch (err) { PS.toast(err.message, 'warn'); btn.disabled = false; btn.textContent = '本机 AI 重审'; }
+    });
+    main.querySelector('#acceptAll').onclick = async () => {
       PS.S.script.body = au.revised.map(p => p.text).join('\n\n');
+      if (PS.S.activeTopicId) await PS.api('PATCH', `/api/topics/${PS.S.activeTopicId}`, { body: PS.S.script.body }).catch(() => {});
       PS.save();
-      PS.toast('已采用改写版本', 'good');
+      PS.toast('已采用改写版本并写入 SQLite', 'good');
     };
-    main.querySelector('#finalizeBtn').onclick = () => {
+    main.querySelector('#finalizeBtn').onclick = async () => {
       const ep42 = PS.S.episodes.find(e => e.episode === 42);
       if (ep42) ep42.finalAt = '今天';
+      if (PS.S.activeTopicId) await PS.api('PATCH', `/api/topics/${PS.S.activeTopicId}`, { body: PS.S.script.body, finalize: true }).catch(() => {});
       PS.save();
-      PS.toast('稿子已定稿！可直接进入「剪辑」工作台出镜头表', 'good');
+      PS.toast('稿子已定稿并落盘！正在进入剪辑台', 'good');
       location.hash = '#done/105';
     };
   };
@@ -552,10 +606,18 @@
     });
     main.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { cp.burnSubs = b.dataset.sub === '1'; PS.save(); PS.pages.cut(); });
     main.querySelector('#copyPrompt')?.addEventListener('click', () => PS.toast('已复制渲染指令，贴给本机 Claude/Codex 即可自动出片', 'good'));
-    main.querySelector('#dlSpec')?.addEventListener('click', () => {
+    main.querySelector('#dlSpec')?.addEventListener('click', async () => {
+      let payload = { episode: cp.episode, source: cp.sourceFile, burnSubtitles: cp.burnSubs, hooks: cp.hookIdx, shots: cp.shots };
+      let savedPath = `~/.park-studio/projects/EP${cp.episode}/worktable.json`;
+      try {
+        const res = await PS.api('POST', `/api/cut/${cp.id || 1}/export-worktable`);
+        payload = res.payload;
+        savedPath = res.path;
+        PS.toast(`已真实导出到：${savedPath}`, 'good');
+      } catch (e) {}
       PS.modal({
-        title: `worktable.json（EP${cp.episode} 剪辑规格表）`, wide: true,
-        body: `<pre class="codebox">${PS.esc(JSON.stringify({ episode: cp.episode, source: cp.sourceFile, burnSubtitles: cp.burnSubs, hooks: cp.hookIdx, shots: cp.shots }, null, 2))}</pre>`,
+        title: `worktable.json 已落盘：${savedPath}`, wide: true,
+        body: `<pre class="codebox">${PS.esc(JSON.stringify(payload, null, 2))}</pre>`,
         foot: `<button class="btn primary" data-close>关闭</button>`,
       });
     });

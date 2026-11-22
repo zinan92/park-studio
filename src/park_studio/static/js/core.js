@@ -218,7 +218,7 @@
     return `<aside class="wendy-drawer ${PS.wendyOpen ? 'open' : ''}" id="wendyDrawer">
       <div class="wd-head">
         <span class="wendy-av">W</span>
-        <div class="min0 grow"><b style="font-size:14px">Wendy · 本地助理</b><div class="sub" style="font-size:11.5px">${PS.S.settings.aiBackend === 'claude' ? '本机 Claude Code CLI' : PS.S.settings.aiBackend === 'codex' ? '本机 Codex CLI' : '自定义 API'}</div></div>
+        <div class="min0 grow"><b style="font-size:14px">Wendy · 本地助理</b><div class="sub" style="font-size:11.5px">${PS.S.settings.aiBackend === 'gemini' ? `本机 Gemini CLI (${PS.S.settings.aiModel || 'default'})` : PS.S.settings.aiBackend === 'claude' ? '本机 Claude Code CLI' : PS.S.settings.aiBackend === 'codex' ? '本机 Codex CLI' : '自定义 API'}</div></div>
         <button class="btn ghost icon" id="wdClose">${PS.icon('x')}</button>
       </div>
       <div class="wd-msgs" id="wdMsgs">${msgs}</div>
@@ -244,13 +244,22 @@
       document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
       bindWendy();
     });
-    document.getElementById('wdForm')?.addEventListener('submit', e => {
+    document.getElementById('wdForm')?.addEventListener('submit', async e => {
       e.preventDefault();
       const inp = document.getElementById('wdInput');
       const v = inp.value.trim();
       if (!v) return;
       inp.value = '';
-      PS.S.wendyMsgs.push({ role: 'me', text: v }, { role: 'ai', text: `好的，已记录你的指令「${v}」，当前可通过顶部四格工作台随时切换执行。` });
+      PS.S.wendyMsgs.push({ role: 'me', text: v });
+      PS.S.wendyMsgs.push({ role: 'ai', text: `正在调用本机 ${PS.S.settings.aiBackend} (${PS.S.settings.aiModel || '默认'}) 思考中…` });
+      document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
+      bindWendy();
+      try {
+        const res = await PS.api('POST', '/api/ai/wendy', { prompt: v });
+        PS.S.wendyMsgs[PS.S.wendyMsgs.length - 1] = { role: 'ai', text: `${res.reply}\n\n_(来自本机 ${res.backend}/${res.model})_` };
+      } catch (err) {
+        PS.S.wendyMsgs[PS.S.wendyMsgs.length - 1] = { role: 'ai', text: `调用本机 AI 失败：${err.message}` };
+      }
       PS.save();
       document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
       bindWendy();
@@ -395,9 +404,67 @@
     fn(sub);
     window.scrollTo(0, 0);
   };
-  PS.boot = function () {
+  PS.api = async function (method, url, body) {
+    const opts = { method, headers: {} };
+    if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+    const res = await fetch(url, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `请求失败 (${res.status})`);
+    return data;
+  };
+
+  PS.syncFromBackend = async function () {
+    try {
+      const b = await PS.api('GET', '/api/bootstrap');
+      PS.backendOnline = true;
+      PS.S.vaultStatus = b.vaultStatus;
+      PS.S.agents = b.agents;
+      if (b.config) {
+        PS.S.settings = { ...PS.S.settings, ...b.config, modules: { ...PS.S.settings.modules, ...(b.config.modules || {}) } };
+        PS.S.daemon.chromePort = b.config.chromePort || 9333;
+        PS.S.daemon.feishuEnabled = !!b.config.feishuEnabled;
+        PS.S.daemon.feishuWebhook = b.config.feishuWebhook || '';
+        PS.S.daemon.wechatIlinkEnabled = !!b.config.wechatIlinkEnabled;
+      }
+      if (b.vault) {
+        if (b.vault.newsletter?.length) PS.S.sources.newsletter = b.vault.newsletter;
+        if (b.vault.saved?.length) PS.S.sources.saved = b.vault.saved;
+        if (b.vault.writing?.length) PS.S.obsidianNotes = b.vault.writing;
+        if (b.vault.kline?.length) PS.S.sources.klineNotes = b.vault.kline;
+      }
+      if (b.topics?.length) {
+        PS.S.topics = b.topics;
+        const activeTopic = b.topics.find(t => !t.trash && !t.final_at) || b.topics[0];
+        if (activeTopic) {
+          PS.S.activeTopicId = activeTopic.id;
+          PS.S.script.id = activeTopic.id;
+          PS.S.script.title = activeTopic.title;
+          if (activeTopic.body) PS.S.script.body = activeTopic.body;
+          if (activeTopic.audit?.revised) PS.S.script.audit = activeTopic.audit;
+        }
+      }
+      if (b.cutProject) {
+        PS.S.cutProject = { ...PS.S.cutProject, ...b.cutProject };
+        if (b.topics?.length && b.topics[0].hooks?.length) {
+          PS.S.cutProject.hooks = b.topics[0].hooks;
+          PS.S.cutProject.pickedHook = b.topics[0].picked_hook || 0;
+        }
+      }
+      if (b.said) PS.S.said = b.said;
+      if (b.tree?.length) PS.S.tree = b.tree;
+      if (b.clients) PS.S.clients = b.clients;
+      if (b.daemonLogs?.length) PS.S.daemonLogs = b.daemonLogs;
+      if (b.positioning && Object.keys(b.positioning).length) PS.S.positioning = b.positioning;
+      PS.save();
+    } catch (e) {
+      PS.backendOnline = false;
+    }
+  };
+
+  PS.boot = async function () {
     window.addEventListener('hashchange', PS.route);
     if (!location.hash) location.hash = '#home';
+    await PS.syncFromBackend();
     PS.route();
   };
 })();

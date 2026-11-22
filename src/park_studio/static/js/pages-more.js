@@ -38,8 +38,8 @@
         </div>
         <div class="stile">
           <div class="lab">本地目录 / Obsidian</div>
-          <div class="val ok">已挂载</div>
-          <div class="dl mono">${PS.esc(s.obsidianPath)}</div>
+          <div class="val ${PS.S.vaultStatus?.mounted === false ? 'warn' : 'ok'}">${PS.S.vaultStatus?.mounted === false ? '未找到' : '已挂载'}</div>
+          <div class="dl mono">${PS.esc(s.obsidianPath)}${PS.S.vaultStatus?.counts ? ` · ${Object.values(PS.S.vaultStatus.counts).reduce((a, b) => a + b, 0)} 篇` : ''}</div>
         </div>
         <div class="stile">
           <div class="lab">专用浏览器</div>
@@ -138,21 +138,23 @@
         <div class="card stack">
           <div class="card-h">
             <h3>本地 AI（零 API 费）与目录</h3>
-            <span class="pill good">本机运行</span>
+            <span class="pill good">${PS.S.agents?.[s.aiBackend]?.installed ? '✓ CLI 已就绪' : '本机运行'}</span>
           </div>
           <div>
             <label class="sub" style="display:block;margin-bottom:6px">Coding Agent 引擎</label>
             <div class="seg">
-              <button class="${s.aiBackend === 'claude' ? 'on' : ''}" data-aib="claude">Claude Code CLI</button>
-              <button class="${s.aiBackend === 'codex' ? 'on' : ''}" data-aib="codex">Codex CLI</button>
+              <button class="${s.aiBackend === 'gemini' ? 'on' : ''}" data-aib="gemini">Gemini CLI${PS.S.agents?.gemini?.installed ? ' ✓' : ''}</button>
+              <button class="${s.aiBackend === 'claude' ? 'on' : ''}" data-aib="claude">Claude Code${PS.S.agents?.claude?.installed ? ' ✓' : ''}</button>
+              <button class="${s.aiBackend === 'codex' ? 'on' : ''}" data-aib="codex">Codex${PS.S.agents?.codex?.installed ? ' ✓' : ''}</button>
               <button class="${s.aiBackend === 'api' ? 'on' : ''}" data-aib="api">可选 API</button>
             </div>
           </div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">模型名称（默认 neon；若 CLI 未识别会自动回退默认模型）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || 'neon')}" placeholder="neon / gemini-2.5-pro / 留空走默认"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 笔记库路径（只读）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">本地语音转写</label>
             <select id="trEng"><option value="mlx-whisper" ${s.transcribeEngine === 'mlx-whisper' ? 'selected' : ''}>mlx-whisper（Apple Silicon 极速本机）</option><option value="faster-whisper" ${s.transcribeEngine === 'faster-whisper' ? 'selected' : ''}>faster-whisper（macOS / Windows 通用）</option></select>
           </div>
-          <div><button class="btn s primary" id="saveAiCfg">保存本地配置</button></div>
+          <div><button class="btn s primary" id="saveAiCfg">保存并重新扫描 Obsidian</button></div>
         </div>
 
         <div class="card stack">
@@ -279,8 +281,24 @@
     main.querySelector('#stTest')?.addEventListener('click', () => PS.toast(`已连上 ${s.siteName}：接口 200 OK`, 'good'));
     main.querySelector('#stSave')?.addEventListener('click', () => { s.siteName = main.querySelector('#stName').value.trim(); s.siteUrl = main.querySelector('#stUrl').value.trim(); PS.save(); PS.toast('站点配置已保存并立即生效', 'good'); });
 
-    main.querySelectorAll('[data-aib]').forEach(b => b.onclick = () => { s.aiBackend = b.dataset.aib; PS.save(); PS.pages.settings(); });
-    main.querySelector('#saveAiCfg').onclick = () => { s.obsidianPath = main.querySelector('#obPath').value.trim(); s.transcribeEngine = main.querySelector('#trEng').value; PS.save(); PS.toast('本地 AI 与目录配置已保存', 'good'); };
+    main.querySelectorAll('[data-aib]').forEach(b => b.onclick = async () => {
+      s.aiBackend = b.dataset.aib;
+      await PS.api('PUT', '/api/settings', { aiBackend: s.aiBackend }).catch(() => {});
+      PS.save(); PS.pages.settings();
+    });
+    main.querySelector('#saveAiCfg').onclick = async () => {
+      s.aiModel = main.querySelector('#aiModelIn').value.trim();
+      s.obsidianPath = main.querySelector('#obPath').value.trim();
+      s.transcribeEngine = main.querySelector('#trEng').value;
+      try {
+        await PS.api('PUT', '/api/settings', { aiBackend: s.aiBackend, aiModel: s.aiModel, obsidianPath: s.obsidianPath, transcribeEngine: s.transcribeEngine });
+        await PS.syncFromBackend();
+        PS.toast('配置已写入 ~/.park-studio/config.yaml 并重新扫描 Obsidian ✓', 'good');
+      } catch {
+        PS.toast('本地配置已保存', 'good');
+      }
+      PS.save(); PS.pages.settings();
+    };
 
     main.querySelector('#swShared').onclick = () => { s.sharedBenchmarkOptIn = !s.sharedBenchmarkOptIn; PS.save(); PS.toast(s.sharedBenchmarkOptIn ? '已加入社区共享对标库（仅同步公开元数据）' : '已暂停贡献，仅保留本地对标'); PS.pages.settings(); };
     main.querySelector('#swTel').onclick = () => { s.telemetryOptIn = !s.telemetryOptIn; PS.save(); PS.pages.settings(); };
