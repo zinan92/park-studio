@@ -1,0 +1,161 @@
+/* Park Studio 设计系统 — 延续 Topic Studio 管理员版经典视觉（深色左栏 + 冷灰底 + 白卡片 + 焦橙强调色），融合运营大屏色板 */
+:root {
+  --ground: #ECEEF1;
+  --surface: #FFFFFF;
+  --sunk: #F4F5F7;
+  --hover: rgba(18, 21, 25, .045);
+  --press: rgba(18, 21, 25, .085);
+  --line: #D8DCE2;
+  --line-soft: #E6E8EC;
+
+  --ink: #121519;
+  --ink-2: #4A515B;
+  --ink-3: #68717E;
+  --on-accent: #FFFFFF;
+
+  --accent: #C2480A;
+  --accent-hover: #A93E08;
+  --accent-soft: #FCE9DC;
+  --accent-line: #F3C9AE;
+
+  --good: #0B7F57;
+  --good-soft: #DDF1E8;
+  --hot: #B7770A;
+  --hot-soft: #FBEFD6;
+  --warn: #C42B47;
+  --warn-soft: #FBE4E8;
+  --info: #2D52D1;
+  --info-soft: #E3E8FB;
+  --pub: #6B4BD6;
+  --pub-soft: #EBE6FA;
+  --pack: #0E7C94;
+  --pack-soft: #DDF0F4;
+  --idle: #6B7280;
+  --idle-soft: #EDEFF2;
+
+  /* 平台品牌色 */
+  --p-douyin: #16181D;
+  --p-xhs: #E1253B;
+  --p-bilibili: #00A1D6;
+  --p-channels: #FA9D3B;
+  --p-youtube: #E52D27;
+  --p-x: #2F3640;
+  --p-wechat: #07C160;
+  --p-site: #6B4BD6;
+
+  /* 左侧栏：深浅模式始终深黑 */
+  --rail: #101317;
+  --rail-2: #1A1E24;
+  --rail-3: #222831;
+  --rail-ink: #E9ECF0;
+  --rail-dim: #7D8590;
+  --rail-mute: #9AA2AD;
+  --rail-line: #2A3038;
+  --rail-hot: #FF8B45;
+  --rail-live: #3CC690;
+  --brand-ink: #57534B;
+  --brand-hi: #F4F1EA;
+  --brand-dot: #E2461F;
+
+  /* 导演工作台 / 深色模块 */
+  --studio-bg: #16130F;
+  --studio-panel: #221E19;
+  --studio-line: #3A342C;
+  --studio-ink: #F2ECE3;
+  --studio-gold: #D4A45A;
+
+  --shadow-1: 0 1px 2px rgba(18, 21, 25, .05);
+  --shadow-2: 0 1px 2px rgba(18, 21, 25, .05), 0 10px 28px rgba(18, 21, 25, .07);
+  --shadow-3: 0 24px 64px rgba(18, 21, 25, .24);
+  --lift: 0 1px 2px rgba(18, 21, 25, .06), 0 22px 44px -22px rgba(18, 21, 25, .26);
+  --scrim: rgba(18, 21, 25, .36);
+
+  --sans: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --serif: "Noto Serif SC", "Songti SC", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --ease: cubic-bezier(.2, 0, .2, 1);
+  --ease-in: cubic-bezier(0, 0, .35, 1);
+  --fast: 110ms;
+  --mid: 180ms;
+  --side: 244px;
+}
+
+:root[data-theme="dark"] {
+  --ground: #0C0E11;
+  --surface: #15181D;
+  --sunk: #111418;
+  --hover: rgba(255, 255, 255, .05);
+  --press: rgba(255, 255, 255, .09);
+  --line: #262B33;
+  --line-soft: #1E2229;
+
+  --ink: #E7EAEE;
+  --ink-2: #A6ADB7;
+  --ink-3: #8892A0;
+  --on-accent: #0C0E11;
+
+  --accent: #FF8B45;
+  --accent-hover: #FFA066;
+  --accent-soft: #3A2314;
+  --accent-line: #6A3A1C;
+
+  --good: #3CC690;
+  --good-soft: #12301F;
+  --hot: #F0B540;
+  --hot-soft: #3A2C0F;
+  --warn: #F2788C;
+  --warn-soft: #3A1820;
+  --info: #8197F7;
+  --info-soft: #1C2340;
+  --pub: #B39BFF;
+  --pub-soft: #2A2250;
+  --pack: #4CC7E0;
+  --pack-soft: #10303A;
+  --idle: #9AA1AC;
+  --idle-soft: #22262D;
+
+  --p-douyin: #E7EAEE;
+  --p-x: #B9C1CC;
+
+  --rail: #08090B;
+  --rail-2: #14171B;
+  --rail-3: #1C2026;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, .6);
+  --lift: 0 1px 2px rgba(0, 0, 0, .4), 0 24px 48px -24px rgba(0, 0, 0, .7);
+  --scrim: rgba(0, 0, 0, .58);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 14px/1.6 var(--sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.lg { width: 20px; height: 20px; }
+svg.i.sm { width: 13px; height: 13px; }
+.m0 { margin: 0; }
+.min0 { min-width: 0; }
+.grow { flex: 1; }
+.sub { color: var(--ink-3); font-size: 13px; }
+.mono { font-family: var(--mono); }
+.clip1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.stack.tight { gap: 6px; }
+.rel { position: relative; }
