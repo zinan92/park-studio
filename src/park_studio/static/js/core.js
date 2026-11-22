@@ -11,11 +11,21 @@
   PS.pct = (a, b, d = 1) => b ? `${((a / b) * 100).toFixed(d)}%` : '–';
 
   PS.loadState = function () {
+    const def = PS.defaultState();
     try {
       const raw = localStorage.getItem(STORE_KEY);
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          ...def,
+          ...parsed,
+          settings: { ...def.settings, ...(parsed.settings || {}), modules: { ...def.settings.modules, ...(parsed.settings?.modules || {}) } },
+          daemon: { ...def.daemon, ...(parsed.daemon || {}) },
+          releases: parsed.releases || def.releases,
+        };
+      }
     } catch (e) {}
-    return PS.defaultState();
+    return def;
   };
   PS.S = PS.loadState();
   PS.save = function () {
@@ -150,7 +160,8 @@
       { label: '咨询客户 CRM', kind: '资产', hash: '#clients' },
       { label: '个人网站', kind: '资产', hash: '#site' },
       { label: '我的定位', kind: '定位', hash: '#position' },
-      { label: '设置 · 专用 Chrome / 本地 AI / 飞书微信', kind: '系统', hash: '#settings' },
+      { label: '系统 · 守护进程 / 7 平台体检 / 集成与共享对标库', kind: '系统', hash: '#settings' },
+      { label: '上新 · 版本更新与开源动态', kind: '系统', hash: '#releases' },
     ];
     const bg = document.createElement('div');
     bg.className = 'modal-bg';
@@ -286,12 +297,12 @@
           </nav>
 
           <div class="rail-foot" id="railFoot">
-            <a class="rail-daemon" href="#settings/platforms">
+            <a class="rail-daemon" href="#settings">
               <span class="dot ${PS.S.daemon.running ? 'live' : 'bad'}"></span>
-              <span>本地中控 · ${onlineN}/${activeN} 平台在线</span>
+              <span>系统 · ${onlineN}/${activeN} 平台在线</span>
             </a>
             <div class="rail-foot-row">
-              <button type="button" class="rail-set-btn" id="setPopBtn"><span>设置与更多</span>${PS.icon('right', 'sm')}</button>
+              <button type="button" class="rail-set-btn" id="setPopBtn"><span>系统与更多</span>${PS.icon('right', 'sm')}</button>
               <button type="button" class="theme-btn" id="themeBtn" title="切换深浅色">◐</button>
             </div>
           </div>
@@ -337,6 +348,10 @@
       if (foot.querySelector('.rail-pop')) return foot.querySelector('.rail-pop').remove();
       const m = PS.S.settings.modules;
       foot.insertAdjacentHTML('beforeend', `<div class="rail-pop" role="menu">
+        <div class="rp-lbl">系统与开源社区</div>
+        <a href="#settings">${PS.icon('sliders', 'sm')}系统（守护进程 · 平台 · 集成）</a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.1.2</span></a>
+        <div class="rp-sep"></div>
         <div class="rp-lbl">更多开源模块</div>
         ${m.tree ? `<a href="#tree">${PS.icon('tree', 'sm')}知识树与内化</a>` : ''}
         <a href="#said">${PS.icon('mic', 'sm')}我说过的话</a>
@@ -345,9 +360,6 @@
         ${m.clients ? `<a href="#clients">${PS.icon('users', 'sm')}咨询客户 CRM</a>` : ''}
         ${m.site ? `<a href="#site">${PS.icon('globe', 'sm')}个人网站</a>` : ''}
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
-        <div class="rp-sep"></div>
-        <a href="#settings/platforms">${PS.icon('chrome', 'sm')}专用 Chrome & 7 平台</a>
-        <a href="#settings/ai">${PS.icon('sliders', 'sm')}设置（本地 AI / 飞书）</a>
       </div>`);
     };
 

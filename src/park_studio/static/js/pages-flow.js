@@ -87,7 +87,10 @@
   };
 
   // ==================== 选题 · 爆款榜（#feed） & 拆解报告（#chai） ====================
+  let feedScope = 'shared'; // shared | mine
+
   PS.pages.feed = function () {
+    const sharedOn = PS.S.settings.sharedBenchmarkOptIn;
     const main = PS.shell('feed', [['选题工作台', '#source'], ['对标爆款榜', '#feed']], `
       <div class="ph">
         <div>
@@ -96,12 +99,19 @@
         </div>
         <div class="acts">
           <div class="seg">
-            <button class="on">爆款榜</button>
+            <button class="${feedScope === 'shared' ? 'on' : ''}" id="fsShared">共享对标库（${PS.S.settings.sharedBenchmarkCount} 号）</button>
+            <button class="${feedScope === 'mine' ? 'on' : ''}" id="fsMine">我盯的号</button>
             <button onclick="location.hash='#chai'">拆过的（${PS.S.reports.length}）</button>
           </div>
           <a class="btn" href="#source">回日报</a>
         </div>
       </div>
+
+      ${feedScope === 'shared' ? `<div class="card row" style="padding:11px 16px;background:color-mix(in srgb,var(--accent-soft) 35%,var(--surface))">
+        <span class="pill ${sharedOn ? 'good' : 'wait'}">${sharedOn ? '已加入社区共享池' : '未开启贡献'}</span>
+        <span class="sub grow">由 Park 社区用户用各自本机流量自愿共享的<b>公开爆款元数据</b>（绝不上传 Cookie 或私密数据）· 你的本机已贡献 ${PS.S.settings.sharedContributed} 条</span>
+        <a class="link-muted" href="#settings">去系统页管理开关 ›</a>
+      </div>` : ''}
 
       <div class="stack">
         ${PS.S.feed.map(f => `<div class="feed-card">
@@ -119,6 +129,8 @@
       </div>
     `, 'mid');
 
+    main.querySelector('#fsShared')?.addEventListener('click', () => { feedScope = 'shared'; PS.pages.feed(); });
+    main.querySelector('#fsMine')?.addEventListener('click', () => { feedScope = 'mine'; PS.pages.feed(); });
     main.querySelectorAll('[data-tear]').forEach(b => b.onclick = () => {
       PS.toast('本机 Coding Agent 已拆解完成', 'good');
       location.hash = '#chai';
