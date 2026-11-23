@@ -40,7 +40,7 @@ SITES = (
     ("bilibili.com", "B 站"),
 )
 
-# 缓存每一天 ~/park-io/_inbox/processed/<YY-MM-DD> 的 url_key -> Path 索引
+# 缓存每一天 newsletterItemsPath/<YY-MM-DD> 的 url_key -> Path 索引
 _ORIG_CACHE: dict[tuple[str, float], dict[str, Path]] = {}
 
 

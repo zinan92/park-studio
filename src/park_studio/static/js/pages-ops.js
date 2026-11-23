@@ -345,44 +345,47 @@
 
   PS.pages['pub-sent'] = function () {
     const active = PS.activePlats();
+    const realEps = PS.S.analytics?.episodes || [];
     let body = '';
 
-    if (sentView === 'matrix') {
+    if (!realEps.length) {
+      body = `<div class="card stack">
+        <b>暂无已发作品记录</b>
+        <p class="sub m0">点击中控大屏右上角「立即采数」或复盘页「立即采流量」，专用 Chrome 会自动从各平台拉取你已发布的全部作品并生成全平台矩阵。</p>
+      </div>`;
+    } else if (sentView === 'matrix') {
       body = `
         <div class="row sub" style="font-size:12.5px">
-          <span>每条内容 × 每个平台 1 格：</span>
-          <span><b style="color:var(--good)">✓</b> 已发并取链（悬停看播放）</span>
-          <span><b style="color:var(--hot)">!</b> 填好等你点发</span>
-          <span><b style="color:var(--info)">◷</b> 已定时</span>
-          <span>○ 未发</span>
+          <span>每条内容 × 每个平台 1 格（共 ${realEps.length} 期真实已发作品）：</span>
+          <span><b style="color:var(--good)">✓</b> 已发布并采回数据（点击直达原链接）</span>
+          <span>○ 暂未采到</span>
         </div>
         <section class="card pad-0">
           <div class="tbl-wrap"><table class="tbl">
-            <thead><tr><th>作品</th>${active.map(pid => `<th style="text-align:center">${PS.PLATFORMS[pid].name}</th>`).join('')}</tr></thead>
+            <thead><tr><th>作品</th>${active.map(pid => `<th style="text-align:center">${PS.PLATFORMS[pid].name}</th>`).join('')}<th class="n">合计播放</th></tr></thead>
             <tbody>
-              ${PS.S.episodes.map(e => `<tr>
-                <td><b>EP${e.episode} · ${PS.esc(e.nick)}</b><div class="sub" style="font-size:11.5px">${PS.esc((e.schedule || '').slice(0, 10))}</div></td>
+              ${realEps.map(e => `<tr>
+                <td><b>${PS.esc(e.title)}</b><div class="sub" style="font-size:11.5px">${PS.esc(e.published_at || '日期未标')} · 已归并 ${e.platformCount} 平台</div></td>
                 ${active.map(pid => {
-                  const t = e.tasks[pid];
-                  if (t?.state === 'published') return `<td style="text-align:center"><span class="sym ok" data-tip="${PS.PLATFORMS[pid].name} · 播放 ${PS.fmt(t.m?.views)}">✓</span></td>`;
-                  if (t?.state === 'awaiting_user') return `<td style="text-align:center"><a class="sym wait" href="#pub-confirm" data-tip="已填好，等你点发">!</a></td>`;
-                  if (t?.state === 'scheduled') return `<td style="text-align:center"><span class="sym sch" data-tip="已定时">◷</span></td>`;
+                  const pw = e.platforms?.[pid];
+                  if (pw) return `<td style="text-align:center"><a class="sym ok" href="${PS.esc(pw.url || '#')}" target="_blank" rel="noopener" data-tip="${PS.PLATFORMS[pid].name} · 播放 ${PS.fmt(pw.views)} · 赞 ${PS.fmt(pw.likes)}">✓</a></td>`;
                   return `<td style="text-align:center"><span class="sym none">○</span></td>`;
                 }).join('')}
+                <td class="n"><b>${PS.fmt(e.views)}</b></td>
               </tr>`).join('')}
             </tbody>
           </table></div>
         </section>`;
     } else {
       const cells = [];
-      for (let off = -5; off <= 8; off++) {
+      for (let off = -13; off <= 0; off++) {
         const dt = new Date(Date.now() + off * 864e5);
         const pad = n => String(n).padStart(2, '0');
         const ds = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
-        const hits = PS.S.episodes.filter(e => (e.schedule || '').slice(0, 10) === ds);
+        const hits = realEps.filter(e => (e.published_at || '').slice(0, 10) === ds);
         cells.push(`<div class="cal-day ${off === 0 ? 'today' : ''}">
           <div class="row" style="justify-content:space-between;font-size:12px"><b class="mono">${ds.slice(5)}</b><span class="sub">${off === 0 ? '今天' : ''}</span></div>
-          ${hits.map(e => `<div class="cal-ep ${Object.values(e.tasks).some(x => x.state === 'awaiting_user') ? 'wait' : 'pub'}" onclick="location.hash='#pub-confirm'"><b>EP${e.episode} ${PS.esc(e.nick)}</b></div>`).join('')}
+          ${hits.map(e => `<div class="cal-ep pub" onclick="location.hash='#review'"><b>${PS.esc(e.nick)}</b><div class="sub" style="font-size:10.5px">${PS.kfmt(e.views)} 播放</div></div>`).join('')}
         </div>`);
       }
       body = `<div class="cal-grid">${cells.join('')}</div>`;
@@ -390,11 +393,11 @@
 
     const main = PS.shell('pub-sent', [['发布工作台', '#pub-confirm'], ['已发 · 矩阵与日历', '#pub-sent']], `
       <div class="ph">
-        <div><h1>已发 · 全平台矩阵</h1><p>所有期次在 7 个平台的发布与链接回填状态。</p></div>
+        <div><h1>已发 · 全平台矩阵</h1><p>100% 真实已发作品在 ${active.length} 个平台的归并与播放总览。</p></div>
         <div class="acts">
           <div class="seg">
             <button class="${sentView === 'matrix' ? 'on' : ''}" id="vMat">矩阵表</button>
-            <button class="${sentView === 'cal' ? 'on' : ''}" id="vCal">14 天分发日历</button>
+            <button class="${sentView === 'cal' ? 'on' : ''}" id="vCal">近 14 天日历</button>
           </div>
         </div>
       </div>

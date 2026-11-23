@@ -451,7 +451,9 @@ async def fill_platform(
         if has_video and video_file is not None and pid != "wechat":
             uploaded = False
             sels = ("input[type=file]",) if pid == "youtube" else (
+                "input.upload-input",
                 "input[type=file][accept*='video']",
+                "input[type=file][accept*='.mp4']",
                 "input[data-testid=fileInput]",
                 "input[type=file]",
             )
@@ -495,12 +497,23 @@ async def fill_platform(
                 if has_video:
                     if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:20], wait_s=14.0):
                         filled_notes.append("已填小红书标题")
-                    if await _focus_and_insert(client, sid, "#post-textarea, [contenteditable=true]", full_body[:600], wait_s=6.0):
+                    if await _focus_and_insert(client, sid, ".tiptap.ProseMirror, .ProseMirror, #post-textarea, [contenteditable=true]", full_body[:600], wait_s=6.0):
                         filled_notes.append("已填正文与标签")
             elif pid == "bilibili":
                 if has_video:
                     if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:80], wait_s=14.0):
                         filled_notes.append("已填 B 站标题")
+                    # 关闭 B 站首次弹出的「开启通知 → 知道了」引导弹窗
+                    await client.evaluate(
+                        sid,
+                        """(() => {
+                          for (const btn of document.querySelectorAll('button, .bcc-button, [role=button]')) {
+                            const tx = (btn.innerText || '').trim();
+                            if (tx === '知道了' || tx === '我知道了') { btn.click(); break; }
+                          }
+                        })()""",
+                    )
+                    await asyncio.sleep(0.3)
             elif pid == "channels":
                 if has_video:
                     if await _focus_and_insert(client, sid, "[contenteditable=true]", full_body[:500], wait_s=12.0):

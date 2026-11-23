@@ -107,7 +107,7 @@ def _resolve_pete_image(raw_path: str, pics_root: Path) -> Path | None:
         return None
     cand = Path(raw_path).expanduser()
     if not cand.is_file():
-        # 兼容 ~/park-io/011_pete/图/... 与 vault/011_pete/图/... 的不同前缀
+        # 兼容外部归档目录 011_pete/图/... 与 vault/011_pete/图/... 的不同前缀
         m = re.search(r"011_pete/图/(.+)$", raw_path)
         if m:
             cand = pics_root / m.group(1)

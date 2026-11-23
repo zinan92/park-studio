@@ -8,7 +8,7 @@ from typing import Any
 import yaml
 
 DEFAULT_CONFIG: dict[str, Any] = {
-    "owner": "Park",
+    "owner": "Creator",
     "aiBackend": "gemini",          # gemini | claude | codex | api
     "aiModel": "neon",              # Gemini CLI 默认模型（留空则走 CLI 默认）
     "apiBaseUrl": "https://api.deepseek.com/v1",
@@ -37,22 +37,22 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "feishuWebhook": "",
     "feishuLogin": False,
     "wechatIlinkEnabled": False,
-    "siteEnabled": True,
-    "siteName": "Park 知识站",
-    "siteUrl": "https://xuanti.park-ai-intel.com",
+    "siteEnabled": False,
+    "siteName": "",
+    "siteUrl": "",
     "siteAdminPath": "/admin",
     "siteDashApi": "/api/admin/dashboard",
     "communityKey": "",
-    "sharedBenchmarkOptIn": True,
+    "sharedBenchmarkOptIn": False,
     "telemetryOptIn": False,
     "learnLinks": True,
     "modules": {
         "source": True,
-        "tree": True,
-        "clients": True,
-        "site": True,
-        "kline": True,
-        "conversion": True,
+        "tree": False,
+        "clients": False,
+        "site": False,
+        "kline": False,
+        "conversion": False,
     },
 }
 
