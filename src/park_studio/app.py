@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, cdp, config, daemon, dailies, db, metrics, platforms, projects, publisher, studiopos, vault
+from . import ai, benchmarks, cdp, config, daemon, dailies, db, materials, metrics, platforms, projects, publisher, studiopos, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -111,6 +111,23 @@ class StudioPosEditReq(BaseModel):
 
 class StudioPosAppliedReq(BaseModel):
     key: str
+
+
+class BenchmarkAccountReq(BaseModel):
+    name: str
+    platform: str = "douyin"
+    url: str
+
+
+class BenchmarkTeardownReq(BaseModel):
+    title: str
+    author: str = ""
+    url: str = ""
+    transcript: str = ""
+
+
+class KbFoldersReq(BaseModel):
+    enabled: list[str]
 
 
 def _row_topic(r) -> dict[str, Any]:
@@ -229,6 +246,9 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "daemonLogs": logs,
             "positioning": positioning,
             "studioPositioning": studiopos.load_studio_positioning(conn, cfg),
+            "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg, limit=80),
+            "kb": vault.list_kb_folders(cfg),
+            "materials": materials.get_materials(kind="image", limit=24, cfg=cfg),
         }
 
     # ---------- AI 日报按期/按条解析（对齐 xuanti 工作台） ----------
@@ -272,6 +292,92 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         if pics_root not in target.parents or not target.is_file():
             raise HTTPException(404, "找不到配图")
         return FileResponse(target)
+
+    # ---------- 对标爆款库（002_对标内容 + 追踪账号 CDP 抓取 + 本地 Agent 拆解） ----------
+    @app.get("/api/benchmarks")
+    def api_list_benchmarks(author: str = "", sort: str = "multiple", limit: int = 120) -> dict[str, Any]:
+        cfg = config.load_config()
+        return benchmarks.list_benchmarks(conn, cfg=cfg, author=author, sort=sort, limit=limit)
+
+    @app.get("/api/benchmarks/detail")
+    def api_benchmark_detail(id: str) -> dict[str, Any]:
+        cfg = config.load_config()
+        item = benchmarks.get_benchmark_detail(conn, id, cfg=cfg)
+        if item is None:
+            raise HTTPException(404, "找不到该对标作品")
+        return item
+
+    @app.post("/api/benchmarks/accounts")
+    def api_add_benchmark_account(req: BenchmarkAccountReq) -> dict[str, Any]:
+        if not req.name.strip() or not req.url.strip():
+            raise HTTPException(400, "账号名和主页链接不能为空")
+        acc = benchmarks.add_benchmark_account(conn, req.name, req.platform, req.url)
+        cfg = config.load_config()
+        return {"ok": True, "account": acc, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg)}
+
+    @app.delete("/api/benchmarks/accounts/{acc_id}")
+    def api_del_benchmark_account(acc_id: int) -> dict[str, Any]:
+        benchmarks.delete_benchmark_account(conn, acc_id)
+        cfg = config.load_config()
+        return {"ok": True, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg)}
+
+    @app.post("/api/benchmarks/accounts/{acc_id}/fetch")
+    async def api_fetch_benchmark_account(acc_id: int) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await benchmarks.fetch_account_works_cdp(conn, acc_id, cfg=cfg)
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**res, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/benchmarks/teardown")
+    def api_teardown_benchmark(req: BenchmarkTeardownReq) -> dict[str, Any]:
+        if not req.title.strip():
+            raise HTTPException(400, "标题不能为空")
+        cfg = config.load_config()
+        try:
+            res = benchmarks.ai_teardown_benchmark(
+                conn,
+                title=req.title,
+                author=req.author,
+                url=req.url,
+                transcript=req.transcript,
+                positioning_text=_positioning_text(),
+            )
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {**res, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg)}
+
+    # ---------- 视觉素材库（三大类：图片 / 视频动效 / 做视频） ----------
+    @app.get("/api/materials")
+    def api_materials(kind: str = "image", cat: str = "", q: str = "", limit: int = 60) -> dict[str, Any]:
+        cfg = config.load_config()
+        return materials.get_materials(kind=kind, cat=cat, q=q, limit=limit, cfg=cfg)
+
+    @app.get("/api/materials/asset")
+    def api_material_asset(folder: str, file: str) -> FileResponse:
+        cfg = config.load_config()
+        target = materials.resolve_asset(folder, file, cfg=cfg)
+        if target is None:
+            raise HTTPException(404, "素材预览不存在")
+        return FileResponse(target)
+
+    # ---------- Obsidian 知识库文件夹总览与检索（替代零散「说过的话」） ----------
+    @app.get("/api/kb/folders")
+    def api_kb_folders() -> dict[str, Any]:
+        cfg = config.load_config()
+        return vault.list_kb_folders(cfg)
+
+    @app.get("/api/kb/notes")
+    def api_kb_notes(folder: str = "", q: str = "", limit: int = 50) -> dict[str, Any]:
+        cfg = config.load_config()
+        return vault.scan_kb_folder(folder, q=q, limit=limit, cfg=cfg)
+
+    @app.put("/api/kb/folders")
+    def api_kb_toggle_folders(req: KbFoldersReq) -> dict[str, Any]:
+        cfg = config.save_config({"kbEnabledFolders": req.enabled})
+        db.log_event(conn, "知识库", "Obsidian", "更新接入文件夹", f"已启用 {len(req.enabled)} 个文件夹")
+        return {"ok": True, "kb": vault.list_kb_folders(cfg)}
 
     @app.get("/api/source/dev")
     def get_dev_daily_api(days: int = 14) -> dict[str, Any]:

@@ -182,6 +182,31 @@ CREATE TABLE IF NOT EXISTS work_snapshots (
     PRIMARY KEY (day, platform, work_id)
 );
 
+CREATE TABLE IF NOT EXISTS benchmark_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    platform TEXT NOT NULL DEFAULT 'douyin',
+    url TEXT NOT NULL,
+    last_fetched_at TEXT NOT NULL DEFAULT '未抓取',
+    works_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS benchmark_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT 'douyin',
+    url TEXT NOT NULL DEFAULT '',
+    published TEXT NOT NULL DEFAULT '',
+    likes INTEGER NOT NULL DEFAULT 0,
+    multiple REAL NOT NULL DEFAULT 0,
+    mainline TEXT NOT NULL DEFAULT '',
+    why_hit TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL

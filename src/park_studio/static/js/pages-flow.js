@@ -128,6 +128,8 @@
       if (savedDay !== arg) { savedDay = arg; savedSelKey = ''; }
     }
     if (srcTab === 'bench') return PS.pages.feed();
+    if (srcTab === 'materials') return PS.pages.materials(arg);
+    if (srcTab === 'obsidian') return PS.pages.kb ? PS.pages.kb() : null;
 
     let iss = PS._newsletterIssue || null;
     if (srcTab === 'newsletter') {
@@ -324,8 +326,8 @@
             <button class="${srcTab === 'newsletter' ? 'on' : ''}" onclick="location.hash='#source/newsletter'">AI 日报 ${newsCount}</button>
             <button class="${srcTab === 'saved' ? 'on' : ''}" onclick="location.hash='#source/saved'">搞钱日报 ${savedCount}</button>
             <button class="${srcTab === 'dev' ? 'on' : ''}" onclick="location.hash='#source/dev'">开发日报</button>
-            <button onclick="location.hash='#feed'">Park 的对标</button>
-            <button class="${srcTab === 'obsidian' ? 'on' : ''}" onclick="location.hash='#source/obsidian'">Obsidian</button>
+            <button onclick="location.hash='#feed'">对标爆款 ${PS.S.benchmarks?.total || ''}</button>
+            <button onclick="location.hash='#materials'">素材库</button>
           </div>
         </div>
       </div>
@@ -464,96 +466,356 @@
   // ==================== 选题 · 爆款榜（#feed） & 拆解报告（#chai） ====================
   let feedScope = 'shared'; // shared | mine
 
-  PS.pages.feed = function () {
-    const sharedOn = PS.S.settings.sharedBenchmarkOptIn;
-    const main = PS.shell('feed', [['选题工作台', '#source'], ['对标爆款榜', '#feed']], `
+  // ==================== 选题 · 找：真实对标爆款库（002_对标内容 + 追踪账号 CDP 抓取 + 本地 Agent 拆解） ====================
+  let bmAuthor = '';
+  let bmSort = 'multiple';
+  let bmSelId = '';
+  const bmDetailCache = new Map();
+
+  PS.pages.feed = async function () {
+    let bm = PS.S.benchmarks;
+    try {
+      bm = await PS.api('GET', `/api/benchmarks?author=${encodeURIComponent(bmAuthor)}&sort=${encodeURIComponent(bmSort)}&limit=120`);
+      PS.S.benchmarks = bm;
+    } catch (e) {}
+    bm = bm || { total: 0, hit3x: 0, authors: [], tracked: [], items: [] };
+    const items = bm.items || [];
+    if (!bmSelId || !items.some(x => x.id === bmSelId)) bmSelId = items[0]?.id || '';
+
+    const renderBmReader = (det, loading = false) => {
+      if (!det) return '<div style="padding:28px" class="sub">左侧选一条对标爆款查看拆解报告，或点击右上角「+ 添加对标账号 / AI 拆解新视频」。</div>';
+      const multBadge = det.multiple > 0
+        ? `<span class="pill ${det.multiple >= 3 ? 'accent' : 'good'}">${det.multiple}× 平时</span>`
+        : '';
+      return `
+        <div class="stack tight" style="padding-bottom:14px;border-bottom:1px solid var(--line-soft)">
+          <div class="row" style="gap:7px;flex-wrap:wrap">
+            ${PS.plogo(det.platform || 'douyin', 18)}
+            <b>${PS.esc(det.author)}</b>
+            ${multBadge}
+            ${det.likes ? `<span class="pill">赞 ${PS.fmt(det.likes)}</span>` : ''}
+            ${det.published ? `<span class="sub mono" style="font-size:12px">${PS.esc(det.published)}</span>` : ''}
+            <span class="grow"></span>
+            ${det.url ? `<a class="btn s" href="${PS.esc(det.url)}" target="_blank" rel="noopener">原视频 ↗</a>` : ''}
+            <button class="btn s" id="bmReTearBtn">${PS.icon('spark', 'sm')}AI 二次拆解</button>
+            <button class="btn primary s" id="bmAddTopicBtn">+ 加入选题池</button>
+          </div>
+          <h2 class="m0" style="font-size:19px;line-height:1.35">${PS.esc(det.title)}</h2>
+        </div>
+        ${det.mainline ? `<div class="callout-warm" style="margin-top:14px"><b>主线：</b>${PS.esc(det.mainline)}</div>` : ''}
+        ${det.whyHit ? `<div class="card stack tight" style="margin-top:12px;background:var(--sunk);border:0"><b style="font-size:13px">为什么爆</b><div class="md-body">${PS.md(det.whyHit)}</div></div>` : ''}
+        <div class="md-body" style="margin-top:14px">${loading ? '<p class="sub">正在加载完整拆解与逐字稿…</p>' : PS.md(det.body || det.excerpt || '暂无正文')}</div>`;
+    };
+
+    const listHtml = `
+      <div class="src-issue-h" style="flex-wrap:wrap;gap:8px">
+        <div class="min0">
+          <div class="sub" style="font-size:12px">已入库 ${bm.total} 条 · 3× 爆款 ${bm.hit3x} 条</div>
+          <b class="clip1" style="font-size:14.5px">对标爆款榜（真实库）</b>
+        </div>
+        <select id="bmAuthorSel" aria-label="按对标博主筛选" style="max-width:150px">
+          <option value="">全部博主 (${bm.authors?.length || 0})</option>
+          ${(bm.authors || []).map(a => `<option value="${PS.esc(a.name)}" ${a.name === bmAuthor ? 'selected' : ''}>${PS.esc(a.name)} (${a.count})</option>`).join('')}
+        </select>
+      </div>
+      ${items.map(it => `<div class="src-row ${it.id === bmSelId ? 'on' : ''}" data-bmid="${PS.esc(it.id)}">
+        <div class="src-meta">
+          ${it.multiple > 0 ? `<span class="pill ${it.multiple >= 3 ? 'accent' : ''}" style="padding:1px 7px;font-size:11px">${it.multiple}×</span>` : ''}
+          <span class="sub">${PS.esc(it.author)}${it.likes ? ` · 赞 ${PS.kfmt(it.likes)}` : ''}${it.published ? ` · ${it.published.slice(5)}` : ''}</span>
+        </div>
+        <div><button class="src-t" type="button" data-bmid="${PS.esc(it.id)}">${PS.esc(it.title)}</button>${origLink(it.url)}</div>
+        ${it.excerpt ? `<p class="src-x">${PS.esc(it.excerpt)}</p>` : ''}
+      </div>`).join('') || '<div style="padding:24px" class="sub">暂无对标内容，点右上角添加对标账号或配置 Obsidian 对标目录。</div>'}`;
+
+    const trackedBar = (bm.tracked || []).length
+      ? `<div class="card row" style="padding:10px 14px;flex-wrap:wrap;gap:8px">
+          <span class="sub" style="font-size:12px;font-weight:600">已追踪主页：</span>
+          ${bm.tracked.map(acc => `<span class="pill" style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px">
+            ${PS.plogo(acc.platform, 14)}<b>${PS.esc(acc.name)}</b>
+            <span class="sub" style="font-size:11px">${PS.esc(acc.last_fetched_at)}</span>
+            <button type="button" class="link-muted" data-bm-fetch="${acc.id}" style="font-size:11.5px;color:var(--accent)">抓最新</button>
+            <button type="button" class="link-muted" data-bm-del="${acc.id}" style="font-size:11px">×</button>
+          </span>`).join('')}
+        </div>`
+      : '';
+
+    const activeBasic = items.find(x => x.id === bmSelId) || items[0];
+    const cached = activeBasic ? bmDetailCache.get(activeBasic.id) : null;
+
+    const main = PS.shell('feed', [['选题工作台', '#source'], ['对标爆款库', '#feed']], `
       <div class="ph">
         <div>
-          <h1>对标发了什么</h1>
-          <p>按「高于平时中位数几倍」排序，点「拆」用本机 Coding Agent 零 API 费拆解。</p>
+          <h1>对标爆款库</h1>
+          <p>直接读取本地 Obsidian <code>002_对标内容</code>（${bm.total} 条真实拆解）+ 追踪主页 CDP 抓取 + 本机 Agent 零 API 费拆解。</p>
         </div>
         <div class="acts">
           <div class="seg">
-            <button class="${feedScope === 'shared' ? 'on' : ''}" id="fsShared">共享对标库（${PS.S.settings.sharedBenchmarkCount} 号）</button>
-            <button class="${feedScope === 'mine' ? 'on' : ''}" id="fsMine">我盯的号</button>
-            <button onclick="location.hash='#chai'">拆过的（${PS.S.reports.length}）</button>
+            <button class="${bmSort === 'multiple' ? 'on' : ''}" data-bms="multiple">按几倍平时</button>
+            <button class="${bmSort === 'likes' ? 'on' : ''}" data-bms="likes">按点赞</button>
+            <button class="${bmSort === 'latest' ? 'on' : ''}" data-bms="latest">最新</button>
           </div>
+          <button class="btn" id="bmAddAccBtn">+ 添加对标账号</button>
+          <button class="btn primary" id="bmNewTearBtn">${PS.icon('spark', 'sm')}AI 拆解新视频</button>
           <a class="btn" href="#source">回日报</a>
         </div>
       </div>
-
-      ${feedScope === 'shared' ? `<div class="card row" style="padding:11px 16px;background:color-mix(in srgb,var(--accent-soft) 35%,var(--surface))">
-        <span class="pill ${sharedOn ? 'good' : 'wait'}">${sharedOn ? '已加入社区共享池' : '未开启贡献'}</span>
-        <span class="sub grow">由 Park 社区用户用各自本机流量自愿共享的<b>公开爆款元数据</b>（绝不上传 Cookie 或私密数据）· 你的本机已贡献 ${PS.S.settings.sharedContributed} 条</span>
-        <a class="link-muted" href="#settings">去系统页管理开关 ›</a>
-      </div>` : ''}
-
-      <div class="stack">
-        ${PS.S.feed.map(f => `<div class="feed-card">
-          <div class="feed-mult"><b>${f.multiple}×</b><small>平时 ${PS.fmt(f.median)}</small></div>
-          <div class="min0 stack tight">
-            <div class="row" style="gap:7px">${PS.plogo(f.platform, 18)}<b>${PS.esc(f.author)}</b><span class="sub">赞 ${PS.fmt(f.likes)} · ${PS.esc(f.ago)}</span></div>
-            <div style="font-size:15px;font-weight:700">${PS.esc(f.title)}</div>
-            <div class="callout-warm"><b>为什么火：</b>${PS.esc(f.why)}<br><b>可以怎么讲：</b>${PS.esc(f.angle)}</div>
-          </div>
-          <div class="stack tight">
-            <button class="btn primary s" data-tear="${f.id}">拆</button>
-            <button class="btn s" data-add="${f.id}">+ 进选题池</button>
-          </div>
-        </div>`).join('')}
+      ${trackedBar}
+      <div class="src-split" id="bmSplit">
+        <div class="card flush src-list" id="bmList">${listHtml}</div>
+        <div class="card src-read" id="bmRead">${renderBmReader(cached || activeBasic, !cached && !!activeBasic)}</div>
       </div>
-    `, 'mid');
+    `);
 
-    main.querySelector('#fsShared')?.addEventListener('click', () => { feedScope = 'shared'; PS.pages.feed(); });
-    main.querySelector('#fsMine')?.addEventListener('click', () => { feedScope = 'mine'; PS.pages.feed(); });
-    main.querySelectorAll('[data-tear]').forEach(b => b.onclick = () => {
-      PS.toast('本机 Coding Agent 已拆解完成', 'good');
-      location.hash = '#chai';
+    const readBox = main.querySelector('#bmRead');
+    const listBox = main.querySelector('#bmList');
+    let curDetail = cached || activeBasic;
+
+    const bindReaderBtns = det => {
+      main.querySelector('#bmAddTopicBtn')?.addEventListener('click', async () => {
+        if (!det) return;
+        const body = [det.mainline ? `## 对标主线\n${det.mainline}` : '', det.whyHit ? `## 为什么爆\n${det.whyHit}` : '', det.url ? `参考原视频：${det.url}` : ''].filter(Boolean).join('\n\n');
+        try {
+          const created = await PS.api('POST', '/api/topics', { title: det.title, source_ref: `对标 · ${det.author}`, body });
+          PS.S.topics.unshift(created);
+          PS.save();
+          PS.toast('已加入「选题池」（写入本地 SQLite）', 'good');
+        } catch (err) { PS.toast(err.message || '加入失败', 'warn'); }
+      });
+      main.querySelector('#bmReTearBtn')?.addEventListener('click', async e => {
+        if (!det) return;
+        const btn = e.currentTarget;
+        btn.disabled = true; btn.textContent = '本机 Agent 拆解中…';
+        try {
+          const r = await PS.api('POST', '/api/benchmarks/teardown', {
+            title: det.title, author: det.author, url: det.url, transcript: (det.body || '').slice(0, 4500),
+          });
+          PS.S.benchmarks = r.benchmarks;
+          bmSelId = r.id;
+          PS.toast(`已由 ${r.backend}/${r.model} 生成新拆解报告 ✓`, 'good');
+          PS.pages.feed();
+        } catch (err) {
+          PS.toast(err.message || '拆解失败', 'warn');
+          btn.disabled = false; btn.textContent = 'AI 二次拆解';
+        }
+      });
+    };
+
+    const openBm = async id => {
+      bmSelId = id;
+      const basic = items.find(x => x.id === id);
+      if (!basic) return;
+      listBox.querySelectorAll('.src-row.on').forEach(el => el.classList.remove('on'));
+      listBox.querySelector(`.src-row[data-bmid="${CSS.escape(id)}"]`)?.classList.add('on');
+      if (bmDetailCache.has(id)) {
+        curDetail = bmDetailCache.get(id);
+        readBox.innerHTML = renderBmReader(curDetail, false);
+        readBox.scrollTop = 0;
+        bindReaderBtns(curDetail);
+        return;
+      }
+      readBox.innerHTML = renderBmReader(basic, true);
+      try {
+        const det = await PS.api('GET', `/api/benchmarks/detail?id=${encodeURIComponent(id)}`);
+        bmDetailCache.set(id, det);
+        curDetail = det;
+        readBox.innerHTML = renderBmReader(det, false);
+        bindReaderBtns(det);
+      } catch (e) {
+        readBox.innerHTML = renderBmReader(basic, false);
+        bindReaderBtns(basic);
+      }
+    };
+
+    listBox.addEventListener('click', e => {
+      if (e.target.closest('[data-ext]')) return;
+      const row = e.target.closest('[data-bmid]');
+      if (row) openBm(row.dataset.bmid);
     });
-    main.querySelectorAll('[data-add]').forEach(b => b.onclick = () => {
-      const f = PS.S.feed.find(x => x.id === +b.dataset.add);
-      PS.S.topics.unshift({ id: Date.now(), title: f.title, stage: '写', score: 14, updated: '刚刚', trash: false });
-      PS.save();
-      PS.toast('已放进「选题池」', 'good');
+    main.querySelector('#bmAuthorSel')?.addEventListener('change', e => { bmAuthor = e.target.value; bmSelId = ''; PS.pages.feed(); });
+    main.querySelectorAll('[data-bms]').forEach(b => b.onclick = () => { bmSort = b.dataset.bms; PS.pages.feed(); });
+    main.querySelectorAll('[data-bm-fetch]').forEach(b => b.onclick = async () => {
+      const id = b.dataset.bmFetch;
+      b.textContent = '抓取中…';
+      try {
+        const r = await PS.api('POST', `/api/benchmarks/accounts/${id}/fetch`, {});
+        PS.S.benchmarks = r.benchmarks;
+        PS.toast(`已从「${r.name}」抓取 ${r.fetched} 条作品并算好倍数`, r.fetched ? 'good' : 'warn');
+        PS.pages.feed();
+      } catch (err) { PS.toast(err.message || '抓取失败', 'warn'); b.textContent = '抓最新'; }
     });
+    main.querySelectorAll('[data-bm-del]').forEach(b => b.onclick = async () => {
+      const r = await PS.api('DELETE', `/api/benchmarks/accounts/${b.dataset.bmDel}`);
+      PS.S.benchmarks = r.benchmarks;
+      PS.pages.feed();
+    });
+
+    main.querySelector('#bmAddAccBtn').onclick = () => {
+      PS.modal({
+        title: '添加对标账号（支持专用 Chrome 抓取最新作品）',
+        body: `<div class="stack">
+          <div><label class="sub" style="display:block;margin-bottom:4px">博主昵称</label><input type="text" id="baName" placeholder="如 dontbesilent / 某科技博主"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">平台</label><select id="baPlat"><option value="douyin">抖音</option><option value="bilibili">B 站</option><option value="youtube">YouTube</option><option value="xhs">小红书</option></select></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">博主主页链接</label><input type="url" id="baUrl" placeholder="https://www.douyin.com/user/... 或 https://space.bilibili.com/..."></div>
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="baSave">添加并保存</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#baSave').onclick = async () => {
+            const name = mb.querySelector('#baName').value.trim();
+            const platform = mb.querySelector('#baPlat').value;
+            const url = mb.querySelector('#baUrl').value.trim();
+            if (!name || !url) return PS.toast('请填博主昵称和主页链接', 'warn');
+            const r = await PS.api('POST', '/api/benchmarks/accounts', { name, platform, url });
+            PS.S.benchmarks = r.benchmarks;
+            close();
+            PS.toast(`已添加对标账号「${name}」，点击「抓最新」即可抓取`, 'good');
+            PS.pages.feed();
+          };
+        },
+      });
+    };
+
+    main.querySelector('#bmNewTearBtn').onclick = () => {
+      PS.modal({
+        title: '用本机 Agent 拆解一条新爆款视频',
+        wide: true,
+        body: `<div class="stack">
+          <div><label class="sub" style="display:block;margin-bottom:4px">视频标题</label><input type="text" id="ntTitle" placeholder="输入爆款视频标题"></div>
+          <div class="sys-2col">
+            <div><label class="sub" style="display:block;margin-bottom:4px">作者</label><input type="text" id="ntAuthor" placeholder="博主名称"></div>
+            <div><label class="sub" style="display:block;margin-bottom:4px">原视频链接（可选）</label><input type="url" id="ntUrl" placeholder="https://..."></div>
+          </div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">逐字稿或内容摘录（贴得越全拆得越准）</label><textarea id="ntBody" rows="7" placeholder="把口播逐字稿或视频内容粘贴到这里…"></textarea></div>
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="ntRun">开始 AI 拆解</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#ntRun').onclick = async e => {
+            const title = mb.querySelector('#ntTitle').value.trim();
+            if (!title) return PS.toast('先填视频标题', 'warn');
+            e.currentTarget.disabled = true; e.currentTarget.textContent = '本机 Agent 拆解中…';
+            try {
+              const r = await PS.api('POST', '/api/benchmarks/teardown', {
+                title, author: mb.querySelector('#ntAuthor').value.trim(), url: mb.querySelector('#ntUrl').value.trim(), transcript: mb.querySelector('#ntBody').value.trim(),
+              });
+              PS.S.benchmarks = r.benchmarks;
+              bmSelId = r.id;
+              close();
+              PS.toast(`拆解完成（${r.backend}/${r.model}）✓`, 'good');
+              PS.pages.feed();
+            } catch (err) {
+              PS.toast(err.message || '拆解失败', 'warn');
+              e.currentTarget.disabled = false; e.currentTarget.textContent = '开始 AI 拆解';
+            }
+          };
+        },
+      });
+    };
+
+    if (activeBasic && !cached) openBm(activeBasic.id);
+    else bindReaderBtns(curDetail);
   };
 
-  PS.pages.chai = function () {
-    const r = PS.S.reports[0];
-    const main = PS.shell('chai', [['选题工作台', '#source'], ['对标爆款榜', '#feed'], ['拆解报告', '#chai']], `
+  PS.pages.chai = function () { return PS.pages.feed(); };
+
+  // ==================== 视觉素材库（三大类：图片 / 视频动效 / 做视频） ====================
+  let matKind = 'image';
+  let matCat = '';
+  let matQ = '';
+  let matTopic = '';
+
+  PS.pages.materials = async function (sub) {
+    if (['image', 'motion', 'video'].includes(sub)) {
+      if (matKind !== sub) { matKind = sub; matCat = ''; }
+    }
+    let data = PS.S.materials;
+    try {
+      data = await PS.api('GET', `/api/materials?kind=${encodeURIComponent(matKind)}&cat=${encodeURIComponent(matCat)}&q=${encodeURIComponent(matQ)}&limit=60`);
+      PS.S.materials = data;
+    } catch (e) {}
+    data = data || { kind: matKind, counts: { image: 0, motion: 0, video: 0 }, total: 0, categories: [], items: [] };
+    const counts = data.counts || { image: 0, motion: 0, video: 0 };
+    const fillVar = txt => {
+      if (!matTopic.trim()) return txt || '';
+      return String(txt || '').replace(/\{topic\}|\{script\}/g, matTopic.trim());
+    };
+
+    const main = PS.shell('materials', [['剪辑工作台', '#cut'], ['视觉素材库', '#materials']], `
       <div class="ph">
         <div>
-          <h1>${PS.esc(r.sourceTitle)}</h1>
-          <p>${PS.esc(r.author)} · 本地转写 + Coding Agent 拆解</p>
+          <h1>视觉素材库</h1>
+          <p>三大类即拿即用：图片风格（${counts.image}）、视频动效（${counts.motion}）、做视频模板（${counts.video}），写稿封面与剪辑镜头表直接复用。</p>
         </div>
         <div class="acts">
-          <a class="btn" href="#feed">回爆款榜</a>
-          <button class="btn primary" onclick="location.hash='#write'">用这篇结构写稿 ›</button>
+          <div class="seg">
+            <button class="${matKind === 'image' ? 'on' : ''}" data-mk="image">图片 (${counts.image})</button>
+            <button class="${matKind === 'motion' ? 'on' : ''}" data-mk="motion">视频动效 (${counts.motion})</button>
+            <button class="${matKind === 'video' ? 'on' : ''}" data-mk="video">做视频 (${counts.video})</button>
+          </div>
         </div>
+      </div>
+
+      <div class="card row" style="padding:10px 14px;flex-wrap:wrap;gap:10px">
+        <input type="search" id="matSearch" value="${PS.esc(matQ)}" placeholder="搜索风格名、场景或关键词…" style="max-width:240px">
+        <input type="text" id="matTopicIn" value="${PS.esc(matTopic)}" placeholder="填入你的主题（自动替换提示词里的 {topic} / {script}）" class="grow" style="min-width:220px">
+        <span class="sub" style="font-size:12px">命中 ${data.total} 款</span>
+      </div>
+
+      <div class="row" style="flex-wrap:wrap;gap:6px">
+        <button class="pill ${!matCat ? 'accent' : ''}" data-mc="" style="cursor:pointer;border:0">全部</button>
+        ${(data.categories || []).slice(0, 18).map(c => `<button class="pill ${matCat === c.name ? 'accent' : ''}" data-mc="${PS.esc(c.name)}" style="cursor:pointer;border:0">${PS.esc(c.name)} ${c.count}</button>`).join('')}
       </div>
 
       <div class="grid-3">
-        <div class="kpi-card"><div class="kpi-lab">点赞</div><div class="kpi-val">${PS.fmt(r.likes)}</div></div>
-        <div class="kpi-card"><div class="kpi-lab">平时中位数</div><div class="kpi-val">${PS.fmt(r.median)}</div></div>
-        <div class="kpi-card"><div class="kpi-lab">高于平时</div><div class="kpi-val" style="color:var(--accent)">${r.multiple}×</div></div>
+        ${(data.items || []).map((it, idx) => `<div class="card stack tight" style="padding:12px">
+          ${it.video ? `<video src="${PS.esc(it.video)}" poster="${PS.esc(it.preview || '')}" muted loop playsinline preload="none" onmouseover="this.play()" onmouseout="this.pause()" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:9px;background:#141619"></video>`
+            : it.preview ? `<img src="${PS.esc(it.preview)}" alt="${PS.esc(it.name)}" loading="lazy" style="width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:9px;background:var(--sunk)">`
+            : ''}
+          <div class="row" style="gap:6px">
+            <span class="pill" style="font-size:11px">${PS.esc(it.cat)}</span>
+            ${it.by ? `<span class="sub clip1" style="font-size:11px">${PS.esc(it.by)}</span>` : ''}
+          </div>
+          <b style="font-size:14.5px">${PS.esc(it.name)}</b>
+          ${it.en ? `<span class="sub mono clip1" style="font-size:11px">${PS.esc(it.en)}</span>` : ''}
+          <p class="sub m0" style="font-size:12.5px;line-height:1.5">${PS.esc(it.sum || it.fit || '')}</p>
+          <div class="row" style="margin-top:auto;padding-top:6px;gap:6px">
+            <button class="btn primary s" data-mcopy="${idx}">${PS.icon('copy', 'sm')}复制提示词</button>
+            <button class="btn s" data-mview="${idx}">看详情</button>
+          </div>
+        </div>`).join('') || '<div class="card sub">没有匹配的素材，换个关键词试试。</div>'}
       </div>
+    `);
 
-      <div class="card stack">
-        <h3 class="m0">结构与主线</h3>
-        <div class="callout-warm"><b>主线：</b>${PS.esc(r.mainLine)}<br><b>开头怎么抓人：</b>${PS.esc(r.hook)}</div>
-        <ul class="m0" style="padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:13.5px">
-          ${r.motives.map(m => `<li>${PS.esc(m)}</li>`).join('')}
-        </ul>
-      </div>
-
-      <div class="card stack">
-        <h3 class="m0">可选复刻角度</h3>
-        ${r.angles.map(a => `<div class="row" style="padding:10px 12px;background:var(--sunk);border-radius:9px">
-          <div class="min0 grow"><b>${PS.esc(a.title)}</b><div class="sub">${PS.esc(a.fit)}</div></div>
-          <a class="btn primary s" href="#write">写这个 ›</a>
-        </div>`).join('')}
-      </div>
-    `, 'narrow');
+    main.querySelectorAll('[data-mk]').forEach(b => b.onclick = () => { matKind = b.dataset.mk; matCat = ''; PS.pages.materials(matKind); });
+    main.querySelectorAll('[data-mc]').forEach(b => b.onclick = () => { matCat = b.dataset.mc; PS.pages.materials(matKind); });
+    main.querySelector('#matSearch').onkeydown = e => { if (e.key === 'Enter') { matQ = e.target.value; PS.pages.materials(matKind); } };
+    main.querySelector('#matTopicIn').oninput = e => { matTopic = e.target.value; };
+    main.querySelectorAll('[data-mcopy]').forEach(b => b.onclick = () => {
+      const it = (data.items || [])[+b.dataset.mcopy];
+      if (!it) return;
+      navigator.clipboard?.writeText(fillVar(it.prompt || it.sum));
+      PS.toast(`已复制「${it.name}」提示词 ✓`, 'good');
+    });
+    main.querySelectorAll('[data-mview]').forEach(b => b.onclick = () => {
+      const it = (data.items || [])[+b.dataset.mview];
+      if (!it) return;
+      PS.modal({
+        title: `${it.name}${it.en ? ' · ' + it.en : ''}`,
+        wide: true,
+        body: `<div class="stack">
+          ${it.video ? `<video src="${PS.esc(it.video)}" controls autoplay loop muted style="width:100%;max-height:320px;border-radius:10px;background:#111"></video>`
+            : it.preview ? `<img src="${PS.esc(it.preview)}" style="width:100%;max-height:360px;object-fit:contain;border-radius:10px;background:var(--sunk)">` : ''}
+          <p class="m0">${PS.esc(it.sum || '')}</p>
+          ${it.fit ? `<div class="callout-warm"><b>适用场景：</b>${PS.esc(it.fit)}</div>` : ''}
+          <div><label class="sub" style="display:block;margin-bottom:4px">提示词 / 导演规范</label><pre class="codebox">${PS.esc(fillVar(it.prompt || it.sum))}</pre></div>
+        </div>`,
+        foot: `<button class="btn primary" id="mCopyModal">复制提示词</button><button class="btn" data-close>关闭</button>`,
+        onOpen(mb) {
+          mb.querySelector('#mCopyModal').onclick = () => {
+            navigator.clipboard?.writeText(fillVar(it.prompt || it.sum));
+            PS.toast('已复制到剪贴板 ✓', 'good');
+          };
+        },
+      });
+    });
   };
 
   // ==================== 选题 · 写：选题池（#pool） → 骨架/写稿（#write） → 审稿（#audit） ====================
@@ -926,11 +1188,14 @@
       </div>`;
     }
 
+    const cutAg = PS.S.settings.cutAgentBackend && PS.S.settings.cutAgentBackend !== 'inherit'
+      ? `${PS.S.settings.cutAgentBackend}${PS.S.settings.cutAgentModel ? ' / ' + PS.S.settings.cutAgentModel : ''}`
+      : `跟随全局 (${PS.S.settings.aiBackend || 'gemini'})`;
     const main = PS.shell('cut', [['剪辑工作台', '#cut'], [`EP${cp.episode} · 镜头表`, '#cut']], `
       <div class="ph">
         <div>
           <h1>剪辑 · EP${cp.episode} ${PS.esc(cp.title)}</h1>
-          <p>三步走完剪辑：先定 Hook，再调镜头表（Spec Table），最后导出 worktable.json 交给本机 Agent 渲染。</p>
+          <p>三步走完剪辑：先定 Hook，再调镜头表（Spec Table），最后导出 worktable.json 交给本机剪辑 Agent · <a href="#settings" class="pill" style="padding:1px 8px;font-size:11.5px">独立剪辑 Agent：${PS.esc(cutAg)} ⚙</a></p>
         </div>
         <div class="acts">
           <div class="stepper">

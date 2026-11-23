@@ -516,3 +516,73 @@ def read_note(rel_path: str, *, cfg: dict[str, Any] | None = None) -> dict[str, 
         "body": body,
         "words": len(re.sub(r"\s+", "", body)),
     }
+
+
+KB_SKIP_PREFIXES = (".", "_secrets", "_archive", "_bot_export", "_scripts", "_inbox", "_contact", "_source", "node_modules")
+
+
+def list_kb_folders(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """列出用户 Obsidian 知识库根目录下所有真实可见文件夹、笔记数与 AI 启用状态。"""
+    cfg = cfg or config.load_config()
+    root = Path(str(cfg.get("obsidianPath") or "")).expanduser()
+    if not root.is_dir():
+        return {"path": str(root), "mounted": False, "totalNotes": 0, "folders": []}
+    enabled_cfg = cfg.get("kbEnabledFolders") or []
+    enabled_set = set(enabled_cfg) if isinstance(enabled_cfg, list) and enabled_cfg else None
+
+    folders: list[dict[str, Any]] = []
+    total_notes = 0
+    for child in sorted(root.iterdir(), key=lambda p: p.name):
+        if not child.is_dir():
+            continue
+        name = child.name
+        if any(name.startswith(pref) for pref in KB_SKIP_PREFIXES) or name in SKIP_DIRS:
+            continue
+        cnt = sum(
+            1
+            for p in child.rglob("*.md")
+            if not any(part.startswith(".") or part in SKIP_DIRS for part in p.relative_to(child).parts)
+            and not p.name.startswith("_")
+            and p.name.lower() != "readme.md"
+        )
+        if cnt == 0:
+            continue
+        total_notes += cnt
+        folders.append({
+            "name": name,
+            "count": cnt,
+            "enabled": True if enabled_set is None else (name in enabled_set),
+        })
+    return {"path": str(root), "mounted": True, "totalNotes": total_notes, "folders": folders}
+
+
+def scan_kb_folder(
+    folder: str = "",
+    *,
+    q: str = "",
+    limit: int = 50,
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """按指定 Obsidian 文件夹（或全库关键词）列出知识库笔记。"""
+    cfg = cfg or config.load_config()
+    root = Path(str(cfg.get("obsidianPath") or "")).expanduser()
+    if not root.is_dir():
+        return {"folder": folder, "items": []}
+    qq = q.strip().lower()
+    if folder:
+        sub = (root / folder).resolve()
+        if root.resolve() not in sub.parents or not sub.is_dir():
+            return {"folder": folder, "items": []}
+        items = _scan_dir(root, sub, folder, limit=120 if qq else limit)
+    else:
+        # 聚合所有启用的知识库文件夹
+        meta = list_kb_folders(cfg)
+        items = []
+        for f in meta["folders"]:
+            if not f["enabled"]:
+                continue
+            items.extend(_scan_dir(root, root / f["name"], f["name"], limit=20))
+        items.sort(key=lambda x: x["date"], reverse=True)
+    if qq:
+        items = [it for it in items if qq in f"{it['title']} {it['excerpt']} {it['tag']} {it['author']}".lower()]
+    return {"folder": folder, "items": items[:limit]}

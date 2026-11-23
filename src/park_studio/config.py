@@ -11,6 +11,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "owner": "Creator",
     "aiBackend": "gemini",          # gemini | claude | codex | api
     "aiModel": "neon",              # Gemini CLI 默认模型（留空则走 CLI 默认）
+    "cutAgentBackend": "inherit",   # inherit（跟随全局）| gemini | claude | codex | custom
+    "cutAgentModel": "",            # 独立剪辑 Agent 模型（留空跟随该引擎默认）
+    "cutAgentCmd": "",              # 自定义剪辑 CLI / Skill 命令（选 custom 时使用）
     "apiBaseUrl": "https://api.deepseek.com/v1",
     "apiKey": "",
     "apiModel": "deepseek-chat",
@@ -20,10 +23,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "newsletter": "006_ai daily newsletter",
         "saved": "002_个人收藏",
         "clippings": "002_clippings",
+        "benchmarks": "002_对标内容",
         "pete": "011_pete",
         "writing": "003_park原始输出",
         "kline": "007_kline daily newsletter",
     },
+    "kbEnabledFolders": [],
+    "catalogDir": "",
+    "catalogStaticDir": "",
     "devRepos": [],
     "positioningFile": "",
     "profileFile": "",

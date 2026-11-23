@@ -87,63 +87,17 @@
       </section>
 
       <div class="sys-sec">
-        <h2>集成与开源社区</h2>
-        <span>飞书通知、自有知识站、本地 Coding Agent 与自愿共享对标库</span>
+        <h2>本地 AI Agent、目录与通知</h2>
+        <span>全局写作 Agent 与独立剪辑 Agent 自由拆分，零强制付费 API</span>
       </div>
       <section class="sys-2col">
         <div class="card stack">
           <div class="card-h">
-            <h3>飞书通知</h3>
-            <span class="pill ${d.feishuEnabled ? 'good' : ''}">${d.feishuEnabled ? '✓ 已连接' : '未启用'}</span>
-          </div>
-          <div>
-            <label class="sub" style="display:block;margin-bottom:4px">群机器人 Webhook</label>
-            <input type="url" id="fsHook" value="${PS.esc(d.feishuWebhook)}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/...">
-          </div>
-          <div class="row">
-            <button class="btn primary s" id="fsTest">测试发送</button>
-            <button class="btn s" id="fsSave">保存</button>
-            <span class="sub">保存后立即生效，不用重启</span>
-          </div>
-          <div class="swrow" style="border-top:1px solid var(--line-soft);padding-top:10px">
-            <div><b style="font-size:13px">用飞书验证码登录</b><small>远程打开时推 6 位验证码，替代网页口令</small></div>
-            <button class="switch ${s.feishuLogin ? 'on' : ''}" id="swFsLogin"></button>
-          </div>
-          <div class="swrow" style="padding-top:2px">
-            <div><b style="font-size:13px">微信（ilink）同步提醒与微信问 Wendy</b><small>同一守护进程，扫码绑定即可接收告警</small></div>
-            <button class="switch ${d.wechatIlinkEnabled ? 'on' : ''}" id="swWx"></button>
-          </div>
-        </div>
-
-        <div class="card stack">
-          <div class="card-h">
-            <h3>自有站点（转化归因）</h3>
-            <button class="switch ${s.siteEnabled ? 'on' : ''}" id="swSite"></button>
-          </div>
-          ${s.siteEnabled ? `
-            <div><label class="sub" style="display:block;margin-bottom:4px">站名</label><input type="text" id="stName" value="${PS.esc(s.siteName)}"></div>
-            <div><label class="sub" style="display:block;margin-bottom:4px">站点地址</label><input type="url" id="stUrl" value="${PS.esc(s.siteUrl)}"></div>
-            <details class="sub"><summary>接口路径（默认值一般不用改）</summary>
-              <div class="sys-2col" style="margin-top:8px">
-                <input type="text" value="${PS.esc(s.siteAdminPath)}" placeholder="后台路径">
-                <input type="text" value="${PS.esc(s.siteDashApi)}" placeholder="仪表盘接口">
-              </div>
-            </details>
-            <div class="row">
-              <button class="btn primary s" id="stTest">测试连接</button>
-              <button class="btn s" id="stSave">保存</button>
-              <span class="sub">近 30 日归因收入 ¥20,350</span>
-            </div>
-          ` : '<p class="sub m0">未启用 · 打开开关后可接入自己的知识站 / 课程站，自动统计每期带来的注册、会员与收入。</p>'}
-        </div>
-
-        <div class="card stack">
-          <div class="card-h">
-            <h3>本地 AI（零 API 费）与目录</h3>
+            <h3>全局 Agent（选题 / 写稿 / 审稿 / 拆解）</h3>
             <span class="pill good">${PS.S.agents?.[s.aiBackend]?.installed ? '✓ CLI 已就绪' : '本机运行'}</span>
           </div>
           <div>
-            <label class="sub" style="display:block;margin-bottom:6px">Coding Agent 引擎</label>
+            <label class="sub" style="display:block;margin-bottom:6px">全局 Coding Agent 引擎</label>
             <div class="seg">
               <button class="${s.aiBackend === 'gemini' ? 'on' : ''}" data-aib="gemini">Gemini CLI${PS.S.agents?.gemini?.installed ? ' ✓' : ''}</button>
               <button class="${s.aiBackend === 'claude' ? 'on' : ''}" data-aib="claude">Claude Code${PS.S.agents?.claude?.installed ? ' ✓' : ''}</button>
@@ -151,88 +105,82 @@
               <button class="${s.aiBackend === 'api' ? 'on' : ''}" data-aib="api">可选 API</button>
             </div>
           </div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">模型名称（默认 neon；若 CLI 未识别会自动回退默认模型）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || 'neon')}" placeholder="neon / gemini-2.5-pro / 留空走默认"></div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 笔记库路径（只读）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿建目录 / 打包自动扫描）</label><input type="text" id="projRootIn" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}"></div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">本地语音转写</label>
-            <select id="trEng"><option value="mlx-whisper" ${s.transcribeEngine === 'mlx-whisper' ? 'selected' : ''}>mlx-whisper（Apple Silicon 极速本机）</option><option value="faster-whisper" ${s.transcribeEngine === 'faster-whisper' ? 'selected' : ''}>faster-whisper（macOS / Windows 通用）</option></select>
-          </div>
-          <div><button class="btn s primary" id="saveAiCfg">保存并重新扫描 Obsidian</button></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">全局模型名称（默认 neon；留空走该 CLI 默认模型）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || 'neon')}" placeholder="neon / gemini-2.5-pro / 留空走默认"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 知识库根目录（只读 · <a href="#kb">去选接入文件夹 ›</a>）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿自动建目录 / 打包自动扫描）</label><input type="text" id="projRootIn" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}"></div>
         </div>
 
         <div class="card stack">
           <div class="card-h">
-            <h3>Park 社区与「共享对标库」</h3>
-            <span class="pill accent">利他飞轮</span>
+            <h3>独立剪辑 Agent（剪辑工作台专用）</h3>
+            <span class="pill accent">${(s.cutAgentBackend && s.cutAgentBackend !== 'inherit') ? s.cutAgentBackend : '跟随全局'}</span>
           </div>
           <div>
-            <label class="sub" style="display:block;margin-bottom:4px">Park 社区通行码（免费进私域群领取，解锁完整信源与共享库）</label>
-            <div class="row">
-              <input type="text" id="commKey" class="grow mono" value="${PS.esc(s.communityKey)}" placeholder="PK-COMM-...">
-              <button class="btn s" id="btnJoinGroup">扫码进群领码</button>
+            <label class="sub" style="display:block;margin-bottom:6px">可与写作拆分（例如写作选 Codex，剪辑单独用 Claude Code / 自定义剪辑 Agent）</label>
+            <div class="seg">
+              <button class="${(!s.cutAgentBackend || s.cutAgentBackend === 'inherit') ? 'on' : ''}" data-caib="inherit">跟随全局</button>
+              <button class="${s.cutAgentBackend === 'gemini' ? 'on' : ''}" data-caib="gemini">Gemini CLI</button>
+              <button class="${s.cutAgentBackend === 'claude' ? 'on' : ''}" data-caib="claude">Claude Code</button>
+              <button class="${s.cutAgentBackend === 'codex' ? 'on' : ''}" data-caib="codex">Codex</button>
+              <button class="${s.cutAgentBackend === 'custom' ? 'on' : ''}" data-caib="custom">自定义命令</button>
             </div>
           </div>
-          <div class="swrow" style="border-top:1px solid var(--line-soft);padding-top:10px">
-            <div>
-              <b style="font-size:13px">加入「共享对标库」（当前 ${s.sharedBenchmarkCount} 个公开号）</b>
-              <small>匿名共享你抓到的<b>公开对标爆款元数据</b>（绝不上传 Cookie 或私密数据），换取全社区实时爆款流</small>
-            </div>
-            <button class="switch ${s.sharedBenchmarkOptIn ? 'on' : ''}" id="swShared"></button>
+          <div><label class="sub" style="display:block;margin-bottom:4px">剪辑 Agent 模型（留空则沿用所选引擎默认）</label><input type="text" id="cutModelIn" class="mono" value="${PS.esc(s.cutAgentModel || '')}" placeholder="如 claude-sonnet-4-5 / neon / 留空"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">自定义剪辑 CLI / Skill 命令（选「自定义命令」时生效）</label><input type="text" id="cutCmdIn" class="mono" value="${PS.esc(s.cutAgentCmd || '')}" placeholder="如 park-video-v2 --spec {worktable}"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">本地语音转写引擎（原片转带时间戳逐字稿）</label>
+            <select id="trEng"><option value="mlx-whisper" ${s.transcribeEngine === 'mlx-whisper' ? 'selected' : ''}>mlx-whisper（Apple Silicon 极速本机）</option><option value="faster-whisper" ${s.transcribeEngine === 'faster-whisper' ? 'selected' : ''}>faster-whisper（macOS / Windows 通用）</option></select>
           </div>
-          <div class="swrow" style="padding-top:0">
-            <div><b style="font-size:13px">透明匿名活跃心跳</b><small>仅上报版本号与 OS，不含任何内容或账号，随时可关</small></div>
-            <button class="switch ${s.telemetryOptIn ? 'on' : ''}" id="swTel"></button>
+          <div><button class="btn s primary" id="saveAiCfg">保存 AI 与目录配置并重扫 Obsidian</button></div>
+        </div>
+
+        <div class="card stack">
+          <div class="card-h">
+            <h3>飞书通知</h3>
+            <span class="pill ${d.feishuEnabled ? 'good' : ''}">${d.feishuEnabled ? '✓ 已连接' : '未启用'}</span>
           </div>
-          <div class="swrow" style="padding-top:0">
-            <div><b style="font-size:13px">显示交流群与踩坑手册提示</b><small>报错或平台改版时提示进群看最新适配</small></div>
-            <button class="switch ${s.learnLinks ? 'on' : ''}" id="swLearn"></button>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">群机器人 Webhook（平台掉线、每日采数完成后自动提醒）</label>
+            <input type="url" id="fsHook" value="${PS.esc(d.feishuWebhook)}" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/...">
+          </div>
+          <div class="row">
+            <button class="btn primary s" id="fsTest">测试发送</button>
+            <button class="btn s" id="fsSave">保存</button>
+            <span class="sub">保存后立即生效，不用重启</span>
+          </div>
+        </div>
+
+        <div class="card stack">
+          <div class="card-h">
+            <h3>开机自启与本地维护</h3>
+            <button class="btn s" id="btnLaunchd">${PS.S.launchd?.installed ? '已生成 launchd ✓' : '生成 macOS 开机自启'}</button>
+          </div>
+          <div class="sys-scroll">
+            <dl class="kv-dl">
+              <dt>每 5 分钟</dt><dd>检查有没有到点要取链接的期数，提醒还没点发布的国内平台</dd>
+              <dt>每天 09:00</dt><dd>全平台真实探活体检一次，有掉线才打扰</dd>
+              <dt>每天 10:00</dt><dd>采集全平台粉丝与已发作品流量，生成当日快照供同龄复盘</dd>
+            </dl>
+          </div>
+          <div class="row" style="border-top:1px solid var(--line-soft);padding-top:10px">
+            <button class="btn danger s" id="resetDemo">重置本地浏览器缓存</button>
+            <span class="sub">不删除 SQLite 数据库与 Obsidian 文件</span>
           </div>
         </div>
       </section>
 
       <div class="sys-sec">
-        <h2>运行透明</h2>
-        <span>自动任务计划与守护进程实时动态</span>
+        <h2>守护进程实时动态</h2>
+        <span>最近 ${PS.S.daemonLogs.length} 条本地执行记录</span>
       </div>
-      <section class="sys-2col">
-        <div class="card">
-          <div class="card-h">
-            <h3>自动任务</h3>
-            <button class="btn s" id="btnLaunchd">${PS.S.launchd?.installed ? '已生成 launchd ✓' : '生成 macOS 开机自启'}</button>
-          </div>
-          <div class="sys-scroll">
-            <dl class="kv-dl">
-              <dt>每 5 分钟</dt><dd>检查有没有到点要取链接的期数，每 20 分钟提醒还没点发布的国内平台</dd>
-              <dt>每小时</dt><dd>视频号等易掉线平台自动保活，掉线发飞书提醒</dd>
-              <dt>每天 09:00</dt><dd>全平台真实探活体检一次，有掉线才打扰</dd>
-              <dt>每天 10:00</dt><dd>采集全平台流量与粉丝，自动发飞书日报；同步共享对标库公开爆款</dd>
-              <dt>发布后 72h</dt><dd>头三天每 6 小时采样一次，第 1 / 3 / 7 天自动出同龄复盘</dd>
-            </dl>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-h"><h3>最近动态</h3><span class="sub">${PS.S.daemonLogs.length} 条记录</span></div>
-          <div class="sys-scroll">
-            ${PS.S.daemonLogs.map(l => `<div class="flog">
-              <span class="tm">${PS.esc(l.ts)}</span>
-              <b>${PS.esc(l.ep)}</b>
-              <span class="pill">${PS.esc(l.plat)}</span>
-              <span class="sub clip1 grow">${PS.esc(l.action)} · ${PS.esc(l.result)}</span>
-            </div>`).join('')}
-          </div>
-        </div>
-      </section>
-
       <section class="card">
-        <details>
-          <summary style="font-weight:600;font-size:13.5px">开源模块显示开关 & 重置演示数据</summary>
-          <div class="stack tight" style="margin-top:12px">
-            ${[['tree', '知识树与内化'], ['clients', '咨询客户 CRM'], ['site', '个人网站'], ['kline', 'K 线日报'], ['conversion', '转化归因漏斗']].map(([k, l]) =>
-              `<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line-soft)"><span class="grow">${l}</span><button class="switch ${s.modules[k] ? 'on' : ''}" data-mod="${k}"></button></div>`
-            ).join('')}
-            <div class="row" style="padding-top:8px"><button class="btn danger s" id="resetDemo">重置全部演示数据</button><span class="sub">所有演示改动仅保存在本浏览器 localStorage</span></div>
-          </div>
-        </details>
+        <div class="sys-scroll">
+          ${PS.S.daemonLogs.map(l => `<div class="flog">
+            <span class="tm">${PS.esc(l.ts)}</span>
+            <b>${PS.esc(l.ep)}</b>
+            <span class="pill">${PS.esc(l.plat)}</span>
+            <span class="sub clip1 grow">${PS.esc(l.action)} · ${PS.esc(l.result)}</span>
+          </div>`).join('')}
+        </div>
       </section>
     `);
 
@@ -370,47 +318,42 @@
       PS.toast('飞书配置已写入 ~/.park-studio/config.yaml', 'good');
       PS.pages.settings();
     };
-    main.querySelector('#swFsLogin').onclick = () => { s.feishuLogin = !s.feishuLogin; PS.save(); PS.pages.settings(); };
-    main.querySelector('#swWx').onclick = () => { d.wechatIlinkEnabled = !d.wechatIlinkEnabled; PS.save(); PS.pages.settings(); };
-    main.querySelector('#swSite').onclick = () => { s.siteEnabled = !s.siteEnabled; PS.save(); PS.pages.settings(); };
-    main.querySelector('#stTest')?.addEventListener('click', () => PS.toast(`已连上 ${s.siteName}：接口 200 OK`, 'good'));
-    main.querySelector('#stSave')?.addEventListener('click', () => { s.siteName = main.querySelector('#stName').value.trim(); s.siteUrl = main.querySelector('#stUrl').value.trim(); PS.save(); PS.toast('站点配置已保存并立即生效', 'good'); });
-
     main.querySelectorAll('[data-aib]').forEach(b => b.onclick = async () => {
       s.aiBackend = b.dataset.aib;
       await PS.api('PUT', '/api/settings', { aiBackend: s.aiBackend }).catch(() => {});
       PS.save(); PS.pages.settings();
     });
+    main.querySelectorAll('[data-caib]').forEach(b => b.onclick = async () => {
+      s.cutAgentBackend = b.dataset.caib;
+      await PS.api('PUT', '/api/settings', { cutAgentBackend: s.cutAgentBackend }).catch(() => {});
+      PS.save(); PS.pages.settings();
+    });
     main.querySelector('#saveAiCfg').onclick = async () => {
       s.aiModel = main.querySelector('#aiModelIn').value.trim();
+      s.cutAgentModel = main.querySelector('#cutModelIn').value.trim();
+      s.cutAgentCmd = main.querySelector('#cutCmdIn').value.trim();
       s.obsidianPath = main.querySelector('#obPath').value.trim();
       s.projectRoot = main.querySelector('#projRootIn').value.trim();
       s.transcribeEngine = main.querySelector('#trEng').value;
       try {
-        await PS.api('PUT', '/api/settings', { aiBackend: s.aiBackend, aiModel: s.aiModel, obsidianPath: s.obsidianPath, projectRoot: s.projectRoot, transcribeEngine: s.transcribeEngine });
+        await PS.api('PUT', '/api/settings', {
+          aiBackend: s.aiBackend,
+          aiModel: s.aiModel,
+          cutAgentBackend: s.cutAgentBackend || 'inherit',
+          cutAgentModel: s.cutAgentModel,
+          cutAgentCmd: s.cutAgentCmd,
+          obsidianPath: s.obsidianPath,
+          projectRoot: s.projectRoot,
+          transcribeEngine: s.transcribeEngine,
+        });
         await PS.syncFromBackend();
-        PS.toast('配置已写入 ~/.park-studio/config.yaml 并重新扫描 Obsidian 与工程目录 ✓', 'good');
+        PS.toast('全局与独立剪辑 Agent 配置已写入 ~/.park-studio/config.yaml ✓', 'good');
       } catch {
         PS.toast('本地配置已保存', 'good');
       }
       PS.save(); PS.pages.settings();
     };
-
-    main.querySelector('#swShared').onclick = () => { s.sharedBenchmarkOptIn = !s.sharedBenchmarkOptIn; PS.save(); PS.toast(s.sharedBenchmarkOptIn ? '已加入社区共享对标库（仅同步公开元数据）' : '已暂停贡献，仅保留本地对标'); PS.pages.settings(); };
-    main.querySelector('#swTel').onclick = () => { s.telemetryOptIn = !s.telemetryOptIn; PS.save(); PS.pages.settings(); };
-    main.querySelector('#swLearn').onclick = () => { s.learnLinks = !s.learnLinks; PS.save(); PS.pages.settings(); };
-    main.querySelector('#btnJoinGroup').onclick = () => {
-      PS.modal({
-        title: '加入 Park Studio 开源创作者交流群（免费领通行码）',
-        body: `<div class="stack" style="text-align:center;padding:8px 0">
-          <div style="width:156px;height:156px;margin:0 auto;border-radius:14px;background:var(--sunk);border:1px dashed var(--line);display:grid;place-items:center;color:var(--ink-3)">微信群二维码位<br><small>正式版替换为你的活码</small></div>
-          <p class="m0" style="font-size:13.5px">扫码进群后免费领一个 <b>Park 社区通行码</b>，解锁每日「Park 信源」更新、社区 <b>共享对标库（${s.sharedBenchmarkCount}+ 公开号）</b> 与平台改版适配通知。</p>
-        </div>`,
-        foot: `<button class="btn primary" data-close>知道了</button>`,
-      });
-    };
-    main.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => { s.modules[b.dataset.mod] = !s.modules[b.dataset.mod]; PS.save(); PS.pages.settings(); });
-    main.querySelector('#resetDemo').onclick = () => PS.resetDemo();
+    main.querySelector('#resetDemo')?.addEventListener('click', () => PS.resetDemo());
   };
   PS.pages.system = PS.pages.settings;
 
@@ -451,112 +394,127 @@
     main.querySelector('#chkUpd').onclick = () => PS.toast('当前已是最新版 v0.1.2 ✓', 'good');
   };
 
-  // ==================== 3. 其余开源资产模块（知识树 / 原话 / 咨询客户 / 个人网站 / 我的定位） ====================
-  let treeSlug = 'content-ops';
+  // ==================== 3. 知识库（Obsidian 接入文件夹总览与检索，取代零散「说过的话」） ====================
+  let kbFolder = '';
+  let kbQuery = '';
+  let kbNoteIdx = 0;
 
-  PS.pages.tree = function () {
-    const cur = PS.S.tree.find(x => x.slug === treeSlug) || PS.S.tree[0];
-    const main = PS.shell('tree', [['更多模块', '#tree'], ['知识树', '#tree']], `
+  PS.pages.kb = async function () {
+    let kb = PS.S.kb;
+    try {
+      kb = await PS.api('GET', '/api/kb/folders');
+      PS.S.kb = kb;
+    } catch (e) {}
+    kb = kb || { path: PS.S.settings.obsidianPath, mounted: false, totalNotes: 0, folders: [] };
+    const folders = kb.folders || [];
+    if (kbFolder && !folders.some(f => f.name === kbFolder)) kbFolder = '';
+    if (!kbFolder && !kbQuery && folders.length) {
+      kbFolder = (folders.find(f => /原始输出|writing|定位/i.test(f.name)) || folders[0]).name;
+    }
+
+    let notes = [];
+    try {
+      const r = await PS.api('GET', `/api/kb/notes?folder=${encodeURIComponent(kbFolder)}&q=${encodeURIComponent(kbQuery)}&limit=60`);
+      notes = r.items || [];
+    } catch (e) {}
+    if (kbNoteIdx >= notes.length) kbNoteIdx = 0;
+    const curNote = notes[kbNoteIdx] || null;
+    const enabledN = folders.filter(f => f.enabled).length;
+
+    const main = PS.shell('kb', [['系统', '#settings'], ['知识库 · Obsidian', '#kb']], `
       <div class="ph">
-        <div><h1>知识树</h1><p>贴 X 链接、GitHub 仓库或 Obsidian 笔记，本地 Agent 只提炼会改变做法的部分并入分支。</p></div>
-        <div class="acts"><button class="btn primary" id="btnIn">+ 内化新链接</button></div>
-      </div>
-      <div class="two-col">
-        <div class="list-col">
-          ${PS.S.tree.map(b => `<button class="list-item ${b.slug === cur.slug ? 'on' : ''}" data-slug="${b.slug}"><b>${PS.esc(b.name)}</b><span class="sub">${b.standards.length} 条标准 · ${b.pitfalls.length} 个坑</span></button>`).join('')}
+        <div>
+          <h1>知识库（Obsidian）</h1>
+          <p>直接展示本机 Obsidian 挂载的文件夹（<span class="mono">${PS.esc(kb.path)}</span> · ${folders.length} 个目录 · 共 ${kb.totalNotes} 篇笔记 · 已启用 ${enabledN} 个供 AI 写稿/审稿参考）。</p>
         </div>
-        <div class="card stack">
-          <h2 class="m0">${PS.esc(cur.name)}</h2>
-          <div class="callout-warm"><b>核心主干：</b>${PS.esc(cur.trunk)}</div>
-          <div><b>好坏标准</b><ul style="padding-left:18px;margin:6px 0">${cur.standards.map(x => `<li>${PS.esc(x)}</li>`).join('')}</ul></div>
-          <div><b style="color:var(--warn)">避坑清单</b><ul style="padding-left:18px;margin:6px 0">${cur.pitfalls.map(x => `<li>${PS.esc(x)}</li>`).join('')}</ul></div>
+        <div class="acts">
+          <input type="search" id="kbSearch" value="${PS.esc(kbQuery)}" placeholder="搜索当前或全库笔记…" style="width:220px">
+          <a class="btn" href="#settings">改目录路径</a>
         </div>
       </div>
-    `, 'mid');
-    main.querySelectorAll('[data-slug]').forEach(b => b.onclick = () => { treeSlug = b.dataset.slug; PS.pages.tree(); });
-    main.querySelector('#btnIn').onclick = () => {
-      PS.modal({
-        title: '内化新资料进知识树',
-        body: `<input type="url" id="inUrl" placeholder="贴 X 链接、GitHub 仓库或文章链接">`,
-        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="inGo">开始内化</button>`,
-        onOpen(m, close) {
-          m.querySelector('#inGo').onclick = () => {
-            const u = m.querySelector('#inUrl').value.trim(); if (!u) return;
-            cur.standards.push(`来自 ${u.slice(0, 34)} 的核心方法论（已本地内化）`);
-            PS.save(); close(); PS.toast('已完成内化', 'good'); PS.pages.tree();
-          };
-        },
-      });
-    };
-  };
 
-  PS.pages.said = function () {
-    const main = PS.shell('said', [['更多模块', '#said'], ['我说过的话', '#said']], `
-      <div class="ph">
-        <div><h1>我说过的话</h1><p>写稿时 AI 只从这里挑你的真实经历和数字举例，绝不编造。</p></div>
-        <div class="acts"><button class="btn primary" id="addSaid">+ 记一句原话</button></div>
-      </div>
-      <div class="stack tight">
-        ${PS.S.said.map(s => `<div class="card row" style="padding:12px 15px;opacity:${s.muted ? '.45' : '1'}">
-          <div class="min0 grow"><span class="pill accent" style="margin-right:6px">${PS.esc(s.topic)}</span><span class="sub">${PS.esc(s.from)}</span><div style="margin-top:4px">${PS.esc(s.text)}</div></div>
-          <button class="btn s" data-mute="${s.id}">${s.muted ? '恢复' : '以后别用'}</button>
-        </div>`).join('')}
-      </div>
-    `, 'narrow');
-    main.querySelectorAll('[data-mute]').forEach(b => b.onclick = () => { const h = PS.S.said.find(x => x.id === +b.dataset.mute); if (h) h.muted = !h.muted; PS.save(); PS.pages.said(); });
-    main.querySelector('#addSaid').onclick = () => {
-      PS.modal({
-        title: '记录一句原话',
-        body: `<textarea id="sdT" rows="3" placeholder="一字不改记在这里…"></textarea>`,
-        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="sdS">保存</button>`,
-        onOpen(m, close) {
-          m.querySelector('#sdS').onclick = () => {
-            const v = m.querySelector('#sdT').value.trim(); if (!v) return;
-            PS.S.said.unshift({ id: Date.now(), topic: '实战记录', text: v, from: '手动录入', muted: false });
-            PS.save(); close(); PS.pages.said();
-          };
-        },
-      });
-    };
-  };
+      ${!kb.mounted ? `<div class="card stack">
+        <b>尚未找到 Obsidian 知识库目录</b>
+        <p class="sub m0">当前路径 <code class="mono">${PS.esc(kb.path)}</code> 不存在。点击右上角「改目录路径」指向你的 Obsidian Vault 根目录即可只读接入。</p>
+      </div>` : `
+      <div class="kb-grid">
+        <div class="card flush stack tight" style="padding:10px;max-height:72vh;overflow-y:auto">
+          <div class="row" style="padding:4px 6px 8px;border-bottom:1px solid var(--line-soft)">
+            <b style="font-size:13px">接入的文件夹</b>
+            <span class="grow"></span>
+            <button type="button" class="link-muted" id="kbAllBtn" style="font-size:11.5px">${kbFolder ? '看全部' : '全部已选'}</button>
+          </div>
+          ${folders.map(f => `<div class="row" style="padding:6px 8px;border-radius:8px;background:${kbFolder === f.name ? 'var(--accent-soft)' : 'transparent'};cursor:pointer;gap:8px" data-kbf="${PS.esc(f.name)}">
+            <input type="checkbox" data-kb-en="${PS.esc(f.name)}" ${f.enabled ? 'checked' : ''} title="允许 AI 写稿/审稿参考此文件夹" style="cursor:pointer;accent-color:var(--accent)">
+            <span class="clip1 grow" style="font-size:13px;font-weight:${kbFolder === f.name ? 700 : 500}">${PS.esc(f.name)}</span>
+            <span class="sub mono" style="font-size:11px">${f.count}</span>
+          </div>`).join('')}
+        </div>
 
-  PS.pages.clients = function () {
-    const rev = PS.S.clients.reduce((s, c) => s + (c.amount || 0), 0);
-    const main = PS.shell('clients', [['更多模块', '#clients'], ['咨询客户', '#clients']], `
-      <div class="ph">
-        <div><h1>咨询客户</h1><p>轻量开源 CRM，直接追踪哪期内容带来了线索与成交（累计 ¥${PS.fmt(rev)}）。</p></div>
-        <div class="acts"><button class="btn primary" id="addCl">+ 新增线索</button></div>
-      </div>
-      <section class="card pad-0"><div class="tbl-wrap"><table class="tbl">
-        <thead><tr><th>姓名</th><th>方向</th><th>阶段</th><th>来源</th><th class="n">金额</th><th>下一步</th></tr></thead>
-        <tbody>${PS.S.clients.map(c => `<tr><td><b>${PS.esc(c.name)}</b></td><td>${PS.esc(c.niche)}</td><td><span class="pill ${c.stage === '已成交' ? 'good' : 'info'}">${c.stage}</span></td><td>${PS.esc(c.source)}</td><td class="n">${c.amount ? '¥' + PS.fmt(c.amount) : '–'}</td><td class="sub">${PS.esc(c.next)}</td></tr>`).join('')}</tbody>
-      </table></div></section>
-    `, 'mid');
-    main.querySelector('#addCl').onclick = () => {
-      PS.modal({
-        title: '新增线索',
-        body: `<div class="stack"><input type="text" id="cn" placeholder="称呼"><input type="text" id="cs" placeholder="来源作品（如 抖音 EP41）"></div>`,
-        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="csave">保存</button>`,
-        onOpen(m, close) {
-          m.querySelector('#csave').onclick = () => {
-            const n = m.querySelector('#cn').value.trim(); if (!n) return;
-            PS.S.clients.unshift({ id: Date.now(), name: n, niche: '知识IP', stage: '新线索', amount: 0, source: m.querySelector('#cs').value.trim() || '自然流量', next: '待沟通' });
-            PS.save(); close(); PS.pages.clients();
-          };
-        },
-      });
-    };
-  };
+        <div class="card flush src-list" style="max-height:72vh;overflow-y:auto">
+          <div class="src-issue-h">
+            <div class="min0">
+              <div class="sub" style="font-size:11.5px">${kbQuery ? `搜索「${PS.esc(kbQuery)}」` : (kbFolder ? '当前文件夹' : '全部已启用文件夹')}</div>
+              <b class="clip1" style="font-size:14px">${PS.esc(kbFolder || '全库检索')} · ${notes.length} 篇</b>
+            </div>
+          </div>
+          ${notes.map((n, i) => `<div class="src-row ${i === kbNoteIdx ? 'on' : ''}" data-kbi="${i}">
+            <div class="src-meta"><span class="sub">${PS.esc(n.tag)} · ${PS.esc(n.date.slice(0, 10))}</span></div>
+            <div><button class="src-t" type="button" data-kbi="${i}">${PS.esc(n.title)}</button></div>
+            ${n.excerpt ? `<p class="src-x">${PS.esc(n.excerpt)}</p>` : ''}
+          </div>`).join('') || '<div style="padding:24px" class="sub">该目录下暂无匹配笔记</div>'}
+        </div>
 
-  PS.pages.site = function () {
-    PS.shell('site', [['更多模块', '#site'], ['个人网站', '#site']], `
-      <div class="ph"><div><h1>个人网站</h1><p>维护你的个人主页与 UTM 转化承接站。</p></div><div class="acts"><a class="btn primary" href="#conversion">看转化归因 ›</a></div></div>
-      <div class="hm-grid">
-        <div class="card stack tight"><span class="pill good" style="width:fit-content">已连接</span><b>${PS.esc(PS.S.settings.siteName)}</b><span class="mono sub">${PS.esc(PS.S.settings.siteUrl)}</span></div>
-        <div class="card stack tight"><span class="pill accent" style="width:fit-content">开源名片模板</span><b>静态个人页导出</b><button class="btn s" style="width:fit-content" onclick="PS.toast('已导出到 ~/.park-studio/site-dist/','good')">导出静态站点</button></div>
-      </div>
-    `, 'mid');
+        <div class="card src-read" style="max-height:72vh;overflow-y:auto">
+          ${curNote ? `
+            <div class="stack tight" style="padding-bottom:12px;border-bottom:1px solid var(--line-soft)">
+              <div class="row">
+                <span class="pill">${PS.esc(curNote.tag)}</span>
+                <span class="sub mono" style="font-size:11.5px">${PS.esc(curNote.file)} · ${curNote.words} 字</span>
+                <span class="grow"></span>
+                <button class="btn primary s" id="kbAddTopic">+ 加入选题池</button>
+              </div>
+              <h2 class="m0" style="font-size:18px">${PS.esc(curNote.title)}</h2>
+            </div>
+            <div class="md-body" style="margin-top:12px">${PS.md(curNote.body || '')}</div>
+          ` : '<div style="padding:28px" class="sub">左侧选择文件夹和笔记查看全文。</div>'}
+        </div>
+      </div>`}
+    `);
+
+    main.querySelector('#kbSearch')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { kbQuery = e.target.value.trim(); kbNoteIdx = 0; PS.pages.kb(); }
+    });
+    main.querySelector('#kbAllBtn')?.addEventListener('click', () => { kbFolder = ''; kbNoteIdx = 0; PS.pages.kb(); });
+    main.querySelectorAll('[data-kbf]').forEach(row => row.onclick = e => {
+      if (e.target.matches('input[type=checkbox]')) return;
+      kbFolder = row.dataset.kbf;
+      kbNoteIdx = 0;
+      PS.pages.kb();
+    });
+    main.querySelectorAll('[data-kb-en]').forEach(box => box.onchange = async () => {
+      const enabled = [...main.querySelectorAll('[data-kb-en]:checked')].map(x => x.dataset.kbEn);
+      const r = await PS.api('PUT', '/api/kb/folders', { enabled });
+      PS.S.kb = r.kb;
+      PS.toast(`已更新 AI 知识库接入范围（${enabled.length} 个文件夹）`, 'good');
+    });
+    main.querySelectorAll('[data-kbi]').forEach(el => el.onclick = () => {
+      kbNoteIdx = +el.dataset.kbi;
+      PS.pages.kb();
+    });
+    main.querySelector('#kbAddTopic')?.addEventListener('click', async () => {
+      if (!curNote) return;
+      const created = await PS.api('POST', '/api/topics', { title: curNote.title, source_ref: `知识库 · ${curNote.tag}`, body: curNote.body || '' });
+      PS.S.topics.unshift(created);
+      PS.save();
+      PS.toast('已从知识库加入「选题池」 ✓', 'good');
+    });
   };
+  // 兼容旧链接重定向，彻底移除未定型边缘壳
+  PS.pages.said = PS.pages.kb;
+  PS.pages.tree = PS.pages.kb;
+  PS.pages.clients = PS.pages.settings;
+  PS.pages.site = PS.pages.settings;
 
   // ==================== 我的定位（有本机定位正本 positioning.json 时原样呈现 7 页签完整定位系统；否则走简洁 5 格编辑卡） ====================
   const SP_TABS = [

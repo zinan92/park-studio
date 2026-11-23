@@ -128,9 +128,9 @@
   function wsOf(active) {
     if (['dashboard', 'home'].includes(active)) return 'hub';
     if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done'].includes(active)) return 'topic';
-    if (['cut-todo', 'cut', 'cut-done'].includes(active)) return 'cut';
+    if (['cut-todo', 'cut', 'cut-done', 'materials'].includes(active)) return 'cut';
     if (['pub-todo', 'pub-pack', 'pub-confirm', 'pub-sent'].includes(active)) return 'publish';
-    if (['review', 'conversion'].includes(active)) return 'review';
+    if (['review'].includes(active)) return 'review';
     return 'more';
   }
 
@@ -139,6 +139,7 @@
     const waitN = ep41 ? Object.values(ep41.tasks).filter(t => t.state === 'awaiting_user').length : 0;
     const poolN = PS.S.topics.filter(t => !t.trash && ['找', '写', '审'].includes(t.stage)).length;
     const doneN = PS.S.episodes.filter(e => e.finalAt).length;
+    const kbN = PS.S.kb?.folders?.length || 0;
 
     if (ws === 'hub') return [];
     if (ws === 'topic') {
@@ -150,9 +151,10 @@
     }
     if (ws === 'cut') {
       return [
-        { id: 'cut-todo', label: '待剪',            href: '#cut-todo', on: active === 'cut-todo', count: 1 },
-        { id: 'cut',      label: '剪辑中 · 镜头表', href: '#cut',      on: active === 'cut',      count: `EP${PS.S.cutProject.episode}`, hot: true },
-        { id: 'cut-done', label: '剪好了',          href: '#cut-done', on: active === 'cut-done', count: 3 },
+        { id: 'cut-todo',  label: '待剪',            href: '#cut-todo',  on: active === 'cut-todo', count: 1 },
+        { id: 'cut',       label: '剪辑中 · 镜头表', href: '#cut',       on: active === 'cut',      count: `EP${PS.S.cutProject.episode}`, hot: true },
+        { id: 'cut-done',  label: '剪好了',          href: '#cut-done',  on: active === 'cut-done', count: 3 },
+        { id: 'materials', label: '视觉素材库',      href: '#materials', on: active === 'materials' },
       ];
     }
     if (ws === 'publish') {
@@ -160,57 +162,44 @@
         { id: 'pub-todo',    label: '待发', href: '#pub-todo',    on: active === 'pub-todo', count: 1 },
         { id: 'pub-pack',    label: '打包', href: '#pub-pack',    on: active === 'pub-pack' },
         { id: 'pub-confirm', label: '确认', href: '#pub-confirm', on: active === 'pub-confirm', count: waitN ? `${waitN} 待点发` : '', hot: !!waitN },
-        { id: 'pub-sent',    label: '已发', href: '#pub-sent',    on: active === 'pub-sent', count: 3 },
+        { id: 'pub-sent',    label: '已发', href: '#pub-sent',    on: active === 'pub-sent', count: PS.S.analytics?.totalEpisodes || 0 },
       ];
     }
     if (ws === 'review') {
-      const list = [
+      return [
         { id: 'review', label: '同龄复盘 · 抖音分析', href: '#review', on: active === 'review' },
       ];
-      if (PS.S.settings.modules.conversion) {
-        list.push({ id: 'conversion', label: '转化归因', href: '#conversion', on: active === 'conversion' });
-      }
-      return list;
     }
-    // 系统、我的定位与开源资产二级快捷切换
-    const m = PS.S.settings.modules;
-    const more = [
+    // 系统、我的定位、Obsidian 知识库与版本动态
+    return [
       { id: 'settings', label: '系统',     href: '#settings', on: active === 'settings' },
       { id: 'position', label: '我的定位', href: '#position', on: active === 'position' },
+      { id: 'kb',       label: '知识库',   href: '#kb',       on: active === 'kb', count: kbN || '' },
+      { id: 'releases', label: '上新',     href: '#releases', on: active === 'releases' },
     ];
-    if (m.tree) more.push({ id: 'tree', label: '知识树', href: '#tree', on: active === 'tree' });
-    more.push({ id: 'said', label: '说过的话', href: '#said', on: active === 'said' });
-    if (m.clients) more.push({ id: 'clients', label: '客户', href: '#clients', on: active === 'clients' });
-    if (m.site) more.push({ id: 'site', label: '个人网站', href: '#site', on: active === 'site' });
-    more.push({ id: 'releases', label: '上新', href: '#releases', on: active === 'releases' });
-    return more;
   }
 
   // ⌘K 完整跨工作台索引
   PS.cmdk = function () {
     const items = [
       { label: '中控 · 正在做与运营大屏', kind: '中控', hash: '#dashboard' },
-      { label: '日报 · 对标（AI 日报 / 搞钱 / 开发 / 爆款榜 / Obsidian）', kind: '选题', hash: '#source' },
-      { label: '爆款榜 · 按几倍平时排', kind: '选题', hash: '#feed' },
-      { label: '拆解报告', kind: '选题', hash: '#chai' },
+      { label: '日报 · 对标（AI 日报 / 搞钱 / 开发 / 对标爆款 / 素材库）', kind: '选题', hash: '#source' },
+      { label: '对标爆款榜 · 按几倍平时排 & AI 拆解', kind: '选题', hash: '#feed' },
       { label: '选题池 & 写稿骨架', kind: '选题', hash: '#pool' },
       { label: '审稿 / 改写（三路诊断）', kind: '选题', hash: '#audit' },
       { label: '定稿', kind: '选题', hash: '#scripts' },
       { label: '待剪', kind: '剪辑', hash: '#cut-todo' },
-      { label: '剪辑中 · Hook / 镜头表 Spec Table / 交给 Agent', kind: '剪辑', hash: '#cut' },
+      { label: '剪辑中 · Hook / 镜头表 Spec Table / 独立剪辑 Agent', kind: '剪辑', hash: '#cut' },
       { label: '剪好了', kind: '剪辑', hash: '#cut-done' },
+      { label: '视觉素材库（图片 / 视频动效 / 做视频）', kind: '剪辑', hash: '#materials' },
       { label: '待发 · 排期', kind: '发布', hash: '#pub-todo' },
       { label: '打包 · publish.json', kind: '发布', hash: '#pub-pack' },
       { label: '确认 · 专用 Chrome 自动填表', kind: '发布', hash: '#pub-confirm' },
-      { label: '已发 · 7 平台矩阵与分发日历', kind: '发布', hash: '#pub-sent' },
-      { label: '1/3/7 天同龄复盘 & 抖音作品分析', kind: '复盘', hash: '#review' },
-      { label: '转化归因 · 自有站点漏斗', kind: '复盘', hash: '#conversion' },
-      { label: '知识树 & 一键内化', kind: '资产', hash: '#tree' },
-      { label: '我说过的话', kind: '资产', hash: '#said' },
-      { label: '咨询客户 CRM', kind: '资产', hash: '#clients' },
-      { label: '个人网站', kind: '资产', hash: '#site' },
-      { label: '我的定位', kind: '资产', hash: '#position' },
-      { label: '系统 · 守护进程 / 7 平台体检 / 集成与共享对标库', kind: '系统', hash: '#settings' },
+      { label: '已发 · 全平台真实矩阵与日历', kind: '发布', hash: '#pub-sent' },
+      { label: '复盘与抖音作品分析', kind: '复盘', hash: '#review' },
+      { label: '知识库 · Obsidian 接入文件夹与笔记检索', kind: '系统', hash: '#kb' },
+      { label: '我的定位（7 页签完整定位卡）', kind: '系统', hash: '#position' },
+      { label: '系统 · 守护进程 / 7 平台体检 / 全局与独立剪辑 Agent', kind: '系统', hash: '#settings' },
       { label: '上新 · 版本更新与开源动态', kind: '系统', hash: '#releases' },
     ];
     const bg = document.createElement('div');
@@ -349,19 +338,13 @@
       const onlineN = PS.activePlats().filter(p => PS.S.platformStatus[p]?.state === 'ok').length;
       const activeN = PS.activePlats().length;
       host.insertAdjacentHTML('beforeend', `<div class="lg-menu" role="menu">
-        <div class="rp-lbl">系统与创作者定位</div>
+        <div class="rp-lbl">系统与创作者中枢</div>
         <a href="#settings">${PS.icon('sliders', 'sm')}系统与体检 <span class="sub" style="margin-left:auto;font-size:11px">${onlineN}/${activeN}</span></a>
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
-        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.1.2</span></a>
+        <a href="#kb">${PS.icon('book', 'sm')}知识库（Obsidian）</a>
+        <a href="#materials">${PS.icon('layers', 'sm')}视觉素材库</a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.1.0</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
-        <div class="rp-sep"></div>
-        <div class="rp-lbl">个人资产与扩展</div>
-        ${m.tree ? `<a href="#tree">${PS.icon('tree', 'sm')}知识树与内化</a>` : ''}
-        <a href="#said">${PS.icon('mic', 'sm')}我说过的话</a>
-        <a href="#source/materials">${PS.icon('layers', 'sm')}视觉素材库</a>
-        ${m.kline ? `<a href="#source/kline">${PS.icon('chart', 'sm')}K 线日报</a>` : ''}
-        ${m.clients ? `<a href="#clients">${PS.icon('users', 'sm')}咨询客户 CRM</a>` : ''}
-        ${m.site ? `<a href="#site">${PS.icon('globe', 'sm')}个人网站</a>` : ''}
         <div class="rp-sep"></div>
         <button type="button" id="themeToggleMenu">◐ 切换深浅外观</button>
       </div>`);
@@ -420,8 +403,8 @@
       el.classList.toggle('on', isOn);
       el.setAttribute('aria-selected', isOn ? 'true' : 'false');
     });
-    document.getElementById('sysNavBtn')?.classList.toggle('on', active === 'settings' || active === 'position');
-    document.getElementById('moreMenuBtn')?.classList.toggle('on', ws === 'more' && active !== 'settings' && active !== 'position');
+    document.getElementById('sysNavBtn')?.classList.toggle('on', ['settings', 'position', 'kb', 'releases'].includes(active));
+    document.getElementById('moreMenuBtn')?.classList.toggle('on', false);
     updateChromeBadges();
     requestAnimationFrame(() => moveThumb(mainPill, mainThumb, '.lg-tab.on', firstRender));
 
@@ -571,6 +554,9 @@
       if (b.daemonLogs?.length) PS.S.daemonLogs = b.daemonLogs;
       if (b.positioning && Object.keys(b.positioning).length) PS.S.positioning = b.positioning;
       PS.S.studioPositioning = b.studioPositioning || null;
+      if (b.benchmarks) PS.S.benchmarks = b.benchmarks;
+      if (b.kb) PS.S.kb = b.kb;
+      if (b.materials) PS.S.materials = b.materials;
       PS.save();
     } catch (e) {
       PS.backendOnline = false;
