@@ -8,68 +8,138 @@
     scheduled:     { label: '已定时', cls: 'info' },
     awaiting_user: { label: '填好 · 等你点发', cls: 'wait' },
     running:       { label: '专用 Chrome 填表中…', cls: 'accent' },
+    failed:        { label: '需处理', cls: 'warn' },
     planned:       { label: '待开跑', cls: '' },
   };
 
-  let curEpId = 104;
+  let curPubEpId = null;
+
+  function pubEpisodes() {
+    return (PS.S.publishEpisodes && PS.S.publishEpisodes.length) ? PS.S.publishEpisodes : PS.S.episodes;
+  }
+
+  function applyPubRes(res) {
+    if (res.episodes?.length) {
+      PS.S.publishEpisodes = res.episodes;
+      for (const pe of res.episodes) {
+        const hit = PS.S.episodes.find(e => e.episode === pe.episode);
+        if (hit) {
+          hit.dbId = pe.id;
+          hit.videoPath = pe.videoPath;
+          hit.publishJson = pe.publishJson;
+          hit.preflight = pe.preflight;
+          for (const [pid, t] of Object.entries(pe.tasks || {})) {
+            hit.tasks[pid] = { ...(hit.tasks[pid] || {}), ...t, m: t.m || hit.tasks[pid]?.m || null };
+          }
+        }
+      }
+    }
+    if (res.chromeStatus) {
+      PS.S.chromeStatus = res.chromeStatus;
+      PS.S.daemon.chromeOnline = !!res.chromeStatus.online;
+    }
+    if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
+    PS.save();
+  }
 
   // ==================== 发布 · 待发（#pub-todo） ====================
   PS.pages['pub-todo'] = function () {
-    const ep42 = PS.S.episodes.find(e => e.episode === 42) || PS.S.episodes[0];
+    const list = pubEpisodes();
+    const ep = list[0];
     PS.shell('pub-todo', [['发布工作台', '#pub-confirm'], ['待发 · 排期', '#pub-todo']], `
       <div class="ph">
-        <div><h1>待发 · 排期队列</h1><p>刚剪完、准备生成多平台文案与 publish.json 的内容。</p></div>
+        <div><h1>待发 · 排期队列</h1><p>刚剪完、准备生成多平台文案与 publish.json 的内容（SQLite 持久化）。</p></div>
       </div>
-      <div class="card row">
-        <div class="min0 grow">
-          <b>EP${ep42.episode} · ${PS.esc(ep42.title)}</b>
-          <div class="sub">计划发布：${PS.esc((ep42.schedule || '').slice(0, 16).replace('T', ' '))} · 7 个目标平台</div>
-        </div>
-        <a class="btn primary s" href="#pub-pack">去打包各平台文案 ›</a>
+      <div class="stack">
+        ${list.map(e => `<div class="card row">
+          <div class="min0 grow">
+            <b>EP${e.episode} · ${PS.esc(e.title)}</b>
+            <div class="sub">计划发布：${PS.esc((e.schedule || '').slice(0, 16).replace('T', ' '))} · ${e.preflight?.video?.exists ? PS.esc(e.preflight.video.note) : '尚未绑定本地成片路径'}</div>
+          </div>
+          <button class="btn s" onclick="location.hash='#pub-pack'">打包 publish.json</button>
+          <a class="btn primary s" href="#pub-confirm">去填表 ›</a>
+        </div>`).join('')}
       </div>
     `, 'mid');
   };
 
   // ==================== 发布 · 打包（#pub-pack） ====================
   PS.pages['pub-pack'] = function () {
-    const ep = PS.S.episodes.find(e => e.id === curEpId) || PS.S.episodes[0];
+    const list = pubEpisodes();
+    const ep = list.find(e => e.id === curPubEpId) || list[0];
+    curPubEpId = ep.id;
+    const pf = ep.preflight || { video: { exists: false, faststart: false, note: '未检测' }, cover_v: false, cover_h: false };
     const main = PS.shell('pub-pack', [['发布工作台', '#pub-confirm'], ['打包 · publish.json', '#pub-pack']], `
       <div class="ph">
         <div>
           <h1>打包 · 各平台文案与工程校验</h1>
-          <p>本地 Coding Agent 为 7 个平台生成差异化标题/标签/UTM 链接，并自动完成成片 faststart 校验。</p>
+          <p>绑定本地成片与封面路径、纯 Python 校验 MP4 faststart，并真实导出 <code class="mono">~/.park-studio/projects/EP${ep.episode}/publish.json</code>。</p>
         </div>
         <div class="acts">
-          <select id="pkSel" style="width:240px">${PS.S.episodes.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
+          <select id="pkSel" style="width:240px">${list.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
           <a class="btn primary" href="#pub-confirm">去确认 · Chrome 填表 ›</a>
         </div>
       </div>
 
       <div class="card stack">
         <div class="row">
-          <span class="pill good">成片 faststart ✓</span>
-          <span class="pill good">3:4 & 16:9 封面齐 ✓</span>
-          <span class="pill info">UTM 归因：${PS.esc(ep.campaign)}</span>
+          <span class="pill ${pf.video?.exists ? (pf.video.faststart ? 'good' : 'wait') : ''}">${pf.video?.exists ? PS.esc(pf.video.note) : '未绑定本地视频'}</span>
+          <span class="pill ${pf.cover_v ? 'good' : ''}">3:4 封面 ${pf.cover_v ? '✓' : '可选'}</span>
+          <span class="pill ${pf.cover_h ? 'good' : ''}">16:9 封面 ${pf.cover_h ? '✓' : '可选'}</span>
+          <span class="pill info">UTM：${PS.esc(ep.campaign || `ep${ep.episode}`)}</span>
         </div>
-        <pre class="codebox">${PS.esc(JSON.stringify(ep.publishJson, null, 2))}</pre>
+        <div class="sys-2col">
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">本地成片路径（自动注入上传框 + faststart 校验）</label>
+            <input type="text" id="pkVideo" class="mono" value="${PS.esc(ep.videoPath || '')}" placeholder="/Users/wendy/Movies/EP${ep.episode}.mp4">
+          </div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">计划发布时间（ISO）</label>
+            <input type="text" id="pkSched" class="mono" value="${PS.esc(ep.schedule || '')}" placeholder="2026-11-24T19:00:00+08:00">
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="pkSaveBtn">${PS.icon('check', 'sm')}校验并导出 publish.json</button>
+          <span class="sub">落盘路径：<code class="mono">~/.park-studio/projects/EP${ep.episode}/publish.json</code></span>
+        </div>
+        <pre class="codebox">${PS.esc(JSON.stringify(ep.publishJson || {}, null, 2))}</pre>
       </div>
     `, 'mid');
-    main.querySelector('#pkSel').onchange = e => { curEpId = +e.target.value; PS.pages['pub-pack'](); };
+
+    main.querySelector('#pkSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-pack'](); };
+    main.querySelector('#pkSaveBtn').onclick = async e => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/pack`, {
+          video_path: main.querySelector('#pkVideo').value.trim(),
+          schedule: main.querySelector('#pkSched').value.trim(),
+        });
+        applyPubRes(res);
+        PS.toast(`已真实导出 ${res.path}`, 'good');
+        PS.pages['pub-pack']();
+      } catch (err) {
+        PS.toast(err.message || '导出失败', 'warn');
+        btn.disabled = false;
+      }
+    };
   };
 
-  // ==================== 发布 · 确认（#pub-confirm · 自研开源专用 Chrome 填表引擎） ====================
+  // ==================== 发布 · 确认（#pub-confirm · 100% MIT 开源自研专用 Chrome 填表引擎） ====================
   PS.pages['pub-confirm'] = function () {
-    const ep = PS.S.episodes.find(e => e.id === curEpId) || PS.S.episodes[0];
+    const list = pubEpisodes();
+    const ep = list.find(e => e.id === curPubEpId) || list[0];
+    curPubEpId = ep.id;
     const active = PS.activePlats();
 
     const main = PS.shell('pub-confirm', [['发布工作台', '#pub-confirm'], ['确认 · 专用 Chrome 填表', '#pub-confirm']], `
       <div class="ph">
         <div>
           <h1>确认 · 自研开源多平台填表</h1>
-          <p>专用 Chrome 分批自动传视频/封面/文案并截图留档；国内四家停在「等你点发」，点完自动取链接写回大屏。</p>
+          <p>100% MIT 自研 CDP 引擎（零闭源插件）：自动在专用 Chrome 打开创作页、填文案/传视频并截图留档；国内四家严格停在「等你点发」，发完自动取链。</p>
         </div>
         <div class="acts">
-          <select id="cfSel" style="width:230px">${PS.S.episodes.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
+          <select id="cfSel" style="width:230px">${list.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
           <button class="btn primary" id="fillAll">${PS.icon('chrome', 'sm')}分批启动 Chrome 填表</button>
         </div>
       </div>
@@ -80,10 +150,18 @@
           const t = ep.tasks[pid] || { state: 'planned', detail: '等待开跑' };
           const sm = STATE_META[t.state] || STATE_META.planned;
           let btn = '';
-          if (t.state === 'planned') btn = `<button class="btn primary s" data-fill="${pid}">填这一家</button>`;
-          else if (t.state === 'awaiting_user') btn = `<button class="btn good s" data-sync="${pid}">我已点发 → 自动取链</button><button class="btn s" data-shot="${pid}">看截图</button>`;
-          else if (t.state === 'scheduled') btn = `<button class="btn s" data-sync="${pid}">核对定时并取链</button>`;
-          else if (t.state === 'published') btn = `<a class="btn s" href="${PS.esc(t.url || '#')}" target="_blank">打开作品 ↗</a><button class="btn s" data-shot="${pid}">存档</button>`;
+          if (t.state === 'planned' || t.state === 'failed') {
+            btn = `<button class="btn primary s" data-fill="${pid}">填这一家</button>`;
+          } else if (t.state === 'awaiting_user') {
+            btn = `<button class="btn good s" data-sync="${pid}">我已点发 → 自动取链</button>`
+              + `<button class="btn s" data-mark="${pid}">贴链确认</button>`
+              + (t.hasScreenshot ? `<button class="btn s" data-shot="${pid}">看截图</button>` : '');
+          } else if (t.state === 'scheduled') {
+            btn = `<button class="btn s" data-sync="${pid}">核对定时并取链</button><button class="btn s" data-mark="${pid}">改状态</button>`;
+          } else if (t.state === 'published') {
+            btn = `<a class="btn s" href="${PS.esc(t.url || '#')}" target="_blank" rel="noopener">打开作品 ↗</a>`
+              + (t.hasScreenshot ? `<button class="btn s" data-shot="${pid}">存档</button>` : `<button class="btn s" data-fill="${pid}">重填</button>`);
+          }
 
           return `<div class="pub-card ${t.state}">
             <div class="row">
@@ -91,54 +169,105 @@
               <span class="grow"></span>
               <span class="pill ${sm.cls}">${sm.label}</span>
             </div>
-            <div class="sub" style="min-height:36px">${PS.esc(t.detail || '就绪')}</div>
-            <div class="row" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--line-soft)">
+            <div class="sub" style="min-height:38px;line-height:1.55">${PS.esc(t.detail || '就绪')}</div>
+            <div class="row" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--line-soft);gap:6px">
               ${btn}
               <span class="grow"></span>
-              <span class="sub" style="font-size:11px">${p.mode === 'manual' ? '只填不发' : '校验提交'}</span>
+              <span class="sub" style="font-size:11px">${p.mode === 'manual' ? '只填不发' : '核对后发'}</span>
             </div>
           </div>`;
         }).join('')}
       </section>
     `);
 
-    main.querySelector('#cfSel').onchange = e => { curEpId = +e.target.value; PS.pages['pub-confirm'](); };
+    main.querySelector('#cfSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-confirm'](); };
 
-    function fillOne(pid) {
+    async function fillOne(pid, btnEl) {
       const p = PS.PLATFORMS[pid];
-      ep.tasks[pid] = { state: 'running', detail: '专用 Chrome 已打开上传页，正在传成片、填文案并截图…', url: '', updatedAt: '刚刚', m: null };
-      PS.pages['pub-confirm']();
-      setTimeout(() => {
-        if (p.mode === 'manual') {
-          ep.tasks[pid] = { state: 'awaiting_user', detail: '已填完视频、封面和话题并截图留档，等你点最后一下「发布」', url: '', updatedAt: '刚刚', m: null };
-          PS.toast(`${p.name} 已填好并推飞书催点发`, 'warn');
-        } else {
-          ep.tasks[pid] = { state: 'published', detail: '回读标题定时一致，已自动发布并回填链接', url: `https://example.com/${pid}/ep${ep.episode}`, updatedAt: '刚刚', m: { views: 1640, likes: 92, comments: 16, favorites: 48, shares: 14, fans: 18 } };
-          PS.toast(`${p.name} 已校验提交并回填链接`, 'good');
-        }
-        PS.save();
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'Chrome 填表中…'; }
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/fill`, { platform: pid });
+        applyPubRes(res);
+        PS.toast(res.ok ? `${p.name} 已在专用 Chrome 填好并截图留档，请亲自点发布` : (res.reason || `${p.name} 需要先登录`), res.ok ? 'good' : 'warn');
         PS.pages['pub-confirm']();
-      }, 750);
+      } catch (err) {
+        PS.toast(err.message || `${p.name} 填表失败`, 'warn');
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = '填这一家'; }
+      }
     }
 
-    main.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => fillOne(b.dataset.fill));
-    main.querySelector('#fillAll').onclick = () => {
-      const todo = active.filter(pid => (ep.tasks[pid]?.state || 'planned') === 'planned');
+    main.querySelectorAll('[data-fill]').forEach(b => b.onclick = e => fillOne(b.dataset.fill, e.currentTarget));
+    main.querySelector('#fillAll').onclick = async e => {
+      const todo = active.filter(pid => ['planned', 'failed'].includes(ep.tasks[pid]?.state || 'planned'));
       if (!todo.length) return PS.toast('当前没有待开跑的平台');
-      todo.forEach((pid, i) => setTimeout(() => fillOne(pid), i * 320));
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      for (let i = 0; i < todo.length; i++) {
+        btn.textContent = `正在填 ${PS.PLATFORMS[todo[i]].name} (${i + 1}/${todo.length})…`;
+        await fillOne(todo[i], null);
+      }
+      btn.disabled = false;
     };
-    main.querySelectorAll('[data-sync]').forEach(b => b.onclick = () => {
+
+    main.querySelectorAll('[data-sync]').forEach(b => b.onclick = async e => {
       const pid = b.dataset.sync;
-      ep.tasks[pid] = { state: 'published', detail: '已从创作者后台自动取回链接并进入 6h 采样', url: `https://creator.${pid}.example/ep${ep.episode}`, updatedAt: '刚刚', m: { views: 5420, likes: 380, comments: 52, favorites: 410, shares: 76, fans: 62 } };
-      PS.save();
-      PS.toast(`${PS.PLATFORMS[pid].name} 链接已自动写回「已发」和「运营大屏」`, 'good');
-      PS.pages['pub-confirm']();
+      const btn = e.currentTarget;
+      const old = btn.textContent;
+      btn.disabled = true; btn.textContent = '后台扫链中…';
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/sync`, { platform: pid });
+        applyPubRes(res);
+        if (res.found) {
+          PS.toast(`${PS.PLATFORMS[pid].name} 链接已自动写回：${res.url}`, 'good');
+        } else {
+          PS.toast(res.reason || '暂未扫到新发布作品，可稍后重试或点「贴链确认」', 'warn');
+        }
+        PS.pages['pub-confirm']();
+      } catch (err) {
+        PS.toast(err.message || '自动取链失败', 'warn');
+        btn.disabled = false; btn.textContent = old;
+      }
     });
+
+    main.querySelectorAll('[data-mark]').forEach(b => b.onclick = () => {
+      const pid = b.dataset.mark;
+      const p = PS.PLATFORMS[pid];
+      const cur = ep.tasks[pid] || {};
+      PS.modal({
+        title: `手动确认已发布 · EP${ep.episode} · ${p.name}`,
+        body: `<div class="stack">
+          <div><label class="sub" style="display:block;margin-bottom:4px">作品链接（可选）</label><input type="url" id="mkUrl" value="${PS.esc(cur.url || '')}" placeholder="https://..."></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">状态</label>
+            <select id="mkState"><option value="published" selected>已发布</option><option value="scheduled">已定时</option><option value="planned">重置为待开跑</option></select>
+          </div>
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="mkSave">保存状态</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#mkSave').onclick = async () => {
+            const url = mb.querySelector('#mkUrl').value.trim();
+            const state = mb.querySelector('#mkState').value;
+            const res = await PS.api('POST', `/api/publish/${ep.id}/mark`, { platform: pid, state, url });
+            applyPubRes(res);
+            close();
+            PS.toast(`${p.name} 状态已写入 SQLite`, 'good');
+            PS.pages['pub-confirm']();
+          };
+        },
+      });
+    });
+
     main.querySelectorAll('[data-shot]').forEach(b => b.onclick = () => {
-      const p = PS.PLATFORMS[b.dataset.shot];
+      const pid = b.dataset.shot;
+      const p = PS.PLATFORMS[pid];
+      const t = ep.tasks[pid] || {};
+      const imgUrl = `/api/publish/${ep.id}/screenshot/${pid}?t=${Date.now()}`;
       PS.modal({
         title: `提交前截图存档 · EP${ep.episode} · ${p.name}`,
-        body: `<div class="card" style="background:var(--sunk)"><p class="m0">视频 faststart ✓ · 标题与定时回读一致 ✓<br>存档路径：<code class="mono">~/.park-studio/projects/EP${ep.episode}/publish_shots/${p.id}.jpg</code></p></div>`,
+        wide: true,
+        body: `<div class="stack">
+          <div class="sub mono" style="font-size:12px">存档路径：${PS.esc(t.screenshot || `~/.park-studio/projects/EP${ep.episode}/publish_shots/${pid}.jpg`)}</div>
+          <img src="${imgUrl}" alt="提交前截图" style="width:100%;border-radius:10px;border:1px solid var(--line-soft)" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'src-notice',textContent:'暂无本机实拍截图（点击「填这一家」后会自动截取提交前画面）'}))">
+        </div>`,
         foot: `<button class="btn primary" data-close>关闭</button>`,
       });
     });

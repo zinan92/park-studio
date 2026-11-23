@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, cdp, config, db, platforms, vault
+from . import ai, cdp, config, daemon, db, platforms, publisher, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -74,6 +74,25 @@ class PlatformToggleReq(BaseModel):
 
 class FeishuTestReq(BaseModel):
     webhook: str = ""
+
+
+class PackEpisodeReq(BaseModel):
+    video_path: str | None = None
+    cover_v_path: str | None = None
+    cover_h_path: str | None = None
+    schedule: str | None = None
+    publish_json: dict[str, Any] | None = None
+
+
+class PublishPlatformReq(BaseModel):
+    platform: str
+
+
+class MarkPublishReq(BaseModel):
+    platform: str
+    state: str = "published"
+    url: str = ""
+    detail: str = ""
 
 
 def _row_topic(r) -> dict[str, Any]:
@@ -167,6 +186,8 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "vaultStatus": vault.vault_status(cfg),
             "chromeStatus": cdp.chrome_status(cfg),
             "platformStatus": platforms.get_platform_status_map(conn),
+            "publishEpisodes": publisher.list_episodes(conn),
+            "launchd": daemon.daemon_status(),
             "followersLive": followers_live,
             "hasLiveFollowers": bool(followers_live),
             "lastMetricsAt": last_metrics_at,
@@ -514,6 +535,84 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         db.log_event(conn, "系统", "飞书", "测试发送", "连通成功")
         return {**res, "daemonLogs": _recent_logs()}
+
+    # ---------- Step 3：100% MIT 自研 CDP 自动填表发布引擎 + 截图存档 + 自动取链 + launchd ----------
+    @app.get("/api/publish/episodes")
+    def api_publish_episodes() -> dict[str, Any]:
+        return {"episodes": publisher.list_episodes(conn)}
+
+    @app.post("/api/publish/{episode_id}/pack")
+    def api_publish_pack(episode_id: int, req: PackEpisodeReq) -> dict[str, Any]:
+        try:
+            res = publisher.pack_episode(
+                conn,
+                episode_id,
+                video_path=req.video_path,
+                cover_v_path=req.cover_v_path,
+                cover_h_path=req.cover_h_path,
+                schedule=req.schedule,
+                publish_json=req.publish_json,
+            )
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/publish/{episode_id}/fill")
+    async def api_publish_fill(episode_id: int, req: PublishPlatformReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await publisher.fill_platform(conn, episode_id, req.platform, cfg=cfg)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {
+            **res,
+            "episodes": publisher.list_episodes(conn),
+            "chromeStatus": cdp.chrome_status(cfg),
+            "daemonLogs": _recent_logs(),
+        }
+
+    @app.post("/api/publish/{episode_id}/sync")
+    async def api_publish_sync(episode_id: int, req: PublishPlatformReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await publisher.sync_platform_link(conn, episode_id, req.platform, cfg=cfg)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/publish/{episode_id}/mark")
+    def api_publish_mark(episode_id: int, req: MarkPublishReq) -> dict[str, Any]:
+        try:
+            res = publisher.mark_platform(
+                conn, episode_id, req.platform, state=req.state, url=req.url, detail=req.detail
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
+
+    @app.get("/api/publish/{episode_id}/screenshot/{pid}")
+    def api_publish_screenshot(episode_id: int, pid: str):
+        ep = publisher.get_episode(conn, episode_id)
+        if not ep:
+            raise HTTPException(404, "期次不存在")
+        task = (ep.get("tasks") or {}).get(pid) or {}
+        shot = Path(str(task.get("screenshot") or ""))
+        if not shot.is_file():
+            raise HTTPException(404, "暂无提交前截图")
+        return FileResponse(shot, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/daemon/install-launchd")
+    def api_install_launchd(load: bool = False) -> dict[str, Any]:
+        try:
+            st = daemon.install_launchd(port=8792, load=load)
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+        db.log_event(conn, "系统", "launchd", "生成开机自启配置", st["plistPath"])
+        return {"ok": True, "launchd": st, "daemonLogs": _recent_logs()}
 
     # ---------- 静态前端托管 ----------
     app.mount("/css", StaticFiles(directory=str(STATIC_DIR / "css")), name="css")

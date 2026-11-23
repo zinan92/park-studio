@@ -565,6 +565,23 @@
       if (b.platformStatus) {
         PS.S.platformStatus = { ...PS.S.platformStatus, ...b.platformStatus };
       }
+      if (b.publishEpisodes?.length) {
+        PS.S.publishEpisodes = b.publishEpisodes;
+        // 同步最新 SQLite 发布任务状态到总览 episodes（按 episode 号对齐）
+        for (const pe of b.publishEpisodes) {
+          const hit = PS.S.episodes.find(e => e.episode === pe.episode);
+          if (hit) {
+            hit.dbId = pe.id;
+            hit.videoPath = pe.videoPath;
+            hit.publishJson = pe.publishJson;
+            hit.preflight = pe.preflight;
+            for (const [pid, t] of Object.entries(pe.tasks || {})) {
+              hit.tasks[pid] = { ...(hit.tasks[pid] || {}), ...t, m: t.m || hit.tasks[pid]?.m || null };
+            }
+          }
+        }
+      }
+      if (b.launchd) PS.S.launchd = b.launchd;
       if (b.lastMetricsAt) PS.S.daemon.lastMetricsAt = b.lastMetricsAt;
       PS.S.liveFollowerPlats = Object.keys(b.followersLive || {});
       if (b.followersLive) {

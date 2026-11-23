@@ -194,7 +194,10 @@
       </div>
       <section class="sys-2col">
         <div class="card">
-          <div class="card-h"><h3>自动任务</h3><span class="sub">launchd / 任务计划</span></div>
+          <div class="card-h">
+            <h3>自动任务</h3>
+            <button class="btn s" id="btnLaunchd">${PS.S.launchd?.installed ? '已生成 launchd ✓' : '生成 macOS 开机自启'}</button>
+          </div>
           <div class="sys-scroll">
             <dl class="kv-dl">
               <dt>每 5 分钟</dt><dd>检查有没有到点要取链接的期数，每 20 分钟提醒还没点发布的国内平台</dd>
@@ -279,9 +282,28 @@
       PS.pages.settings();
     });
 
-    main.querySelector('#btnSyncCur').onclick = () => {
-      PS.toast(`「${curEp.nick}」自动取链将在 Step 3 发布引擎接入后生效`, 'good');
-    };
+    main.querySelector('#btnSyncCur').onclick = e => runBtn(e.currentTarget, '正在扫描后台链接…', async () => {
+      const pe = (PS.S.publishEpisodes || [])[0];
+      if (!pe) return PS.toast('暂无发布期次', 'warn');
+      let hits = 0;
+      for (const pid of active) {
+        const st = pe.tasks?.[pid]?.state;
+        if (st === 'awaiting_user' || st === 'scheduled') {
+          const r = await PS.api('POST', `/api/publish/${pe.id}/sync`, { platform: pid });
+          applySysRes(r);
+          if (r.found) hits++;
+        }
+      }
+      PS.toast(hits ? `已自动取回 ${hits} 个平台作品链接` : '扫描完毕，暂未发现新回填链接', hits ? 'good' : 'warn');
+      PS.pages.settings();
+    });
+    main.querySelector('#btnLaunchd')?.addEventListener('click', e => runBtn(e.currentTarget, '生成中…', async () => {
+      const res = await PS.api('POST', '/api/daemon/install-launchd', {});
+      PS.S.launchd = res.launchd;
+      applySysRes(res);
+      PS.toast(`已生成 ${res.launchd.plistPath}`, 'good');
+      PS.pages.settings();
+    }));
     main.querySelector('#btnMetrics').onclick = e => runBtn(e.currentTarget, '正在采集数据…', async () => {
       const res = await PS.api('POST', '/api/collect/followers', {});
       applySysRes(res);

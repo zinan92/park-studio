@@ -298,6 +298,37 @@ class CDPClient:
             raise RuntimeError(str(desc or "JS evaluation error"))
         return (res.get("result") or {}).get("value")
 
+    async def set_file_input(self, session_id: str, selector: str, files: list[str]) -> bool:
+        """通过原生 CDP DOM.setFileInputFiles 直接向文件上传框注入本地路径（不弹系统文件对话框）。"""
+        active_sid = self._session_aliases.get(session_id, session_id)
+        await self.send("DOM.enable", {}, session_id=active_sid)
+        doc = await self.send("DOM.getDocument", {"depth": -1, "pierce": True}, session_id=active_sid)
+        root_id = (doc.get("root") or {}).get("nodeId")
+        if not root_id:
+            return False
+        q = await self.send("DOM.querySelector", {"nodeId": root_id, "selector": selector}, session_id=active_sid)
+        node_id = q.get("nodeId") or 0
+        if not node_id:
+            return False
+        await self.send("DOM.setFileInputFiles", {"nodeId": node_id, "files": files}, session_id=active_sid)
+        return True
+
+    async def insert_text(self, session_id: str, text: str) -> None:
+        """向当前聚焦输入框/富文本编辑器原生输入文字（兼容 React/Vue/DraftJS）。"""
+        active_sid = self._session_aliases.get(session_id, session_id)
+        await self.send("Input.insertText", {"text": text}, session_id=active_sid)
+
+    async def capture_screenshot(self, session_id: str, out_path: Path) -> Path:
+        """截取当前标签页提交前存档截图（JPEG）。"""
+        import base64
+
+        active_sid = self._session_aliases.get(session_id, session_id)
+        res = await self.send("Page.captureScreenshot", {"format": "jpeg", "quality": 82}, session_id=active_sid)
+        data = res.get("data") or ""
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(base64.b64decode(data))
+        return out_path
+
     async def with_tab(
         self,
         url: str,

@@ -123,6 +123,33 @@ CREATE TABLE IF NOT EXISTS followers_daily (
     PRIMARY KEY (day, platform)
 );
 
+CREATE TABLE IF NOT EXISTS publish_episodes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    episode INTEGER NOT NULL,
+    nick TEXT NOT NULL,
+    title TEXT NOT NULL,
+    campaign TEXT NOT NULL DEFAULT '',
+    schedule TEXT NOT NULL DEFAULT '',
+    video_path TEXT NOT NULL DEFAULT '',
+    cover_v_path TEXT NOT NULL DEFAULT '',
+    cover_h_path TEXT NOT NULL DEFAULT '',
+    publish_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS publish_tasks (
+    episode_id INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'planned',
+    detail TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    screenshot_path TEXT NOT NULL DEFAULT '',
+    metrics_json TEXT NOT NULL DEFAULT '{}',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (episode_id, platform)
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
@@ -263,6 +290,81 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
                 "INSERT INTO platform_status(platform, state, detail, disabled, checked_at, updated_at) VALUES (?,?,?,0,'未检查',?)",
                 (pid, st, det, ts),
             )
+
+    if conn.execute("SELECT COUNT(*) FROM publish_episodes").fetchone()[0] == 0:
+        ep_seeds = [
+            (
+                42,
+                "Park Studio 全开源发布",
+                "我把 4 个内容工作台合并成 1 个开源本地中控：零 API 费跑通选题剪辑发布复盘",
+                "ep42-park-studio",
+                "2026-11-24T19:00:00+08:00",
+                {
+                    "episode": 42,
+                    "title": "我把 4 个内容工作台合并成 1 个开源本地中控：零 API 费跑通选题剪辑发布复盘",
+                    "description": "开源本地内容生产线 Park Studio：Obsidian 只读 + 本地 Gemini/Claude/Codex 零 API 费 + 专用 Chrome 7 平台半自动发布闭环。",
+                    "tags": ["AI工作流", "开源项目", "自媒体效率", "一人公司"],
+                    "utm_campaign": "ep42-park-studio",
+                    "schedule": "2026-11-24T19:00:00+08:00",
+                    "platforms": {
+                        "douyin": {"title": "4 套工作台合 1 个开源中控：零 API 费跑通 7 平台", "tags": ["AI工具", "自媒体", "开源"]},
+                        "xhs": {"title": "我把每天用的内容工作台全功能开源了（附 Mac 本地版）", "tags": ["AI工作流", "效率神器", "一人公司"]},
+                        "bilibili": {"title": "【开源】零 API 费！一个本地中控搞定选题、剪辑镜头表、7 平台填表与复盘", "tags": ["开源", "AI", "效率工具"]},
+                        "channels": {"title": "用开源本地中控跑通 7 平台内容生产线", "tags": ["AI", "创作者"]},
+                        "youtube": {"title": "I Open-Sourced My Local AI Content Studio (Zero API Fees, 7 Platforms)", "tags": ["AI", "OpenSource", "Creator"]},
+                        "x": {"text": "I merged 4 legacy local tools into one MIT open-source Creator OS — Park Studio.\n\n- Local Obsidian + Gemini/Claude/Codex CLI (zero API fees)\n- Dedicated Chrome CDP for 7 platforms\n- Full-screen liquid glass Command Center\n\nGitHub link in reply."},
+                        "wechat": {"title": "为什么我把自己的内容中控全功能 MIT 开源了"},
+                    },
+                },
+                {
+                    "douyin": ("planned", "待开跑", ""),
+                    "xhs": ("planned", "待开跑", ""),
+                    "bilibili": ("planned", "待开跑", ""),
+                    "channels": ("planned", "待开跑", ""),
+                    "youtube": ("planned", "待开跑", ""),
+                    "x": ("planned", "待开跑", ""),
+                    "wechat": ("planned", "待开跑", ""),
+                },
+            ),
+            (
+                41,
+                "本地 Agent 自动填 7 平台",
+                "一期视频发 7 个平台太折磨？我用本地专用 Chrome + Agent 做成了半自动发布闭环",
+                "ep41-auto-publish",
+                "2026-11-22T18:30:00+08:00",
+                {
+                    "episode": 41,
+                    "title": "一期视频发 7 个平台太折磨？我用本地专用 Chrome + Agent 做成了半自动发布闭环",
+                    "description": "国内 4 家只填不点发、截图留档；发完自动取链回填大屏。",
+                    "tags": ["AI", "多平台发布", "自动化"],
+                    "utm_campaign": "ep41-auto-publish",
+                    "schedule": "2026-11-22T18:30:00+08:00",
+                    "platforms": {},
+                },
+                {
+                    "douyin": ("published", "已发 · 已自动取链", "https://www.douyin.com/"),
+                    "xhs": ("awaiting_user", "已填好文案并截图留档，等你点最后一下发布", ""),
+                    "bilibili": ("published", "已发 · 已自动取链", "https://www.bilibili.com/"),
+                    "channels": ("awaiting_user", "已填好文案并截图留档，等你点最后一下发布", ""),
+                    "youtube": ("published", "已发 · 已自动取链", "https://studio.youtube.com/"),
+                    "x": ("published", "已发 · 已自动取链", "https://x.com/"),
+                    "wechat": ("scheduled", "已排期定时推送", ""),
+                },
+            ),
+        ]
+        for ep_num, nick, title, camp, sched, pjson, tmap in ep_seeds:
+            cur = conn.execute(
+                """INSERT INTO publish_episodes(episode, nick, title, campaign, schedule, video_path, cover_v_path, cover_h_path, publish_json, created_at, updated_at)
+                   VALUES (?,?,?,?,?,'','','',?,?,?)""",
+                (ep_num, nick, title, camp, sched, json.dumps(pjson, ensure_ascii=False), ts, ts),
+            )
+            eid = cur.lastrowid
+            for pid, (st, det, u) in tmap.items():
+                conn.execute(
+                    """INSERT INTO publish_tasks(episode_id, platform, state, detail, url, screenshot_path, metrics_json, updated_at)
+                       VALUES (?,?,?,?,?,'','{}',?)""",
+                    (eid, pid, st, det, u, ts),
+                )
 
     if conn.execute("SELECT COUNT(*) FROM daemon_logs").fetchone()[0] == 0:
         conn.execute("INSERT INTO daemon_logs(ts, episode, platform, action, result) VALUES (?,?,?,?,?)",
