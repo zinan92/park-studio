@@ -343,7 +343,7 @@
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
         <a href="#kb">${PS.icon('book', 'sm')}知识库（Obsidian）</a>
         <a href="#materials">${PS.icon('layers', 'sm')}视觉素材库</a>
-        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.1.0</span></a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.2.0</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
         <button type="button" id="themeToggleMenu">◐ 切换深浅外观</button>

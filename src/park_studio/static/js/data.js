@@ -40,7 +40,7 @@
       meta: {
         owner: 'Park',
         workspaceName: 'Park Studio',
-        version: 'v0.1.0-preview',
+        version: 'v0.2.0',
         demoMode: true,
         runtimeMode: 'localhost', // localhost | desktop-app
       },
@@ -88,7 +88,12 @@
         },
       },
       releases: [
-        { ver: 'v0.1.2', date: '2026-11-22', tag: '最新', title: '四大工作台极简架构 + Apple 风格系统台 + 共享对标库机制', notes: ['左栏收敛为「选题 / 剪辑 / 发布 / 复盘」四大工作台，每次仅露出 3–4 步，零视觉压迫', '新增 Apple 风格「系统」页：守护进程 / 本地目录 / 专用浏览器 / 7 平台体检与一键打开登录页', '新增自愿制「共享对标库」：只同步公开爆款元数据，绝不上传 Cookie，人人利他换取全社区爆款流'] },
+        { ver: 'v0.2.0', date: '2026-11-23', tag: '最新', title: '双模式本地剪辑台 + 对标爆款库 + 视觉素材库 + Obsidian 知识库 + Gemini 引擎', notes: [
+          '双模式本地视频剪辑台：一键粗剪（mlx-whisper / faster-whisper 离线转写 + 自动标口误/停顿 + ffmpeg 两遍 -16 LUFS & ASS 字幕烧录 + faststart 自动落盘）与高级动效模式（SRT 秒解析 + Spec Table 镜头表 + 独立剪辑 Agent 后台实时日志）',
+          '补齐对标爆款库（本地拆解目录 + 3× 爆款筛选 + 博主追踪抓取 + AI 拆解）、视觉素材库（图片 / 视频动效 / 做视频三大类 + 实图/视频预览）与 3 栏 Obsidian 知识库',
+          'AI 引擎新增 Gemini API（自动读取 GOOGLE_API_KEY / GEMINI_API_KEY）与 Antigravity CLI (agy)，支持全局 Agent 与独立剪辑 Agent 拆分配置'
+        ] },
+        { ver: 'v0.1.2', date: '2026-11-22', tag: '架构', title: '四大工作台极简架构 + Apple 风格系统台 + 共享对标库机制', notes: ['左栏收敛为「选题 / 剪辑 / 发布 / 复盘」四大工作台，每次仅露出 3–4 步，零视觉压迫', '新增 Apple 风格「系统」页：守护进程 / 本地目录 / 专用浏览器 / 7 平台体检与一键打开登录页', '新增自愿制「共享对标库」：只同步公开爆款元数据，绝不上传 Cookie，人人利他换取全社区爆款流'] },
         { ver: 'v0.1.1', date: '2026-11-18', tag: '功能', title: '剪辑工作台 3 步镜头表（Spec Table）与 worktable.json 交接', notes: ['支持 Hook 原句勾选、低/中/高动效密度切换与逐字稿双栏联动', '一键复制指令交给本机 Claude Code / Codex + park-video-v2 渲染成片'] },
         { ver: 'v0.1.0', date: '2026-11-12', tag: '首发', title: 'Park Studio MIT 全功能开源基线发布', notes: ['合并 Topic Studio 管理员版与 4 个历史 Content Studio 分支为唯一开源本地工作台', '零强制外部付费 API：默认直连本机 Coding Agent 与本地语音转写'] },
       ],
