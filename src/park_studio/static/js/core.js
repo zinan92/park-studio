@@ -1,4 +1,4 @@
-/* Park Studio 核心框架 v2 — 严格对齐线上版四大工作台 [ 选题 | 剪辑 | 发布 | 复盘 ] + 极简底部设置浮层 */
+/* Park Studio 核心框架 v3 — Apple Liquid Glass 悬浮毛玻璃双层顶栏（中控 | 选题 | 剪辑 | 发布 | 复盘）+ 弹性滑块动效 */
 (function () {
   'use strict';
   const PS = (window.PS = window.PS || {});
@@ -7,7 +7,6 @@
   PS.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   PS.md = function (src) {
     const inline = s => {
-      // 先转义 HTML，再解析安全 Markdown 内联语法（链接、粗体、行内代码、裸网址）
       const links = [];
       let t = String(s || '').replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, label, url) => {
         const idx = links.length;
@@ -39,6 +38,7 @@
     close();
     return out.join('');
   };
+
   PS.fmt = n => (n == null || isNaN(n)) ? '–' : Math.round(n).toLocaleString('en-US');
   PS.kfmt = n => (n == null || isNaN(n)) ? '–' : n >= 10000 ? `${(n / 10000).toFixed(n >= 100000 ? 0 : 1)}万` : PS.fmt(n);
   PS.sgn = n => (n == null ? '–' : (n > 0 ? '+' : '') + PS.fmt(n));
@@ -116,63 +116,80 @@
     PS.toast(cur === 'dark' ? '已切换深色模式' : '已切换浅色模式');
   };
 
-  // 四大工作台定义（与线上版完全一致，只显示当前阶段的 3-4 项！）
-  const WS_META = {
-    topic:   { name: '选题', sub: '选题工作台', def: '#source' },
-    cut:     { name: '剪辑', sub: '剪辑工作台', def: '#cut' },
-    publish: { name: '发布', sub: '发布工作台', def: '#pub-confirm' },
-    review:  { name: '复盘', sub: '复盘工作台', def: '#dashboard' },
-  };
+  // 五大顶层悬浮玻璃胶囊 Tab：[ 中控 | 选题 | 剪辑 | 发布 | 复盘 ]
+  const WS_LIST = [
+    { key: 'hub',     name: '中控', icon: 'dashboard', def: '#dashboard' },
+    { key: 'topic',   name: '选题', icon: 'star',      def: '#source' },
+    { key: 'cut',     name: '剪辑', icon: 'film',      def: '#cut' },
+    { key: 'publish', name: '发布', icon: 'send',      def: '#pub-confirm' },
+    { key: 'review',  name: '复盘', icon: 'chart',     def: '#review' },
+  ];
 
   function wsOf(active) {
-    if (['home', 'source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done'].includes(active)) return 'topic';
+    if (['dashboard', 'home'].includes(active)) return 'hub';
+    if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done'].includes(active)) return 'topic';
     if (['cut-todo', 'cut', 'cut-done'].includes(active)) return 'cut';
     if (['pub-todo', 'pub-pack', 'pub-confirm', 'pub-sent'].includes(active)) return 'publish';
-    if (['dashboard', 'review', 'conversion'].includes(active)) return 'review';
-    return PS._lastWs || 'topic';
+    if (['review', 'conversion'].includes(active)) return 'review';
+    return 'more';
   }
 
-  function railNavItems(ws, active) {
+  function subTabsFor(ws, active) {
     const ep41 = PS.S.episodes.find(e => e.episode === 41);
     const waitN = ep41 ? Object.values(ep41.tasks).filter(t => t.state === 'awaiting_user').length : 0;
     const poolN = PS.S.topics.filter(t => !t.trash && ['找', '写', '审'].includes(t.stage)).length;
     const doneN = PS.S.episodes.filter(e => e.finalAt).length;
 
+    if (ws === 'hub') return [];
     if (ws === 'topic') {
-      return `
-        <a class="navi ${active === 'home' ? 'on' : ''}" href="#home"><span><i class="st-b">今</i>今天想干什么</span></a>
-        <a class="navi ${['source', 'feed', 'chai'].includes(active) ? 'on' : ''}" href="#source"><span><i class="st-b">找</i>日报 · 对标</span></a>
-        <a class="navi ${['pool', 'write', 'audit'].includes(active) ? 'on' : ''}" href="#pool"><span><i class="st-b live">写</i>选题池</span><span class="count">${poolN}</span></a>
-        <a class="navi ${['scripts', 'done'].includes(active) ? 'on' : ''}" href="#scripts"><span><i class="st-b">定</i>定稿</span><span class="count">${doneN}</span></a>
-      `;
+      return [
+        { id: 'source',  label: '日报 · 对标', href: '#source',  on: ['source', 'feed', 'chai'].includes(active) },
+        { id: 'pool',    label: '选题池',      href: '#pool',    on: ['pool', 'write', 'audit'].includes(active), count: poolN },
+        { id: 'scripts', label: '定稿',        href: '#scripts', on: ['scripts', 'done'].includes(active), count: doneN },
+      ];
     }
     if (ws === 'cut') {
-      return `
-        <a class="rail-now" href="#cut"><small>正在剪 · EP${PS.S.cutProject.episode}</small><b>${PS.esc(PS.S.cutProject.title)}</b></a>
-        <a class="navi ${active === 'cut-todo' ? 'on' : ''}" href="#cut-todo"><span><i class="st-b">待</i>待剪</span><span class="count">1</span></a>
-        <a class="navi ${active === 'cut' ? 'on' : ''}" href="#cut"><span><i class="st-b hot">剪</i>剪辑中</span><span class="count hot">镜头表</span></a>
-        <a class="navi ${active === 'cut-done' ? 'on' : ''}" href="#cut-done"><span><i class="st-b live">好</i>剪好了</span><span class="count">3</span></a>
-      `;
+      return [
+        { id: 'cut-todo', label: '待剪',            href: '#cut-todo', on: active === 'cut-todo', count: 1 },
+        { id: 'cut',      label: '剪辑中 · 镜头表', href: '#cut',      on: active === 'cut',      count: `EP${PS.S.cutProject.episode}`, hot: true },
+        { id: 'cut-done', label: '剪好了',          href: '#cut-done', on: active === 'cut-done', count: 3 },
+      ];
     }
     if (ws === 'publish') {
-      return `
-        <a class="navi ${active === 'pub-todo' ? 'on' : ''}" href="#pub-todo"><span><i class="st-b">待</i>待发</span><span class="count">1</span></a>
-        <a class="navi ${active === 'pub-pack' ? 'on' : ''}" href="#pub-pack"><span><i class="st-b">包</i>打包</span></a>
-        <a class="navi ${active === 'pub-confirm' ? 'on' : ''}" href="#pub-confirm"><span><i class="st-b hot">确</i>确认</span>${waitN ? `<span class="count hot">${waitN} 待点发</span>` : ''}</a>
-        <a class="navi ${active === 'pub-sent' ? 'on' : ''}" href="#pub-sent"><span><i class="st-b live">已</i>已发</span><span class="count">3</span></a>
-      `;
+      return [
+        { id: 'pub-todo',    label: '待发', href: '#pub-todo',    on: active === 'pub-todo', count: 1 },
+        { id: 'pub-pack',    label: '打包', href: '#pub-pack',    on: active === 'pub-pack' },
+        { id: 'pub-confirm', label: '确认', href: '#pub-confirm', on: active === 'pub-confirm', count: waitN ? `${waitN} 待点发` : '', hot: !!waitN },
+        { id: 'pub-sent',    label: '已发', href: '#pub-sent',    on: active === 'pub-sent', count: 3 },
+      ];
     }
-    return `
-      <a class="navi ${active === 'dashboard' ? 'on' : ''}" href="#dashboard"><span><i class="st-b live">盘</i>运营大屏</span></a>
-      <a class="navi ${active === 'review' ? 'on' : ''}" href="#review"><span><i class="st-b">析</i>同龄复盘 · 抖音分析</span></a>
-      ${PS.S.settings.modules.conversion ? `<a class="navi ${active === 'conversion' ? 'on' : ''}" href="#conversion"><span><i class="st-b">转</i>转化归因</span></a>` : ''}
-    `;
+    if (ws === 'review') {
+      const list = [
+        { id: 'review', label: '同龄复盘 · 抖音分析', href: '#review', on: active === 'review' },
+      ];
+      if (PS.S.settings.modules.conversion) {
+        list.push({ id: 'conversion', label: '转化归因', href: '#conversion', on: active === 'conversion' });
+      }
+      return list;
+    }
+    // 系统与开源资产二级快捷切换
+    const m = PS.S.settings.modules;
+    const more = [
+      { id: 'settings', label: '系统', href: '#settings', on: active === 'settings' },
+      { id: 'releases', label: '上新', href: '#releases', on: active === 'releases' },
+    ];
+    if (m.tree) more.push({ id: 'tree', label: '知识树', href: '#tree', on: active === 'tree' });
+    more.push({ id: 'said', label: '说过的话', href: '#said', on: active === 'said' });
+    if (m.clients) more.push({ id: 'clients', label: '客户', href: '#clients', on: active === 'clients' });
+    if (m.site) more.push({ id: 'site', label: '个人网站', href: '#site', on: active === 'site' });
+    more.push({ id: 'position', label: '我的定位', href: '#position', on: active === 'position' });
+    return more;
   }
 
   // ⌘K 完整跨工作台索引
   PS.cmdk = function () {
     const items = [
-      { label: '首页 · 今天想干什么？', kind: '选题', hash: '#home' },
+      { label: '中控 · 正在做与运营大屏', kind: '中控', hash: '#dashboard' },
       { label: '日报 · 对标（AI 日报 / 搞钱 / 开发 / 爆款榜 / Obsidian）', kind: '选题', hash: '#source' },
       { label: '爆款榜 · 按几倍平时排', kind: '选题', hash: '#feed' },
       { label: '拆解报告', kind: '选题', hash: '#chai' },
@@ -186,14 +203,13 @@
       { label: '打包 · publish.json', kind: '发布', hash: '#pub-pack' },
       { label: '确认 · 专用 Chrome 自动填表', kind: '发布', hash: '#pub-confirm' },
       { label: '已发 · 7 平台矩阵与分发日历', kind: '发布', hash: '#pub-sent' },
-      { label: '运营大屏 · 全平台粉丝与人话结论', kind: '复盘', hash: '#dashboard' },
       { label: '1/3/7 天同龄复盘 & 抖音作品分析', kind: '复盘', hash: '#review' },
       { label: '转化归因 · 自有站点漏斗', kind: '复盘', hash: '#conversion' },
       { label: '知识树 & 一键内化', kind: '资产', hash: '#tree' },
       { label: '我说过的话', kind: '资产', hash: '#said' },
       { label: '咨询客户 CRM', kind: '资产', hash: '#clients' },
       { label: '个人网站', kind: '资产', hash: '#site' },
-      { label: '我的定位', kind: '定位', hash: '#position' },
+      { label: '我的定位', kind: '资产', hash: '#position' },
       { label: '系统 · 守护进程 / 7 平台体检 / 集成与共享对标库', kind: '系统', hash: '#settings' },
       { label: '上新 · 版本更新与开源动态', kind: '系统', hash: '#releases' },
     ];
@@ -272,7 +288,7 @@
       let reply = { role: 'ai', text: `已收到「${q}」，我已为你定位到对应工作台。`, card: null };
       if (q.includes('EP41')) reply = { role: 'ai', text: 'EP41 目前 **小红书** 和 **视频号** 已由专用 Chrome 填表完毕，只等你点最后一下发布。', card: { title: '去发布工作台 · 确认', desc: '点发后自动取链回填', hash: '#pub-confirm', btn: '打开确认页' } };
       else if (q.includes('镜头表')) reply = { role: 'ai', text: '已准备把 EP42 的动效镜头表调到「高」密度，点下面直接进入剪辑台核对。', card: { title: '打开剪辑 · 镜头表', desc: 'EP42 当前 6 个动效镜头', hash: '#cut', btn: '去镜头表' } };
-      else if (q.includes('7 天')) reply = { role: 'ai', text: '近 7 天全网涨粉最多的是 **抖音 (+673)** 和 **小红书 (+490)**，EP41 首日播放是上期同龄的 **1.7 倍**。', card: { title: '打开复盘 · 运营大屏', desc: '查看堆叠涨粉图与转化归因', hash: '#dashboard', btn: '看大屏' } };
+      else if (q.includes('7 天')) reply = { role: 'ai', text: '近 7 天全网涨粉最多的是 **抖音 (+673)** 和 **小红书 (+490)**，EP41 首日播放是上期同龄的 **1.7 倍**。', card: { title: '打开中控大屏', desc: '查看堆叠涨粉图与转化归因', hash: '#dashboard', btn: '看中控' } };
       PS.S.wendyMsgs.push(reply);
       PS.save();
       document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
@@ -300,102 +316,107 @@
     });
   }
 
-  // 主外框 Shell（widthMode: '' | 'mid' | 'narrow'）
-  PS.shell = function (active, crumbs, inner, widthMode = '') {
-    const ws = wsOf(active);
-    PS._lastWs = ws;
-    const onlineN = PS.activePlats().filter(p => PS.S.platformStatus[p]?.state === 'ok').length;
-    const activeN = PS.activePlats().length;
-    const unread = PS.S.notifications.filter(n => !n.read).length;
-    const isApp = PS.S.meta.runtimeMode === 'desktop-app';
-    const crumbHTML = crumbs.map((c, i) =>
-      i < crumbs.length - 1 ? `<a href="${c[1]}">${PS.esc(c[0])}</a>${PS.icon('right', 'sm')}` : `<b>${PS.esc(c[0])}</b>`
-    ).join('');
+  // 物理弹性滑块定位（不销毁顶栏 DOM，切 Tab 丝滑弹过去）
+  function moveThumb(bar, thumb, selector, instant = false) {
+    if (!bar || !thumb) return;
+    const target = bar.querySelector(selector);
+    if (!target) {
+      thumb.classList.remove('ready');
+      return;
+    }
+    if (instant) thumb.classList.add('no-anim');
+    else thumb.classList.remove('no-anim');
+    thumb.style.transform = `translateX(${target.offsetLeft}px)`;
+    thumb.style.width = `${target.offsetWidth}px`;
+    thumb.classList.add('ready');
+    if (instant) {
+      void thumb.offsetWidth;
+      thumb.classList.remove('no-anim');
+    }
+  }
 
+  let chromeMounted = false;
+  let lastWsKey = '';
+
+  function ensureChrome() {
+    if (chromeMounted && document.getElementById('chromeTop')) return;
+    chromeMounted = true;
     document.getElementById('app').innerHTML = `
       <div class="app">
-        <aside class="side" id="side">
-          <a class="rail-brand" href="#position" title="我的定位 · 我是谁 / 卖什么">
-            <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
-              <path class="bm1" d="M14 66 Q30 28 48 86" fill="none" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
-              <path class="bm2" d="M48 86 Q76 88 106 22" fill="none" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-              <circle class="bm3" cx="48" cy="86" r="9"/>
-            </svg>
-            <span class="brand-t">
-              <b>Park Studio</b>
-              <small>${PS.esc(WS_META[ws].sub)}</small>
-            </span>
-          </a>
+        <header class="top-dock" id="chromeTop">
+          <div class="top-dock-row">
+            <div class="top-left">
+              <a class="lg-brand lg-island" href="#dashboard" title="Park Studio · 开源内容中控">
+                <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
+                  <path class="bm1" d="M14 66 Q30 28 48 86" fill="none" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path class="bm2" d="M48 86 Q76 88 106 22" fill="none" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle class="bm3" cx="48" cy="86" r="10"/>
+                </svg>
+                <b>Park Studio</b>
+              </a>
+            </div>
 
-          <div class="ws-tabs" role="tablist" aria-label="四大工作台">
-            ${Object.entries(WS_META).map(([k, v]) => `<button type="button" class="ws-tab ${ws === k ? 'on' : ''}" data-ws="${k}">${v.name}</button>`).join('')}
-          </div>
+            <nav class="top-center" aria-label="主工作台">
+              <div class="lg-pill" id="mainPill" role="tablist">
+                <span class="lg-thumb" id="mainThumb" aria-hidden="true"></span>
+                ${WS_LIST.map(w => `<button type="button" class="lg-tab" role="tab" data-ws="${w.key}">
+                  ${PS.icon(w.icon)}<span>${w.name}</span><span class="tab-dot" data-badge="${w.key}" hidden></span>
+                </button>`).join('')}
+              </div>
+            </nav>
 
-          <button type="button" class="rail-search" id="railSearch">
-            <span>搜索页面和选题</span><kbd>⌘K</kbd>
-          </button>
-
-          <nav aria-label="当前工作台导航">
-            ${railNavItems(ws, active)}
-          </nav>
-
-          <div class="rail-foot" id="railFoot">
-            <a class="rail-daemon" href="#settings">
-              <span class="dot ${PS.S.daemon.running ? 'live' : 'bad'}"></span>
-              <span>系统 · ${onlineN}/${activeN} 平台在线</span>
-            </a>
-            <div class="rail-foot-row">
-              <button type="button" class="rail-set-btn" id="setPopBtn"><span>系统与更多</span>${PS.icon('right', 'sm')}</button>
-              <button type="button" class="theme-btn" id="themeBtn" title="切换深浅色">◐</button>
+            <div class="top-right">
+              <button type="button" class="lg-btn lg-island circ" id="cmdkBtn" title="搜索页面和选题 (⌘K)" aria-label="搜索">${PS.icon('search')}</button>
+              <a class="lg-btn lg-island" id="sysNavBtn" href="#settings" title="系统 · 守护进程 / 7 平台体检 / 集成">
+                <span class="dot live" id="sysDot"></span><span class="lbl">系统</span>
+              </a>
+              <button type="button" class="lg-btn lg-island" id="wendyBtn" title="问 Wendy 本地助理">
+                <span class="wendy-av">W</span><span class="lbl">Wendy</span>
+              </button>
+              <div class="rel" id="moreHost">
+                <button type="button" class="lg-btn lg-island circ rel" id="moreMenuBtn" title="更多模块、通知与深浅色" aria-label="更多">
+                  ${PS.icon('menu')}<span class="badge" id="bellBadge" hidden></span>
+                </button>
+              </div>
             </div>
           </div>
-        </aside>
+          <div class="sub-dock" id="subDock"></div>
+        </header>
 
         <div class="main">
-          <header class="topbar" id="topbar">
-            <button class="btn ghost icon burger" id="burger">${PS.icon('menu')}</button>
-            <div class="crumbs">${crumbHTML}</div>
-            <button type="button" class="top-pill" id="runtimeBtn" title="切换预览浏览器 localhost / 桌面原生 App 形态">
-              <i class="dot live"></i>
-              <span>${isApp ? '桌面 App' : `Localhost :${location.port || 8792}`}</span>
-            </button>
-            <button type="button" class="top-pill" id="wendyBtn"><span class="wendy-av">W</span><span>问 Wendy</span></button>
-            <div class="rel">
-              <button class="btn ghost icon rel" id="bellBtn" aria-label="通知">${PS.icon('bell', 'lg')}${unread ? `<span class="badge">${unread}</span>` : ''}</button>
-            </div>
-          </header>
-          <main class="page ${widthMode}" id="main">${inner}</main>
+          <main class="page" id="main"></main>
         </div>
       </div>
       ${renderWendyDrawer()}
     `;
 
-    document.querySelectorAll('[data-ws]').forEach(b => b.onclick = () => {
-      location.hash = WS_META[b.dataset.ws].def;
+    document.querySelectorAll('#mainPill [data-ws]').forEach(btn => {
+      btn.onclick = () => {
+        const w = WS_LIST.find(x => x.key === btn.dataset.ws);
+        if (!w) return;
+        // 立刻触发滑块弹性移动，不等路由重绘
+        document.querySelectorAll('#mainPill .lg-tab').forEach(el => el.classList.toggle('on', el === btn));
+        moveThumb(document.getElementById('mainPill'), document.getElementById('mainThumb'), '.lg-tab.on', false);
+        location.hash = w.def;
+      };
     });
-    document.getElementById('railSearch').onclick = () => PS.cmdk();
-    document.getElementById('themeBtn').onclick = () => PS.toggleTheme();
+    document.getElementById('cmdkBtn').onclick = () => PS.cmdk();
     document.getElementById('wendyBtn').onclick = () => PS.toggleWendy();
-    document.getElementById('burger').onclick = () => document.getElementById('side').classList.toggle('open');
-    document.getElementById('runtimeBtn').onclick = () => {
-      PS.S.meta.runtimeMode = isApp ? 'localhost' : 'desktop-app';
-      PS.save();
-      PS.toast(PS.S.meta.runtimeMode === 'desktop-app' ? '已切换预览：Tauri 本地桌面 App 形态' : '已切换预览：Localhost 本地网页形态');
-      PS.route();
-    };
-
-    // 左下角白色浮层菜单（完整保留所有开源资产与扩展模块，不占左栏空间）
-    document.getElementById('setPopBtn').onclick = e => {
+    document.getElementById('moreMenuBtn').onclick = e => {
       e.stopPropagation();
-      const foot = document.getElementById('railFoot');
-      if (foot.querySelector('.rail-pop')) return foot.querySelector('.rail-pop').remove();
+      const host = document.getElementById('moreHost');
+      if (host.querySelector('.lg-menu')) return host.querySelector('.lg-menu').remove();
       const m = PS.S.settings.modules;
-      foot.insertAdjacentHTML('beforeend', `<div class="rail-pop" role="menu">
+      const unread = PS.S.notifications.filter(n => !n.read).length;
+      const onlineN = PS.activePlats().filter(p => PS.S.platformStatus[p]?.state === 'ok').length;
+      const activeN = PS.activePlats().length;
+      host.insertAdjacentHTML('beforeend', `<div class="lg-menu" role="menu">
         <div class="rp-lbl">系统与开源社区</div>
-        <a href="#settings">${PS.icon('sliders', 'sm')}系统（守护进程 · 平台 · 集成）</a>
+        <a href="#settings">${PS.icon('sliders', 'sm')}系统与体检 <span class="sub" style="margin-left:auto;font-size:11px">${onlineN}/${activeN}</span></a>
         <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.1.2</span></a>
+        <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
-        <div class="rp-lbl">更多开源模块</div>
+        <div class="rp-lbl">个人资产与扩展</div>
         ${m.tree ? `<a href="#tree">${PS.icon('tree', 'sm')}知识树与内化</a>` : ''}
         <a href="#said">${PS.icon('mic', 'sm')}我说过的话</a>
         <a href="#source/materials">${PS.icon('layers', 'sm')}视觉素材库</a>
@@ -403,38 +424,120 @@
         ${m.clients ? `<a href="#clients">${PS.icon('users', 'sm')}咨询客户 CRM</a>` : ''}
         ${m.site ? `<a href="#site">${PS.icon('globe', 'sm')}个人网站</a>` : ''}
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
+        <div class="rp-sep"></div>
+        <button type="button" id="themeToggleMenu">◐ 切换深浅外观</button>
       </div>`);
-    };
-
-    document.getElementById('bellBtn').onclick = e => {
-      e.stopPropagation();
-      const host = e.currentTarget.parentElement;
-      if (host.querySelector('.pop')) return host.querySelector('.pop').remove();
-      host.insertAdjacentHTML('beforeend', `<div class="pop">
-        <div class="pop-h"><b>通知</b><button class="btn ghost s" id="readAll">全部已读</button></div>
-        <div class="pop-list">
-          ${PS.S.notifications.map(n => `<a class="pop-item ${n.read ? '' : 'unread'}" href="${n.link === '#publish' ? '#pub-confirm' : n.link}" data-nid="${n.id}">
+      host.querySelector('#themeToggleMenu').onclick = () => { host.querySelector('.lg-menu')?.remove(); PS.toggleTheme(); };
+      host.querySelector('#openNotifBtn').onclick = () => {
+        host.querySelector('.lg-menu')?.remove();
+        PS.modal({
+          title: '通知中心',
+          body: `<div class="stack tight">${PS.S.notifications.map(n => `<a class="pop-item ${n.read ? '' : 'unread'}" style="border-radius:10px;border:1px solid var(--line-soft)" href="${n.link === '#publish' ? '#pub-confirm' : n.link}" data-close>
             ${PS.icon(n.kind === 'good' ? 'check' : 'alert')}
             <div><div>${PS.esc(n.title)}</div><small>${PS.esc(n.time)}</small></div>
-          </a>`).join('')}
-        </div>
-      </div>`);
-      host.querySelector('#readAll').onclick = () => { PS.S.notifications.forEach(n => (n.read = true)); PS.save(); host.querySelector('.pop')?.remove(); PS.route(); };
+          </a>`).join('')}</div>`,
+          foot: `<button class="btn" id="markAllRead">全部已读</button><button class="btn primary" data-close>关闭</button>`,
+          onOpen(mb, close) {
+            mb.querySelector('#markAllRead').onclick = () => {
+              PS.S.notifications.forEach(n => (n.read = true));
+              PS.save();
+              updateChromeBadges();
+              close();
+            };
+          },
+        });
+      };
     };
+
     bindWendy();
-    window.onscroll = () => document.getElementById('topbar')?.classList.toggle('scrolled', window.scrollY > 4);
-    return document.getElementById('main');
+    window.addEventListener('resize', () => {
+      moveThumb(document.getElementById('mainPill'), document.getElementById('mainThumb'), '.lg-tab.on', true);
+      moveThumb(document.getElementById('subBar'), document.getElementById('subThumb'), '.lg-subtab.on', true);
+    });
+  }
+
+  function updateChromeBadges() {
+    const ep41 = PS.S.episodes.find(e => e.episode === 41);
+    const waitN = ep41 ? Object.values(ep41.tasks).filter(t => t.state === 'awaiting_user').length : 0;
+    const pubBadge = document.querySelector('#mainPill [data-badge="publish"]');
+    if (pubBadge) {
+      pubBadge.hidden = !waitN;
+      pubBadge.textContent = waitN ? String(waitN) : '';
+    }
+    const unread = PS.S.notifications.filter(n => !n.read).length;
+    const bellBadge = document.getElementById('bellBadge');
+    if (bellBadge) {
+      bellBadge.hidden = !unread;
+      bellBadge.textContent = unread ? String(unread) : '';
+    }
+    const sysDot = document.getElementById('sysDot');
+    if (sysDot) sysDot.className = `dot ${PS.S.daemon.running ? 'live' : 'bad'}`;
+  }
+
+  function syncTopNav(ws, active) {
+    const mainPill = document.getElementById('mainPill');
+    const mainThumb = document.getElementById('mainThumb');
+    const firstRender = !mainThumb.classList.contains('ready');
+    mainPill.querySelectorAll('.lg-tab').forEach(el => {
+      const isOn = el.dataset.ws === ws;
+      el.classList.toggle('on', isOn);
+      el.setAttribute('aria-selected', isOn ? 'true' : 'false');
+    });
+    document.getElementById('sysNavBtn')?.classList.toggle('on', active === 'settings');
+    document.getElementById('moreMenuBtn')?.classList.toggle('on', ws === 'more' && active !== 'settings');
+    updateChromeBadges();
+    requestAnimationFrame(() => moveThumb(mainPill, mainThumb, '.lg-tab.on', firstRender));
+
+    // Row 2 二级毛玻璃分段栏（同工作台内保持 DOM，切换子页签同样有弹性滑动！）
+    const subDock = document.getElementById('subDock');
+    const subs = subTabsFor(ws, active);
+    if (!subs.length) {
+      subDock.innerHTML = '';
+      lastWsKey = ws;
+      return;
+    }
+    const sameWs = lastWsKey === ws && document.getElementById('subBar');
+    if (sameWs) {
+      const subBar = document.getElementById('subBar');
+      subBar.querySelectorAll('.lg-subtab').forEach(el => {
+        const meta = subs.find(s => s.id === el.dataset.subid);
+        el.classList.toggle('on', !!meta?.on);
+      });
+      requestAnimationFrame(() => moveThumb(subBar, document.getElementById('subThumb'), '.lg-subtab.on', false));
+    } else {
+      subDock.innerHTML = `<div class="lg-subbar" id="subBar" role="tablist">
+        <span class="lg-sub-thumb" id="subThumb" aria-hidden="true"></span>
+        ${subs.map(s => `<a class="lg-subtab ${s.on ? 'on' : ''}" data-subid="${s.id}" href="${s.href}">
+          <span>${PS.esc(s.label)}</span>${s.count ? `<span class="scnt ${s.hot ? 'hot' : ''}">${PS.esc(s.count)}</span>` : ''}
+        </a>`).join('')}
+      </div>`;
+      requestAnimationFrame(() => moveThumb(document.getElementById('subBar'), document.getElementById('subThumb'), '.lg-subtab.on', true));
+    }
+    lastWsKey = ws;
+  }
+
+  // 主外框 Shell（widthMode: '' | 'mid' | 'narrow'）
+  PS.shell = function (active, crumbs, inner, widthMode = '') {
+    ensureChrome();
+    const ws = wsOf(active);
+    PS._lastWs = ws;
+    syncTopNav(ws, active);
+    document.querySelectorAll('.lg-menu,.pop').forEach(p => p.remove());
+    const main = document.getElementById('main');
+    main.className = `page ${widthMode}`.trim();
+    main.innerHTML = inner;
+    return main;
   };
 
   document.addEventListener('click', e => {
-    document.querySelectorAll('.pop,.rail-pop').forEach(p => { if (!p.parentElement.contains(e.target)) p.remove(); });
+    document.querySelectorAll('.pop,.lg-menu').forEach(p => { if (!p.parentElement.contains(e.target)) p.remove(); });
   });
 
   PS.pages = {};
   PS.route = function () {
-    const raw = (location.hash || '#home').replace(/^#/, '');
+    const raw = (location.hash || '#dashboard').replace(/^#/, '');
     const [head, sub, arg] = raw.split('/');
-    const fn = PS.pages[head] || PS.pages.home;
+    const fn = PS.pages[head] || PS.pages.dashboard;
     fn(sub, arg);
     window.scrollTo(0, 0);
   };
@@ -498,7 +601,7 @@
 
   PS.boot = async function () {
     window.addEventListener('hashchange', PS.route);
-    if (!location.hash) location.hash = '#home';
+    if (!location.hash || location.hash === '#home') location.hash = '#dashboard';
     await PS.syncFromBackend();
     PS.route();
   };

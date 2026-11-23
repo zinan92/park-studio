@@ -18,126 +18,63 @@
     return { views, inter, pub, total, todo };
   }
 
-  // ==================== 首页（#home · 极简今天想干什么？） ====================
+  // ==================== 首页入口统一并入「中控」（#dashboard） ====================
   PS.pages.home = function () {
-    const today = new Date();
-    const dStr = `${today.getMonth() + 1} 月 ${today.getDate()} 日`;
-    const cut = PS.S.cutProject;
-    const active = PS.activePlats();
-    const iss = PS._newsletterIssue;
-    const topNews = iss?.parts?.length
-      ? iss.parts.flatMap(p => p.groups.flatMap(g => g.items)).slice(0, 3)
-      : PS.S.sources.newsletter.slice(0, 3);
-    const newsCount = iss?.total || PS.S.sources.newsletter.length;
-
-    const main = PS.shell('home', [['首页', '#home']], `
-      <div style="margin-top:8px">
-        <div class="sub" style="margin-bottom:4px">${dStr}</div>
-        <h1 style="font-size:28px;font-weight:800;margin:0;letter-spacing:-.02em">今天想干什么？</h1>
-      </div>
-
-      <button type="button" class="hm-now" onclick="location.hash='#cut'">
-        <span class="hm-ic">${PS.icon('right')}</span>
-        <span class="min0 grow">
-          <b style="font-size:15px">接着做《${PS.esc(cut.title)}》</b>
-          <div class="sub">停在「剪辑 · 镜头表」</div>
-        </span>
-        <span style="color:var(--accent);font-size:13px;font-weight:600">接着做 ›</span>
-      </button>
-
-      <div class="hm-grid">
-        <button type="button" class="hm-peek" onclick="location.hash='#source'">
-          <span class="hm-ph">
-            <span class="hm-ic">${PS.icon('star')}</span>
-            <b>今天的信源</b>
-            <span class="hm-more">看全部 ›</span>
-          </span>
-          <span class="sub">AI 日报 ${newsCount} 条 · 搞钱 ${PS.S.sources.saved.length} 条 · 开发日报</span>
-          <div class="hm-lines">
-            ${topNews.map((n, i) => `<div class="hm-line"><i class="hm-i">${i + 1}</i><span class="clip1 grow">${PS.esc(n.title)}</span></div>`).join('')}
-          </div>
-        </button>
-
-        <button type="button" class="hm-peek" onclick="location.hash='#pub-sent'">
-          <span class="hm-ph">
-            <span class="hm-ic">${PS.icon('film')}</span>
-            <b>你的作品</b>
-            <span class="hm-more">看全部 ›</span>
-          </span>
-          <span class="sub">${PS.S.episodes.length} 篇定了稿</span>
-          <div class="hm-lines">
-            ${PS.S.episodes.slice(0, 3).map((e, i) => {
-              const et = epTotals(e);
-              const dots = active.map(pid => {
-                const st = e.tasks[pid]?.state;
-                const cls = st === 'published' ? 'on' : st === 'awaiting_user' ? 'wait' : '';
-                return `<i class="${cls}">${PS.PLATFORMS[pid].short}</i>`;
-              }).join('');
-              return `<div class="hm-line"><i class="hm-i">${i + 1}</i><span class="clip1 grow">${PS.esc(e.nick)}</span>${et.pub || et.todo ? `<span class="mini-pm">${dots}</span>` : '<span class="sub" style="font-size:12px">还没发</span>'}</div>`;
-            }).join('')}
-          </div>
-        </button>
-      </div>
-
-      <section class="hm-drop" id="dropZone">
-        <div class="hm-drop-in">
-          <span class="hm-ic">${PS.icon('upload')}</span>
-          <div class="min0 grow">
-            <b style="font-size:14.5px">拍好了、写好了？拖进来</b>
-            <div class="sub">整个视频文件夹拖进来最省事：有 .srt 就当稿子，视频只在你电脑上读时长，不上传</div>
-          </div>
-          <div class="row">
-            <button class="btn primary" id="pickDir">${PS.icon('layers', 'sm')}选文件夹</button>
-            <button class="btn" id="pickFiles">选文件</button>
-          </div>
-          <input type="file" id="fileIn" multiple hidden>
-        </div>
-        <div id="dropRes" hidden style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line-soft)"></div>
-      </section>
-
-      <div style="text-align:center">
-        <button class="link-muted" id="quickPaste">没有文件？贴一段文字</button>
-        <span class="sub"> · </span>
-        <button class="link-muted" onclick="location.hash='#dashboard'">直接看运营大屏 ›</button>
-      </div>
-    `, 'mid');
-
-    const zone = main.querySelector('#dropZone'), fileIn = main.querySelector('#fileIn'), dropRes = main.querySelector('#dropRes');
-    function handleFiles(files) {
-      if (!files || !files.length) return;
-      dropRes.hidden = false;
-      dropRes.innerHTML = `<div class="row"><span class="pill good">已读入 ${files.length} 个本地文件</span><span class="sub grow clip1">${PS.esc([...files].map(f => f.name).join(' · '))}</span><a class="btn primary s" href="#cut">去剪辑镜头表 ›</a></div>`;
-    }
-    main.querySelector('#pickDir').onclick = () => fileIn.click();
-    main.querySelector('#pickFiles').onclick = () => fileIn.click();
-    fileIn.onchange = e => handleFiles(e.target.files);
-    zone.ondragover = e => { e.preventDefault(); zone.classList.add('over'); };
-    zone.ondragleave = () => zone.classList.remove('over');
-    zone.ondrop = e => { e.preventDefault(); zone.classList.remove('over'); handleFiles(e.dataTransfer.files); };
-    main.querySelector('#quickPaste').onclick = () => {
-      PS.modal({
-        title: '贴一段文字，交给本地 Agent 理成口播稿',
-        body: `<textarea id="qpTxt" rows="6" placeholder="把你随口说的话或草稿粘贴进来…"></textarea>`,
-        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="qpGo">理成口播稿</button>`,
-        onOpen(m, close) {
-          m.querySelector('#qpGo').onclick = () => {
-            const v = m.querySelector('#qpTxt').value.trim();
-            if (!v) return;
-            PS.S.script.body = v;
-            PS.save();
-            close();
-            location.hash = '#write';
-          };
-        },
-      });
-    };
+    return PS.pages.dashboard();
   };
 
-  // ==================== 复盘工作台 · 运营大屏（#dashboard） ====================
+  function openQuickImportModal() {
+    PS.modal({
+      title: '导入本地素材或贴一段文字',
+      body: `<div class="stack">
+        <div class="hm-drop" id="mDropZone">
+          <div class="hm-drop-in">
+            <span class="hm-ic">${PS.icon('upload')}</span>
+            <div class="min0 grow">
+              <b style="font-size:14px">整个视频文件夹或 .srt 拖进来</b>
+              <div class="sub">视频只在你电脑上读取时长与路径，绝不上传云端</div>
+            </div>
+            <button class="btn primary s" type="button" id="mPickFiles">选文件</button>
+            <input type="file" id="mFileIn" multiple hidden>
+          </div>
+          <div id="mDropRes" hidden style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-soft)"></div>
+        </div>
+        <div class="stack tight">
+          <label style="font-size:13px;font-weight:600">或者直接贴一段文字，交给本地 Agent 理成口播稿</label>
+          <textarea id="mPasteTxt" rows="5" placeholder="把你随口说的话或草稿粘贴进来…"></textarea>
+        </div>
+      </div>`,
+      foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="mPasteGo">理成口播稿 ›</button>`,
+      onOpen(mb, close) {
+        const fin = mb.querySelector('#mFileIn'), dz = mb.querySelector('#mDropZone'), dres = mb.querySelector('#mDropRes');
+        const showFiles = files => {
+          if (!files || !files.length) return;
+          dres.hidden = false;
+          dres.innerHTML = `<div class="row"><span class="pill good">已读入 ${files.length} 个文件</span><span class="sub grow clip1">${PS.esc([...files].map(f => f.name).join(' · '))}</span><a class="btn primary s" href="#cut" data-close>去镜头表 ›</a></div>`;
+        };
+        mb.querySelector('#mPickFiles').onclick = () => fin.click();
+        fin.onchange = e => showFiles(e.target.files);
+        dz.ondragover = e => { e.preventDefault(); dz.classList.add('over'); };
+        dz.ondragleave = () => dz.classList.remove('over');
+        dz.ondrop = e => { e.preventDefault(); dz.classList.remove('over'); showFiles(e.dataTransfer.files); };
+        mb.querySelector('#mPasteGo').onclick = () => {
+          const v = mb.querySelector('#mPasteTxt').value.trim();
+          if (!v) return PS.toast('先贴一段文字，或者直接选文件', 'warn');
+          PS.S.script.body = v;
+          PS.save();
+          close();
+          location.hash = '#write';
+        };
+      },
+    });
+  }
+
+  // ==================== 中控（#dashboard · 「正在做」+ 运营大屏一屏总览） ====================
   let heroIdx = 0;
 
   PS.pages.dashboard = function () {
     const active = PS.activePlats();
+    const cut = PS.S.cutProject;
     const iss = PS._newsletterIssue;
     const topNews = iss?.parts?.length
       ? iss.parts.flatMap(p => p.groups.flatMap(g => g.items)).slice(0, 3)
@@ -154,6 +91,7 @@
     const tot30 = pStats.reduce((s, x) => s + x.d30, 0);
     const topFan7 = [...pStats].sort((a, b) => b.d7 - a.d7)[0];
     const ep41 = eps[0], t41 = epTotals(ep41);
+    const waitNames = active.filter(pid => ep41.tasks[pid]?.state === 'awaiting_user').map(pid => PS.PLATFORMS[pid].name);
 
     const insights = [
       { cls: 'g', tag: '涨粉', html: `近 7 天涨粉最多的是 <b>${PS.PLATFORMS[topFan7.id].name} ${PS.sgn(topFan7.d7)}</b>，占全网近 7 天合计 ${PS.sgn(tot7)} 的 <b>${PS.pct(topFan7.d7, tot7, 0)}</b>。` },
@@ -162,17 +100,49 @@
       { cls: 'p', tag: '转化', html: `${PS.esc(PS.S.settings.siteName)}近 30 日归因收入 <b>¥20,350</b>，B 站注册→付费转化率最高（14.3%）。` },
     ];
 
-    const main = PS.shell('dashboard', [['复盘工作台', '#dashboard'], ['运营大屏', '#dashboard']], `
+    const main = PS.shell('dashboard', [['中控', '#dashboard']], `
       <div class="ph">
         <div>
-          <h1>运营大屏</h1>
-          <p>全平台粉丝、最新发布进度、人话结论与各平台趋势一屏总览；上次自动采数：${PS.esc(PS.S.daemon.lastMetricsAt)}。</p>
+          <h1>中控大屏</h1>
+          <p>一眼看清全盘状态和当前停在哪一步 · 上次自动采数：${PS.esc(PS.S.daemon.lastMetricsAt)}。</p>
         </div>
         <div class="acts">
-          <a class="btn" href="#review">同龄复盘 · 抖音分析</a>
+          <button class="btn" id="quickImportBtn">${PS.icon('upload', 'sm')}导入素材 / 贴稿</button>
           <button class="btn primary" id="dashCollect">${PS.icon('refresh', 'sm')}立即采数</button>
         </div>
       </div>
+
+      <section class="wip-strip" aria-label="正在做">
+        <button type="button" class="wip-card primary" onclick="location.hash='#cut'">
+          <span class="wip-ic">${PS.icon('film')}</span>
+          <div class="min0 grow">
+            <div class="wip-tag"><span>正在做 · EP${cut.episode}</span></div>
+            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(cut.title)}</b>
+            <div class="sub clip1" style="font-size:12px">停在「剪辑 · 镜头表 (${(cut.shots || []).length} 镜)」</div>
+          </div>
+          <span class="wip-go">接着剪 ›</span>
+        </button>
+
+        <button type="button" class="wip-card ${t41.todo ? 'warn' : ''}" onclick="location.hash='#pub-confirm'">
+          <span class="wip-ic">${PS.icon(t41.todo ? 'send' : 'check')}</span>
+          <div class="min0 grow">
+            <div class="wip-tag"><span>${t41.todo ? `待确认发布 · ${t41.todo} 平台` : '最新一期已闭环'}</span></div>
+            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">EP${ep41.episode} ${PS.esc(ep41.nick)}</b>
+            <div class="sub clip1" style="font-size:12px">${t41.todo ? `${PS.esc(waitNames.join('、'))} 已由专用 Chrome 填表` : `${t41.pub}/${t41.total} 平台已发布`}</div>
+          </div>
+          <span class="wip-go">${t41.todo ? '去点发 ›' : '看矩阵 ›'}</span>
+        </button>
+
+        <button type="button" class="wip-card" onclick="location.hash='#source'">
+          <span class="wip-ic">${PS.icon('star')}</span>
+          <div class="min0 grow">
+            <div class="wip-tag"><span>今日信源 · AI 日报 ${newsCount} 条</span></div>
+            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(topNews[0]?.title || '查看今日 AI 情报')}</b>
+            <div class="sub clip1" style="font-size:12px">搞钱 ${PS.S.sources.saved.length} 篇 · 选题池 ${PS.S.topics.filter(t => !t.trash).length} 条</div>
+          </div>
+          <span class="wip-go">看日报 ›</span>
+        </button>
+      </section>
 
       <section class="hero-ep" id="heroHost"></section>
 
@@ -259,6 +229,7 @@
 
     renderHero();
     PS.drawStackedFans(main.querySelector('#fansChart'), PS.S.followers, active, eps);
+    main.querySelector('#quickImportBtn').onclick = openQuickImportModal;
     main.querySelector('#dashCollect').onclick = () => {
       for (const p of active) {
         const days = Object.keys(PS.S.followers[p]).sort();
