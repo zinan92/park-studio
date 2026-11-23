@@ -188,10 +188,11 @@
           ${pStats.map(ps => {
             const p = PS.PLATFORMS[ps.id], st = PS.S.platformStatus[ps.id];
             const wc = an.platformCounts?.[ps.id] || 0;
+            const hasFol = Object.keys(PS.S.followers[ps.id] || {}).length > 0;
             return `<div class="pc">
               <div class="row" style="gap:7px">${PS.plogo(ps.id, 22)}<b style="font-size:13.5px">${p.name}</b><span class="grow"></span>${wc ? `<span class="sub" style="font-size:11px">${wc} 作品</span>` : ''}<i class="dot ${st.state === 'ok' ? 'live' : 'warn'}"></i></div>
-              <div class="pc-val">${PS.fmt(ps.total)}</div>
-              <div class="row" style="gap:5px"><span class="gpill">今<b>${PS.sgn(ps.today)}</b></span><span class="gpill">7日<b>${PS.sgn(ps.d7)}</b></span></div>
+              <div class="pc-val">${hasFol ? PS.fmt(ps.total) : '–'}</div>
+              <div class="row" style="gap:5px">${hasFol ? `<span class="gpill">今<b>${PS.sgn(ps.today)}</b></span><span class="gpill">7日<b>${PS.sgn(ps.d7)}</b></span>` : '<span class="sub" style="font-size:11.5px">暂未采到粉丝数</span>'}</div>
               <div class="pc-sp">${PS.sparklineSVG(ps.id, PS.S.followers[ps.id])}</div>
             </div>`;
           }).join('')}

@@ -525,13 +525,14 @@
       if (b.analytics) PS.S.analytics = b.analytics;
       if (b.lastMetricsAt) PS.S.daemon.lastMetricsAt = b.lastMetricsAt;
       PS.S.liveFollowerPlats = Object.keys(b.followersLive || {});
-      if (b.followersLive) {
-        for (const [pid, dayMap] of Object.entries(b.followersLive)) {
-          if (dayMap && Object.keys(dayMap).length) {
-            // 有真实实测粉丝数据时完全替换演示基线，避免和虚假基线混在一起算出假暴跌
-            PS.S.followers[pid] = { ...dayMap };
-          }
+      if (b.hasLiveFollowers || PS.backendOnline) {
+        // 真实后端在线时完全以 SQLite 实测粉丝为准，彻底清零 data.js 残留演示数字（如旧公众号 19,113）
+        const cleanFollowers = {};
+        for (const pid of PS.PLAT_ORDER) {
+          const dayMap = b.followersLive?.[pid];
+          cleanFollowers[pid] = (dayMap && Object.keys(dayMap).length) ? { ...dayMap } : {};
         }
+        PS.S.followers = cleanFollowers;
       }
       if (b.config) {
         PS.S.settings = { ...PS.S.settings, ...b.config, modules: { ...PS.S.settings.modules, ...(b.config.modules || {}) } };
