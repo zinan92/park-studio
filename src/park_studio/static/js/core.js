@@ -254,66 +254,9 @@
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); PS.cmdk(); }
   });
 
-  // Wendy 右侧抽屉
-  PS.wendyOpen = false;
-  PS.toggleWendy = function (force) {
-    PS.wendyOpen = typeof force === 'boolean' ? force : !PS.wendyOpen;
-    document.getElementById('wendyDrawer')?.classList.toggle('open', PS.wendyOpen);
-  };
-  function renderWendyDrawer() {
-    const msgs = PS.S.wendyMsgs.map(m => `<div class="wd-msg ${m.role}">
-      <div>${PS.esc(m.text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>')}</div>
-      ${m.card ? `<div class="wd-card"><div style="font-weight:700;font-size:12.5px">${PS.esc(m.card.title)}</div><div class="sub" style="margin:3px 0 8px">${PS.esc(m.card.desc)}</div><a class="btn primary s" href="${m.card.hash}" onclick="PS.toggleWendy(false)">${PS.esc(m.card.btn)}</a></div>` : ''}
-    </div>`).join('');
-    return `<aside class="wendy-drawer ${PS.wendyOpen ? 'open' : ''}" id="wendyDrawer">
-      <div class="wd-head">
-        <span class="wendy-av">W</span>
-        <div class="min0 grow"><b style="font-size:14px">Wendy · 本地助理</b><div class="sub" style="font-size:11.5px">${PS.S.settings.aiBackend === 'gemini' ? `本机 Gemini CLI (${PS.S.settings.aiModel || 'default'})` : PS.S.settings.aiBackend === 'claude' ? '本机 Claude Code CLI' : PS.S.settings.aiBackend === 'codex' ? '本机 Codex CLI' : '自定义 API'}</div></div>
-        <button class="btn ghost icon" id="wdClose">${PS.icon('x')}</button>
-      </div>
-      <div class="wd-msgs" id="wdMsgs">${msgs}</div>
-      <div class="wd-chips">
-        <button class="wd-chip" data-wq="EP41 还差哪几个平台没点发？">EP41 差哪几个没发？</button>
-        <button class="wd-chip" data-wq="帮我把 EP42 的剪辑镜头表密度调高一档">调整 EP42 镜头表</button>
-        <button class="wd-chip" data-wq="看近 7 天哪个平台涨粉最快">近 7 天涨粉归因</button>
-      </div>
-      <form class="wd-in" id="wdForm"><input type="text" id="wdInput" placeholder="问 Wendy…"><button class="btn primary" type="submit">发</button></form>
-    </aside>`;
-  }
-  function bindWendy() {
-    document.getElementById('wdClose')?.addEventListener('click', () => PS.toggleWendy(false));
-    document.querySelectorAll('[data-wq]').forEach(b => b.onclick = () => {
-      const q = b.dataset.wq;
-      PS.S.wendyMsgs.push({ role: 'me', text: q });
-      let reply = { role: 'ai', text: `已收到「${q}」，我已为你定位到对应工作台。`, card: null };
-      if (q.includes('EP41')) reply = { role: 'ai', text: 'EP41 目前 **小红书** 和 **视频号** 已由专用 Chrome 填表完毕，只等你点最后一下发布。', card: { title: '去发布工作台 · 确认', desc: '点发后自动取链回填', hash: '#pub-confirm', btn: '打开确认页' } };
-      else if (q.includes('镜头表')) reply = { role: 'ai', text: '已准备把 EP42 的动效镜头表调到「高」密度，点下面直接进入剪辑台核对。', card: { title: '打开剪辑 · 镜头表', desc: 'EP42 当前 6 个动效镜头', hash: '#cut', btn: '去镜头表' } };
-      else if (q.includes('7 天')) reply = { role: 'ai', text: '近 7 天全网涨粉最多的是 **抖音 (+673)** 和 **小红书 (+490)**，EP41 首日播放是上期同龄的 **1.7 倍**。', card: { title: '打开中控大屏', desc: '查看堆叠涨粉图与转化归因', hash: '#dashboard', btn: '看中控' } };
-      PS.S.wendyMsgs.push(reply);
-      PS.save();
-      document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
-      bindWendy();
-    });
-    document.getElementById('wdForm')?.addEventListener('submit', async e => {
-      e.preventDefault();
-      const inp = document.getElementById('wdInput');
-      const v = inp.value.trim();
-      if (!v) return;
-      inp.value = '';
-      PS.S.wendyMsgs.push({ role: 'me', text: v });
-      PS.S.wendyMsgs.push({ role: 'ai', text: `正在调用本机 ${PS.S.settings.aiBackend} (${PS.S.settings.aiModel || '默认'}) 思考中…` });
-      document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
-      bindWendy();
-      try {
-        const res = await PS.api('POST', '/api/ai/wendy', { prompt: v });
-        PS.S.wendyMsgs[PS.S.wendyMsgs.length - 1] = { role: 'ai', text: `${res.reply}\n\n_(来自本机 ${res.backend}/${res.model})_` };
-      } catch (err) {
-        PS.S.wendyMsgs[PS.S.wendyMsgs.length - 1] = { role: 'ai', text: `调用本机 AI 失败：${err.message}` };
-      }
-      PS.save();
-      document.getElementById('wendyDrawer').outerHTML = renderWendyDrawer();
-      bindWendy();
-    });
+  // 检测是否在原生 Mac App (WKWebView) 中运行，为红绿灯留出呼吸间距
+  if (/ParkStudioMacApp/.test(navigator.userAgent)) {
+    document.documentElement.classList.add('macos-app');
   }
 
   // 物理弹性滑块定位（不销毁顶栏 DOM，切 Tab 丝滑弹过去）
@@ -370,9 +313,6 @@
               <a class="lg-btn lg-island" id="sysNavBtn" href="#settings" title="系统 · 守护进程 / 7 平台体检 / 集成">
                 <span class="dot live" id="sysDot"></span><span class="lbl">系统</span>
               </a>
-              <button type="button" class="lg-btn lg-island" id="wendyBtn" title="问 Wendy 本地助理">
-                <span class="wendy-av">W</span><span class="lbl">Wendy</span>
-              </button>
               <div class="rel" id="moreHost">
                 <button type="button" class="lg-btn lg-island circ rel" id="moreMenuBtn" title="更多模块、通知与深浅色" aria-label="更多">
                   ${PS.icon('menu')}<span class="badge" id="bellBadge" hidden></span>
@@ -387,7 +327,6 @@
           <main class="page" id="main"></main>
         </div>
       </div>
-      ${renderWendyDrawer()}
     `;
 
     document.querySelectorAll('#mainPill [data-ws]').forEach(btn => {
@@ -401,7 +340,6 @@
       };
     });
     document.getElementById('cmdkBtn').onclick = () => PS.cmdk();
-    document.getElementById('wendyBtn').onclick = () => PS.toggleWendy();
     document.getElementById('moreMenuBtn').onclick = e => {
       e.stopPropagation();
       const host = document.getElementById('moreHost');
@@ -449,7 +387,6 @@
       };
     };
 
-    bindWendy();
     window.addEventListener('resize', () => {
       moveThumb(document.getElementById('mainPill'), document.getElementById('mainThumb'), '.lg-tab.on', true);
       moveThumb(document.getElementById('subBar'), document.getElementById('subThumb'), '.lg-subtab.on', true);

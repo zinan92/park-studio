@@ -34,6 +34,8 @@
 }
 .top-dock-row > * { pointer-events: auto; }
 .top-left { display: flex; align-items: center; gap: 8px; justify-self: start; min-width: 0; }
+:root.macos-app .top-left { padding-left: 68px; }
+:root.macos-app .top-dock { padding-top: 10px; }
 .top-center { justify-self: center; }
 .top-right { display: flex; align-items: center; gap: 7px; justify-self: end; }
 
