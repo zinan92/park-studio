@@ -205,3 +205,34 @@ def extract_json_block(text: str) -> Any:
                 except ValueError:
                     pass
     return None
+
+
+def run_cut_prompt(
+    prompt: str,
+    *,
+    system: str = "",
+    cfg: dict[str, Any] | None = None,
+    timeout: int = 120,
+    runner: Any = subprocess.run,
+) -> dict[str, Any]:
+    """按系统设置中的「独立剪辑 Agent」（cutAgentBackend / cutAgentModel / cutAgentCmd）执行剪辑规划或指令。"""
+    cfg = cfg or config.load_config()
+    cut_backend = str(cfg.get("cutAgentBackend") or "inherit").strip().lower()
+    if not cut_backend or cut_backend == "inherit":
+        return run_prompt(prompt, system=system, cfg=cfg, timeout=timeout, runner=runner)
+
+    if cut_backend == "custom":
+        cmd_tpl = str(cfg.get("cutAgentCmd") or "").strip()
+        if not cmd_tpl:
+            raise AIError("独立剪辑 Agent 选了「自定义命令」，但未填写 CLI 命令")
+        done = runner(cmd_tpl, input=prompt, shell=True, capture_output=True, text=True, timeout=timeout, env=_env(), check=False)
+        if done.returncode != 0:
+            raise AIError(f"自定义剪辑命令执行失败：{(done.stderr or done.stdout or '').strip()[-260:]}")
+        return {"text": (done.stdout or "").strip(), "backend": "custom", "model": cmd_tpl.split()[0]}
+
+    override = {
+        **cfg,
+        "aiBackend": cut_backend,
+        "aiModel": str(cfg.get("cutAgentModel") or "").strip(),
+    }
+    return run_prompt(prompt, system=system, cfg=override, timeout=timeout, runner=runner)

@@ -557,6 +557,7 @@
       if (b.benchmarks) PS.S.benchmarks = b.benchmarks;
       if (b.kb) PS.S.kb = b.kb;
       if (b.materials) PS.S.materials = b.materials;
+      if (b.cutEnv) PS.S.cutEnv = b.cutEnv;
       PS.save();
     } catch (e) {
       PS.backendOnline = false;

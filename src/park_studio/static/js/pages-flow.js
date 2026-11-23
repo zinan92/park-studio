@@ -1087,185 +1087,421 @@
     };
   };
 
-  // ==================== 剪辑工作台：待剪 / 剪辑中（3 步：Hook → 动效镜头表 Spec Table → 交给 Agent）/ 剪好了 ====================
-  let cutStep = 'motion'; // hook | motion | hand
+  // ==================== 剪辑工作台：双模式（一键粗剪 xuanti-cut + 高级动效 park-video-v2）+ 后台实时任务日志 ====================
+  let cutStep = 'import'; // import | plan | render
+  let cutActiveJob = null;
+  let cutPollTimer = null;
+
+  function stopCutPoll() {
+    if (cutPollTimer) { clearInterval(cutPollTimer); cutPollTimer = null; }
+  }
 
   PS.pages['cut-todo'] = function () {
+    const finalized = PS.S.topics.filter(t => !t.trash && t.final_at);
     PS.shell('cut-todo', [['剪辑工作台', '#cut'], ['待剪', '#cut-todo']], `
-      <div class="ph"><div><h1>待剪</h1><p>已定稿、待选 Hook 与排镜头表（Spec Table）的内容。</p></div></div>
-      <div class="card row">
-        <div class="min0 grow"><b>EP42 · ${PS.esc(PS.S.cutProject.title)}</b><div class="sub">原片：${PS.esc(PS.S.cutProject.sourceFile)} · ${PS.S.cutProject.duration}</div></div>
-        <a class="btn primary s" href="#cut">进入剪辑台 ›</a>
+      <div class="ph"><div><h1>待剪</h1><p>已定稿待剪辑的稿件，或直接进入剪辑台导入本地原片 / SRT。</p></div><div class="acts"><a class="btn primary" href="#cut">打开剪辑台 ›</a></div></div>
+      <div class="stack tight">
+        ${finalized.map(t => `<div class="card row" style="padding:13px 16px">
+          <div class="min0 grow"><b>${PS.esc(t.title)}</b><div class="sub">定稿于 ${PS.esc((t.final_at || '').slice(0, 16).replace('T', ' '))}</div></div>
+          <a class="btn primary s" href="#cut">去剪这条 ›</a>
+        </div>`).join('') || `<div class="card row"><div class="min0 grow"><b>${PS.esc(PS.S.cutProject.title)}</b><div class="sub">原片：${PS.esc(PS.S.cutProject.sourceFile || '未导入')} · ${PS.esc(PS.S.cutProject.duration || '–')}</div></div><a class="btn primary s" href="#cut">进入剪辑台 ›</a></div>`}
       </div>
     `, 'mid');
   };
 
   PS.pages.cut = function (sub) {
-    if (['hook', 'motion', 'hand'].includes(sub)) cutStep = sub;
+    if (['import', 'plan', 'render'].includes(sub)) cutStep = sub;
+    if (sub === 'hook') cutStep = 'plan';
+    if (sub === 'motion') cutStep = 'plan';
+    if (sub === 'hand') cutStep = 'render';
+
     const cp = PS.S.cutProject;
-    let body = '';
+    const cutId = cp.id || 1;
+    const mode = cp.mode || 'rough';
+    const dropIdx = Array.isArray(cp.dropIdx) ? cp.dropIdx : [];
+    const hookIdx = Array.isArray(cp.hookIdx) ? cp.hookIdx : [];
+    const pauseS = Number(cp.pauseS || 0.8);
+    const env = PS.S.cutEnv || {};
+    const cutAg = PS.S.settings.cutAgentBackend && PS.S.settings.cutAgentBackend !== 'inherit'
+      ? `${PS.S.settings.cutAgentBackend}${PS.S.settings.cutAgentModel ? ' / ' + PS.S.settings.cutAgentModel : ''}`
+      : `跟随全局 (${PS.S.settings.aiBackend || 'gemini'})`;
 
-    if (cutStep === 'hook') {
-      body = `<div class="card stack">
-        <div class="row"><b>勾选放在成片最前面的 1–2 句原话（Hook）</b><span class="sub">原话不改写，在正文原位置照常保留</span></div>
-        <div class="stack tight">
-          ${cp.lines.map(l => {
-            const on = cp.hookIdx.includes(l.i);
-            return `<div class="tx-line ${on ? 'hook' : ''}" data-hk="${l.i}">
-              <span class="mono sub" style="margin-right:8px">${l.ts}</span>
-              ${on ? '<span class="pill accent" style="margin-right:6px">Hook</span>' : ''}
-              ${PS.esc(l.text)}
-            </div>`;
-          }).join('')}
-        </div>
-        <div class="row"><span class="sub">已选 ${cp.hookIdx.length} 句作为开头 Hook</span><span class="grow"></span><button class="btn primary" id="toMotion">下一步：动效与镜头表 ›</button></div>
-      </div>`;
-    } else if (cutStep === 'motion') {
-      body = `
-        <div class="card row" style="padding:12px 16px">
-          <span class="mono" style="font-size:13px">${PS.esc(cp.sourceFile)}</span>
-          <span class="sub">${cp.duration}</span>
+    const jobBoxHtml = cutActiveJob ? `
+      <div class="card stack tight" id="cutJobBox" style="border-color:${cutActiveJob.state === 'failed' ? 'var(--hot)' : cutActiveJob.state === 'done' ? 'var(--good)' : 'var(--accent)'}">
+        <div class="row">
+          <span class="pill ${cutActiveJob.state === 'done' ? 'good' : cutActiveJob.state === 'failed' ? 'warn' : 'accent'}">${cutActiveJob.state === 'running' ? '● 执行中…' : cutActiveJob.state === 'done' ? '✓ 已完成' : '✕ 失败'}</span>
+          <b>${PS.esc(cutActiveJob.title)}</b>
           <span class="grow"></span>
-          <span class="sub">动效密度：</span>
-          <div class="seg">
-            ${['低', '中', '高'].map(lv => `<button class="${cp.density === lv ? 'on' : ''}" data-den="${lv}">${lv}</button>`).join('')}
-          </div>
-          <button class="btn s" id="replanBtn">${PS.icon('refresh', 'sm')}AI 重新排镜头表</button>
+          ${cutActiveJob.state !== 'running' ? '<button class="btn s" id="clearCutJob">收起日志</button>' : ''}
         </div>
-
-        <div class="cut-split">
-          <div class="card stack tight">
-            <div class="card-h"><h3>口播逐字稿（点击序号定位右侧镜头卡）</h3></div>
-            ${cp.lines.map(l => `<div class="tx-line ${cp.hookIdx.includes(l.i) ? 'hook' : ''} ${cp.selectedShot === l.shot ? 'sel' : ''}" data-pick-shot="${l.shot}">
-              <span class="shot-chip ${cp.selectedShot === l.shot ? 'on' : ''}">${l.shot}</span>
-              <span class="mono sub" style="margin-right:6px">${l.ts}</span>
-              ${PS.esc(l.text)}
-            </div>`).join('')}
+        <pre class="codebox" id="cutJobLog" style="max-height:200px">${PS.esc((cutActiveJob.logs || []).join('\n'))}</pre>
+        ${cutActiveJob.state === 'done' && cutActiveJob.result?.publishEpisode ? `
+          <div class="row" style="padding:10px 12px;background:var(--good-soft);border-radius:10px">
+            <div class="min0 grow"><b style="color:var(--good)">成片已自动落盘到统一工程目录！</b><div class="sub mono" style="font-size:11.5px">${PS.esc(cutActiveJob.result.videoPath)}</div></div>
+            <a class="btn primary s" href="#pub-confirm">一键去发布工作台填表 ›</a>
           </div>
+        ` : ''}
+        ${cutActiveJob.state === 'done' && cutActiveJob.result?.agentReply ? `
+          <details open><summary style="font-size:12.5px;font-weight:600;cursor:pointer">独立剪辑 Agent 执行回执（${PS.esc(cutActiveJob.result.backend)}/${PS.esc(cutActiveJob.result.model)}）</summary>
+            <div class="md-body" style="margin-top:8px;padding:10px 12px;background:var(--sunk);border-radius:9px">${PS.md(cutActiveJob.result.agentReply)}</div>
+          </details>
+        ` : ''}
+      </div>` : '';
 
-          <div class="stack tight">
-            ${cp.shots.map(s => `<div class="spec-card ${cp.selectedShot === s.id ? 'on' : ''}" data-pick-shot="${s.id}">
-              <div class="row">
-                <span class="shot-chip ${cp.selectedShot === s.id ? 'on' : ''}">${s.id}</span>
-                <b>${PS.esc(s.style)}</b>
-                <span class="sub mono">${s.ts}</span>
-                <span class="grow"></span>
-                <button class="btn s" data-swap="${s.id}">换一个</button>
-              </div>
-              <div class="spec-prev"><span>${PS.esc(s.preview)}</span><span style="opacity:.55;font-size:11px">SPEC #${s.id}</span></div>
-              <textarea rows="2" data-reason="${s.id}" style="font-size:12.5px">${PS.esc(s.reason)}</textarea>
-            </div>`).join('')}
-            <div class="row" style="margin-top:6px"><span class="grow"></span><button class="btn primary" id="toHand">下一步：交给本地 Agent 渲染 ›</button></div>
-          </div>
-        </div>
-      `;
-    } else {
-      const promptTxt = `按 ~/.park-studio/projects/EP${cp.episode}/worktable.json 里的 Hook（第 ${cp.hookIdx.join('、')} 句）和 ${cp.shots.length} 个动效镜头表，用 park-video-v2 剪辑 ${cp.sourceFile}（${cp.burnSubs ? '烧字幕' : '不烧字幕'}），出成片后回填到 Park Studio。`;
-      body = `<div class="stack" style="max-width:740px;margin:0 auto">
+    let body = '';
+    if (cutStep === 'import') {
+      const readyProjs = (PS.S.projects?.projects || []).filter(p => p.videoPath).slice(0, 6);
+      body = `<div class="stack">
         <div class="card stack">
-          <div class="row"><b>交给本机 Agent 渲染（不上传视频到任何服务器）</b><span class="grow"></span>
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <b>导入本机原片 / 剪映 SRT（100% 本地处理，绝不上传云端）</b>
+            <span class="grow"></span>
+            <span class="pill ${env.ffmpeg ? 'good' : 'warn'}">ffmpeg ${env.ffmpeg ? '✓' : '缺失'}</span>
+            <span class="pill ${env.transcribe ? 'good' : 'warn'}">转写：${PS.esc(env.transcribe || '未安装')}</span>
+          </div>
+          <div class="sys-2col">
+            <div><label class="sub" style="display:block;margin-bottom:4px">视频标题（将用于生成统一工程目录名）</label><input type="text" id="ciTitle" value="${PS.esc(cp.title || '')}" placeholder="如：AI 时代怎么搭本地内容生产线"></div>
+            <div><label class="sub" style="display:block;margin-bottom:4px">本机原片路径（.mp4 / .mov）</label><input type="text" id="ciVideo" class="mono" value="${PS.esc(cp.sourceFile || '')}" placeholder="/Volumes/.../raw.mov 或 ~/Movies/.../raw.mp4"></div>
+          </div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">可选：剪映导出的 .srt 字幕路径（高级动效模式可直接毫秒级导入，免重新转写）</label>
+            <input type="text" id="ciSrt" class="mono" value="${PS.esc(cp.srtPath || '')}" placeholder="留空则在下方点「本机 mlx-whisper 离线转写」">
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <button class="btn" id="ciLoadBtn">1. 校验并载入媒体</button>
+            <button class="btn primary" id="ciTranscribeBtn">${PS.icon('mic', 'sm')}2. 本机 ${PS.esc(env.transcribe || 'mlx-whisper')} 离线转写 + 标口误</button>
+            ${cp.hasRealTranscript || (cp.lines || []).length ? '<button class="btn" id="toPlanBtn">已有逐字稿 → 下一步 ›</button>' : ''}
+          </div>
+          ${cp.videoInfo ? `<div class="sub mono" style="font-size:12px">已识别视频：${cp.videoInfo.width}×${cp.videoInfo.height} · ${cp.videoInfo.fps}fps · ${cp.videoInfo.durationText} · ${cp.videoInfo.sizeMb} MB</div>` : ''}
+        </div>
+
+        ${readyProjs.length ? `<div class="card stack tight">
+          <div class="row"><b style="font-size:13.5px">快速从本地工程目录选一条视频试剪</b><span class="sub">扫描自 ${PS.esc(PS.S.projects?.root || '')}</span></div>
+          ${readyProjs.map((p, idx) => `<div class="row" style="padding:7px 0;border-top:1px solid var(--line-soft)">
+            <div class="min0 grow"><b style="font-size:13px">${PS.esc(p.name)}</b><div class="sub mono clip1" style="font-size:11px">${PS.esc(p.videoPath)}</div></div>
+            <button class="btn s" data-pick-proj="${idx}">填入路径</button>
+          </div>`).join('')}
+        </div>` : ''}
+      </div>`;
+    } else if (cutStep === 'plan') {
+      const lines = cp.lines || [];
+      const keptCount = lines.filter(l => !dropIdx.includes(l.i)).length;
+      if (mode === 'rough') {
+        body = `<div class="stack">
+          <div class="card row" style="padding:12px 16px;flex-wrap:wrap;gap:10px">
+            <span class="pill accent">一键粗剪模式</span>
+            <span class="sub">共 ${lines.length} 句 · 保留 <b>${keptCount}</b> 句 · 剪掉 <b>${dropIdx.length}</b> 句 · Hook <b>${hookIdx.length}</b> 句</span>
+            <span class="grow"></span>
+            <span class="sub">停顿缩短阈值：</span>
+            <div class="seg">
+              ${[0.5, 0.8, 1.2].map(v => `<button class="${pauseS === v ? 'on' : ''}" data-pause="${v}">${v}s</button>`).join('')}
+            </div>
+            <button class="btn s" id="aiPlanBtn">${PS.icon('spark', 'sm')}独立剪辑 Agent 挑 Hook</button>
+            <button class="btn primary s" id="toRenderBtn">下一步：一键渲染成片 ›</button>
+          </div>
+
+          <div class="card stack tight" style="max-height:62vh;overflow-y:auto">
+            <div class="row" style="padding-bottom:8px;border-bottom:1px solid var(--line-soft)">
+              <b>逐字稿审阅（点右侧「剪/留」控制是否剪掉，点「Hook」把原话放到成片最前）</b>
+              <span class="grow"></span>
+              <span class="sub" style="font-size:12px">已自动标出说错重来 / 语气词</span>
+            </div>
+            ${lines.map(l => {
+              const dropped = dropIdx.includes(l.i);
+              const hooked = hookIdx.includes(l.i);
+              return `<div class="row" style="padding:7px 10px;border-radius:8px;background:${hooked ? 'var(--accent-soft)' : dropped ? 'var(--sunk)' : 'transparent'};opacity:${dropped ? '.52' : '1'};gap:8px;align-items:flex-start">
+                <span class="mono sub" style="font-size:11.5px;min-width:44px;margin-top:2px">${PS.esc(l.ts || '')}</span>
+                <div class="min0 grow" style="font-size:13.5px;line-height:1.55;${dropped ? 'text-decoration:line-through' : ''}">
+                  ${l.cutReason ? `<span class="pill warn" style="padding:0 6px;font-size:10.5px;margin-right:5px">自动标剪：${PS.esc(l.cutReason)}</span>` : ''}
+                  ${hooked ? '<span class="pill accent" style="padding:0 6px;font-size:10.5px;margin-right:5px">Hook</span>' : ''}
+                  ${PS.esc(l.text)}
+                </div>
+                <button class="btn s ${hooked ? 'primary' : ''}" data-hk="${l.i}" ${dropped ? 'disabled' : ''}>Hook</button>
+                <button class="btn s" data-drop="${l.i}">${dropped ? '恢复保留' : '剪掉'}</button>
+              </div>`;
+            }).join('') || '<div style="padding:20px" class="sub">暂无逐字稿，请先回第 1 步导入原片并转写。</div>'}
+          </div>
+        </div>`;
+      } else {
+        body = `<div class="stack">
+          <div class="card row" style="padding:12px 16px;flex-wrap:wrap;gap:10px">
+            <span class="pill info">高级动效模式（Spec Table）</span>
+            <span class="mono sub" style="font-size:12px">${PS.esc(cp.sourceFile || '未绑定原片')}</span>
+            <span class="grow"></span>
+            <span class="sub">动效密度：</span>
+            <div class="seg">
+              ${['低', '中', '高'].map(lv => `<button class="${cp.density === lv ? 'on' : ''}" data-den="${lv}">${lv}</button>`).join('')}
+            </div>
+            <button class="btn primary s" id="aiPlanBtn">${PS.icon('spark', 'sm')}独立剪辑 Agent 自动排镜头表</button>
+            <a class="btn s" href="#materials/motion">挑动效素材 ›</a>
+          </div>
+
+          <div class="cut-split">
+            <div class="card stack tight" style="max-height:60vh;overflow-y:auto">
+              <div class="card-h"><h3>口播逐字稿（点「Hook」标开头 · 点行定位镜头）</h3></div>
+              ${lines.map(l => `<div class="tx-line ${hookIdx.includes(l.i) ? 'hook' : ''} ${cp.selectedShot && cp.selectedShot === l.shot ? 'sel' : ''}" data-pick-shot="${l.shot || 0}">
+                ${l.shot ? `<span class="shot-chip ${cp.selectedShot === l.shot ? 'on' : ''}">${l.shot}</span>` : ''}
+                <span class="mono sub" style="margin-right:6px">${PS.esc(l.ts || '')}</span>
+                ${hookIdx.includes(l.i) ? '<span class="pill accent" style="margin-right:5px;padding:0 6px;font-size:10.5px">Hook</span>' : ''}
+                <span>${PS.esc(l.text)}</span>
+                <button type="button" class="link-muted" data-hk="${l.i}" style="float:right;font-size:11px">${hookIdx.includes(l.i) ? '取消Hook' : '+Hook'}</button>
+              </div>`).join('') || '<div class="sub">请先在第 1 步导入原片或 .srt 字幕</div>'}
+            </div>
+
+            <div class="stack tight">
+              ${(cp.shots || []).map(s => `<div class="spec-card ${cp.selectedShot === s.id ? 'on' : ''}" data-pick-shot="${s.id}">
+                <div class="row">
+                  <span class="shot-chip ${cp.selectedShot === s.id ? 'on' : ''}">${s.id}</span>
+                  <b>${PS.esc(s.style)}</b>
+                  <span class="sub mono">${PS.esc(s.ts || '')}</span>
+                  <span class="grow"></span>
+                  <button class="btn s" data-swap="${s.id}">换动效</button>
+                </div>
+                <div class="spec-prev"><span>${PS.esc(s.preview)}</span><span style="opacity:.55;font-size:11px">SPEC #${s.id}</span></div>
+                <textarea rows="2" data-reason="${s.id}" style="font-size:12.5px">${PS.esc(s.reason)}</textarea>
+              </div>`).join('')}
+              <div class="row" style="margin-top:6px"><span class="grow"></span><button class="btn primary" id="toRenderBtn">下一步：渲染与落盘 ›</button></div>
+            </div>
+          </div>
+        </div>`;
+      }
+    } else {
+      const promptTxt = `按 ~/.park-studio/projects/EP${cp.episode}/worktable.json 里的 Hook（第 ${hookIdx.join('、') || '无'} 句）和 ${(cp.shots || []).length} 个动效镜头表，用 park-video-v2 剪辑 ${cp.sourceFile}（${cp.burnSubs ? '烧字幕' : '不烧字幕'}），成片输出到统一工程目录 final/上传/。`;
+      body = `<div class="stack" style="max-width:780px;margin:0 auto">
+        <div class="card stack">
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <b>${mode === 'rough' ? '一键粗剪渲染（ffmpeg 两遍 -16 LUFS 响度 + faststart 自动落盘）' : '高级动效渲染（导出 worktable.json + 一键后台触发独立剪辑 Agent）'}</b>
+            <span class="grow"></span>
             <div class="seg">
               <button class="${cp.burnSubs ? 'on' : ''}" data-sub="1">烧字幕</button>
               <button class="${!cp.burnSubs ? 'on' : ''}" data-sub="0">不烧字幕</button>
             </div>
           </div>
-          <ul class="m0 sub" style="padding-left:18px;line-height:1.8">
-            <li>前置 Hook：已选 ${cp.hookIdx.length} 句原话</li>
-            <li>镜头表（Spec Table）：共 ${cp.shots.length} 处动效（密度：${cp.density}）</li>
-            <li>自动校验输出 faststart，确保抖音/小红书一次传过</li>
+          <ul class="m0 sub" style="padding-left:18px;line-height:1.8;font-size:13px">
+            <li>原片：<code class="mono">${PS.esc(cp.sourceFile || '未导入')}</code></li>
+            <li>前置 Hook：已选 <b>${hookIdx.length}</b> 句原话 · 剪掉 <b>${dropIdx.length}</b> 句口误/语气词 · 停顿阈值 <b>${pauseS}s</b></li>
+            <li>落盘目标：自动写入统一目录 <code class="mono">&lt;projectRoot&gt;/YYYY-MM-DD_${PS.esc((cp.title || '').slice(0, 20))}/final/上传/</code> 并载入发布工作台</li>
           </ul>
-          <pre class="codebox">${PS.esc(promptTxt)}</pre>
-          <div class="row">
-            <button class="btn primary" id="copyPrompt">${PS.icon('copy', 'sm')}复制指令给 Claude / Codex</button>
-            <button class="link-muted" id="dlSpec">查看 / 下载 worktable.json</button>
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <button class="btn primary" id="runRenderBtn">${PS.icon('film', 'sm')}${mode === 'rough' ? '一键开始粗剪渲染并落盘' : '一键触发独立剪辑 Agent 执行'}</button>
+            <button class="btn" id="dlSpec">导出 / 查看 worktable.json</button>
+            <button class="btn" id="copyPrompt">${PS.icon('copy', 'sm')}复制指令备用</button>
           </div>
+          <details><summary class="sub" style="font-size:12px;cursor:pointer">查看备用终端指令</summary><pre class="codebox" style="margin-top:8px">${PS.esc(promptTxt)}</pre></details>
         </div>
 
-        <div class="card row">
-          <div class="min0 grow"><b>本地渲染完后，标记「剪好了」</b><div class="sub">成片自动进入「发布工作台」，生成 7 平台发布工程</div></div>
-          <button class="btn good" id="markCutDone">${PS.icon('check', 'sm')}剪好了 → 去发布工作台</button>
-        </div>
+        ${cp.outputPath ? `<div class="card row" style="border-color:var(--good)">
+          <div class="min0 grow"><b style="color:var(--good)">最新渲染成片已落盘</b><div class="sub mono clip1" style="font-size:12px">${PS.esc(cp.outputPath)}</div></div>
+          <a class="btn primary s" href="#pub-confirm">去发布工作台填表 ›</a>
+        </div>` : ''}
       </div>`;
     }
 
-    const cutAg = PS.S.settings.cutAgentBackend && PS.S.settings.cutAgentBackend !== 'inherit'
-      ? `${PS.S.settings.cutAgentBackend}${PS.S.settings.cutAgentModel ? ' / ' + PS.S.settings.cutAgentModel : ''}`
-      : `跟随全局 (${PS.S.settings.aiBackend || 'gemini'})`;
-    const main = PS.shell('cut', [['剪辑工作台', '#cut'], [`EP${cp.episode} · 镜头表`, '#cut']], `
+    const main = PS.shell('cut', [['剪辑工作台', '#cut'], [`EP${cp.episode} · 剪辑`, '#cut']], `
       <div class="ph">
         <div>
-          <h1>剪辑 · EP${cp.episode} ${PS.esc(cp.title)}</h1>
-          <p>三步走完剪辑：先定 Hook，再调镜头表（Spec Table），最后导出 worktable.json 交给本机剪辑 Agent · <a href="#settings" class="pill" style="padding:1px 8px;font-size:11.5px">独立剪辑 Agent：${PS.esc(cutAg)} ⚙</a></p>
+          <h1>剪辑 · ${PS.esc(cp.title || '新建剪辑工程')}</h1>
+          <p>双模式本地剪辑：一键粗剪（mlx-whisper + ffmpeg）或高级动效（SRT + 镜头表）· <a href="#settings" class="pill" style="padding:1px 8px;font-size:11.5px">独立剪辑 Agent：${PS.esc(cutAg)} ⚙</a></p>
         </div>
-        <div class="acts">
+        <div class="acts" style="flex-wrap:wrap;gap:8px">
+          <div class="seg">
+            <button class="${mode === 'rough' ? 'on' : ''}" data-cmode="rough">一键粗剪</button>
+            <button class="${mode === 'motion' ? 'on' : ''}" data-cmode="motion">高级动效</button>
+          </div>
           <div class="stepper">
-            <button class="step-btn ${cutStep === 'hook' ? 'on' : ''}" data-cs="hook"><i>1</i>Hook</button>
-            <button class="step-btn ${cutStep === 'motion' ? 'on' : ''}" data-cs="motion"><i>2</i>动效 · 镜头表</button>
-            <button class="step-btn ${cutStep === 'hand' ? 'on' : ''}" data-cs="hand"><i>3</i>交给 agent</button>
+            <button class="step-btn ${cutStep === 'import' ? 'on' : ''}" data-cs="import"><i>1</i>导入转写</button>
+            <button class="step-btn ${cutStep === 'plan' ? 'on' : ''}" data-cs="plan"><i>2</i>${mode === 'rough' ? '删口误 · Hook' : '镜头表'}</button>
+            <button class="step-btn ${cutStep === 'render' ? 'on' : ''}" data-cs="render"><i>3</i>渲染落盘</button>
           </div>
         </div>
       </div>
+      ${jobBoxHtml}
       ${body}
     `);
 
+    const syncCutPatch = async patch => {
+      try {
+        const updated = await PS.api('PATCH', `/api/cut/${cutId}`, patch);
+        PS.S.cutProject = { ...PS.S.cutProject, ...updated };
+        PS.save();
+      } catch (e) {}
+    };
+
+    const watchJob = (job, onDone) => {
+      cutActiveJob = job;
+      stopCutPoll();
+      PS.pages.cut();
+      cutPollTimer = setInterval(async () => {
+        try {
+          const j = await PS.api('GET', `/api/cut/jobs/${job.id}`);
+          cutActiveJob = j;
+          const logEl = document.getElementById('cutJobLog');
+          if (logEl) { logEl.textContent = (j.logs || []).join('\n'); logEl.scrollTop = logEl.scrollHeight; }
+          if (j.state !== 'running') {
+            stopCutPoll();
+            try {
+              const fresh = await PS.api('GET', `/api/cut/${cutId}`);
+              PS.S.cutProject = { ...PS.S.cutProject, ...fresh };
+              if (j.result?.publishEpisode) await PS.syncFromBackend();
+              PS.save();
+            } catch (e) {}
+            if (j.state === 'done') {
+              PS.toast(`${j.title} 完成 ✓`, 'good');
+              if (onDone) onDone(j);
+            } else {
+              PS.toast(j.error || '剪辑任务失败', 'warn');
+            }
+            PS.pages.cut();
+          }
+        } catch (e) { stopCutPoll(); }
+      }, 900);
+    };
+
+    main.querySelector('#clearCutJob')?.addEventListener('click', () => { cutActiveJob = null; PS.pages.cut(); });
     main.querySelectorAll('[data-cs]').forEach(b => b.onclick = () => { cutStep = b.dataset.cs; PS.pages.cut(); });
-    main.querySelectorAll('[data-hk]').forEach(el => el.onclick = () => {
-      const i = +el.dataset.hk;
-      cp.hookIdx = cp.hookIdx.includes(i) ? cp.hookIdx.filter(x => x !== i) : [...cp.hookIdx, i].sort();
-      PS.save();
+    main.querySelectorAll('[data-cmode]').forEach(b => b.onclick = async () => {
+      cp.mode = b.dataset.cmode;
+      await syncCutPatch({ mode: cp.mode });
       PS.pages.cut();
     });
-    main.querySelector('#toMotion')?.addEventListener('click', () => { cutStep = 'motion'; PS.pages.cut(); });
-    main.querySelector('#toHand')?.addEventListener('click', () => { cutStep = 'hand'; PS.pages.cut(); });
-    main.querySelectorAll('[data-den]').forEach(b => b.onclick = () => { cp.density = b.dataset.den; PS.save(); PS.toast(`动效密度已切为「${cp.density}」`); PS.pages.cut(); });
-    main.querySelector('#replanBtn')?.addEventListener('click', () => PS.toast('本机 Agent 已按最新密度刷新 6 个镜头规格', 'good'));
+
+    // Step 1: 导入原片/SRT + 后台离线转写
+    const readyProjs = (PS.S.projects?.projects || []).filter(p => p.videoPath).slice(0, 6);
+    main.querySelectorAll('[data-pick-proj]').forEach(b => b.onclick = () => {
+      const p = readyProjs[+b.dataset.pickProj];
+      if (!p) return;
+      main.querySelector('#ciTitle').value = p.title || p.name;
+      main.querySelector('#ciVideo').value = p.videoPath;
+    });
+    main.querySelector('#ciLoadBtn')?.addEventListener('click', async e => {
+      const video_path = main.querySelector('#ciVideo').value.trim();
+      const srt_path = main.querySelector('#ciSrt').value.trim();
+      const title = main.querySelector('#ciTitle').value.trim();
+      e.currentTarget.disabled = true;
+      try {
+        const res = await PS.api('POST', `/api/cut/${cutId}/import-media`, { video_path, srt_path, title, mode });
+        PS.S.cutProject = { ...PS.S.cutProject, ...res.cutProject };
+        PS.save();
+        PS.toast(srt_path ? '已载入视频与 SRT 字幕，直接进入第 2 步 ✓' : '原片校验通过！点击「2. 本机离线转写」生成逐字稿', 'good');
+        if (srt_path) cutStep = 'plan';
+        PS.pages.cut();
+      } catch (err) {
+        PS.toast(err.message || '导入失败', 'warn');
+        e.currentTarget.disabled = false;
+      }
+    });
+    main.querySelector('#ciTranscribeBtn')?.addEventListener('click', async e => {
+      const video_path = main.querySelector('#ciVideo').value.trim();
+      if (!video_path) return PS.toast('请先填好本机原片 .mp4 / .mov 路径', 'warn');
+      e.currentTarget.disabled = true;
+      try {
+        await PS.api('POST', `/api/cut/${cutId}/import-media`, {
+          video_path, srt_path: '', title: main.querySelector('#ciTitle').value.trim(), mode,
+        });
+        const res = await PS.api('POST', `/api/cut/${cutId}/transcribe`, { video_path, lang: 'zh' });
+        watchJob(res.job, () => { cutStep = 'plan'; });
+      } catch (err) {
+        PS.toast(err.message || '启动转写失败', 'warn');
+        e.currentTarget.disabled = false;
+      }
+    });
+    main.querySelector('#toPlanBtn')?.addEventListener('click', () => { cutStep = 'plan'; PS.pages.cut(); });
+    main.querySelector('#toRenderBtn')?.addEventListener('click', () => { cutStep = 'render'; PS.pages.cut(); });
+
+    // Step 2: 删口误 / 勾 Hook / 停顿阈值 / 独立剪辑 Agent 排镜头
+    main.querySelectorAll('[data-hk]').forEach(el => el.onclick = async e => {
+      e.stopPropagation();
+      const i = +el.dataset.hk;
+      cp.hookIdx = hookIdx.includes(i) ? hookIdx.filter(x => x !== i) : [...hookIdx, i].slice(0, 3).sort((a, b) => a - b);
+      await syncCutPatch({ hook_idx: cp.hookIdx });
+      PS.pages.cut();
+    });
+    main.querySelectorAll('[data-drop]').forEach(el => el.onclick = async () => {
+      const i = +el.dataset.drop;
+      cp.dropIdx = dropIdx.includes(i) ? dropIdx.filter(x => x !== i) : [...dropIdx, i].sort((a, b) => a - b);
+      if (cp.dropIdx.includes(i) && (cp.hookIdx || []).includes(i)) {
+        cp.hookIdx = cp.hookIdx.filter(x => x !== i);
+      }
+      await syncCutPatch({ drop_idx: cp.dropIdx, hook_idx: cp.hookIdx });
+      PS.pages.cut();
+    });
+    main.querySelectorAll('[data-pause]').forEach(b => b.onclick = async () => {
+      cp.pauseS = Number(b.dataset.pause);
+      await syncCutPatch({ pause_s: cp.pauseS });
+      PS.pages.cut();
+    });
+    main.querySelectorAll('[data-den]').forEach(b => b.onclick = async () => {
+      cp.density = b.dataset.den;
+      await syncCutPatch({ density: cp.density });
+      PS.pages.cut();
+    });
+    main.querySelector('#aiPlanBtn')?.addEventListener('click', async e => {
+      e.currentTarget.disabled = true;
+      try {
+        const res = await PS.api('POST', `/api/cut/${cutId}/ai-plan`, {});
+        watchJob(res.job);
+      } catch (err) {
+        PS.toast(err.message || '独立剪辑 Agent 规划失败', 'warn');
+        e.currentTarget.disabled = false;
+      }
+    });
     main.querySelectorAll('[data-pick-shot]').forEach(el => el.onclick = e => {
       if (e.target.closest('button,textarea')) return;
-      cp.selectedShot = +el.dataset.pickShot;
-      PS.pages.cut();
+      const sid = +el.dataset.pickShot;
+      if (sid) { cp.selectedShot = sid; PS.pages.cut(); }
     });
-    main.querySelectorAll('[data-swap]').forEach(b => b.onclick = () => {
-      const s = cp.shots.find(x => x.id === +b.dataset.swap);
-      const styles = ['画中画 · 居中大字弹出', '数据高亮卡（焦橙冲击）', '左右分屏对比动效', '关键词阶梯浮现'];
+    main.querySelectorAll('[data-swap]').forEach(b => b.onclick = async () => {
+      const s = (cp.shots || []).find(x => x.id === +b.dataset.swap);
+      if (!s) return;
+      const styles = ['画中画 · 居中大字弹出', '数据高亮卡（焦橙冲击）', '左右分屏对比动效', '关键词阶梯浮现', '录屏特写放大'];
       s.style = styles[(styles.indexOf(s.style) + 1) % styles.length];
-      PS.save();
-      PS.toast(`镜头 #${s.id} 已切换为「${s.style}」`, 'good');
+      await syncCutPatch({ shots: cp.shots });
       PS.pages.cut();
     });
-    main.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { cp.burnSubs = b.dataset.sub === '1'; PS.save(); PS.pages.cut(); });
-    main.querySelector('#copyPrompt')?.addEventListener('click', () => PS.toast('已复制渲染指令，贴给本机 Claude/Codex 即可自动出片', 'good'));
-    main.querySelector('#dlSpec')?.addEventListener('click', async () => {
-      let payload = { episode: cp.episode, source: cp.sourceFile, burnSubtitles: cp.burnSubs, hooks: cp.hookIdx, shots: cp.shots };
-      let savedPath = `~/.park-studio/projects/EP${cp.episode}/worktable.json`;
+
+    // Step 3: 渲染与落盘
+    main.querySelectorAll('[data-sub]').forEach(b => b.onclick = async () => {
+      cp.burnSubs = b.dataset.sub === '1';
+      await syncCutPatch({ burn_subs: cp.burnSubs });
+      PS.pages.cut();
+    });
+    main.querySelector('#runRenderBtn')?.addEventListener('click', async e => {
+      e.currentTarget.disabled = true;
       try {
-        const res = await PS.api('POST', `/api/cut/${cp.id || 1}/export-worktable`);
-        payload = res.payload;
-        savedPath = res.path;
-        PS.toast(`已真实导出到：${savedPath}`, 'good');
-      } catch (e) {}
+        const res = await PS.api('POST', `/api/cut/${cutId}/render`, {
+          mode, drop_idx: cp.dropIdx || [], hook_idx: cp.hookIdx || [], pause_s: cp.pauseS || 0.8, burn_subs: !!cp.burnSubs,
+        });
+        watchJob(res.job);
+      } catch (err) {
+        PS.toast(err.message || '渲染启动失败', 'warn');
+        e.currentTarget.disabled = false;
+      }
+    });
+    main.querySelector('#copyPrompt')?.addEventListener('click', () => {
+      const pTxt = `按 ~/.park-studio/projects/EP${cp.episode}/worktable.json 里的 Hook（第 ${hookIdx.join('、') || '无'} 句）和 ${(cp.shots || []).length} 个动效镜头表，用 park-video-v2 剪辑 ${cp.sourceFile}（${cp.burnSubs ? '烧字幕' : '不烧字幕'}），成片输出到统一工程目录 final/上传/。`;
+      navigator.clipboard?.writeText(pTxt);
+      PS.toast('已复制备用渲染指令 ✓', 'good');
+    });
+    main.querySelector('#dlSpec')?.addEventListener('click', async () => {
+      const res = await PS.api('POST', `/api/cut/${cutId}/export-worktable`);
+      PS.toast(`已导出到：${res.path}`, 'good');
       PS.modal({
-        title: `worktable.json 已落盘：${savedPath}`, wide: true,
-        body: `<pre class="codebox">${PS.esc(JSON.stringify(payload, null, 2))}</pre>`,
+        title: `worktable.json 已落盘：${res.path}`, wide: true,
+        body: `<pre class="codebox">${PS.esc(JSON.stringify(res.payload, null, 2))}</pre>`,
         foot: `<button class="btn primary" data-close>关闭</button>`,
       });
-    });
-    main.querySelector('#markCutDone')?.addEventListener('click', () => {
-      const ep42 = PS.S.episodes.find(e => e.episode === 42);
-      if (ep42) { ep42.videoName = 'EP42-ParkStudio开源发布-成片.mp4'; ep42.videoSizeMb = 388; }
-      PS.save();
-      PS.toast('EP42 成片已登记！正在进入「发布工作台」', 'good');
-      location.hash = '#pub-pack';
     });
   };
 
   PS.pages['cut-done'] = function () {
+    const readyProjs = (PS.S.projects?.projects || []).filter(p => p.videoPath);
     PS.shell('cut-done', [['剪辑工作台', '#cut'], ['剪好了', '#cut-done']], `
-      <div class="ph"><div><h1>剪好了</h1><p>已完成本地剪辑的成片，点击直接进入发布工作台。</p></div></div>
+      <div class="ph"><div><h1>剪好了（统一工程目录成片）</h1><p>扫描自 <code class="mono">${PS.esc(PS.S.projects?.root || '')}</code>，共 ${readyProjs.length} 个可直接载入发布工作台的成片工程。</p></div></div>
       <div class="stack tight">
-        ${PS.S.episodes.filter(e => e.videoName).map(e => `<div class="card row" style="padding:13px 16px">
-          <div class="min0 grow"><b>EP${e.episode} · ${PS.esc(e.nick)}</b><div class="sub mono">${PS.esc(e.videoName)} · ${e.videoSizeMb} MB</div></div>
-          <a class="btn primary s" href="#pub-confirm">去发布工作台 ›</a>
-        </div>`).join('')}
+        ${readyProjs.map(p => `<div class="card row" style="padding:13px 16px">
+          <div class="min0 grow"><b>${PS.esc(p.name)}</b><div class="sub mono clip1" style="font-size:12px">${PS.esc(p.videoPath)}</div></div>
+          <a class="btn primary s" href="#pub-pack">载入发布打包 ›</a>
+        </div>`).join('') || '<div class="card sub">暂无已剪好的成片，去「剪辑中」一键粗剪即可自动落盘到这里。</div>'}
       </div>
     `, 'mid');
   };

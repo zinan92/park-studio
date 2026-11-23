@@ -262,4 +262,113 @@ def test_metrics_upsert_and_cross_platform_grouping(tmp_path: Path, monkeypatch)
     assert an["douyin"]["hit3xCount"] == 1
 
 
+def test_dual_mode_cutter_srt_render_and_landing(tmp_path: Path, monkeypatch) -> None:
+    import subprocess
+    from park_studio import cutter, db
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    root = tmp_path / "exports"
+    cfg = config.save_config({
+        "obsidianPath": str(tmp_path / "empty"),
+        "projectRoot": str(root),
+        "cutAgentBackend": "codex",
+        "cutAgentModel": "o3",
+    })
+
+    env = cutter.check_env(cfg)
+    assert env["cutAgent"]["effective"] == "codex"
+    assert env["cutAgent"]["model"] == "o3"
+
+    # 1. 解析 SRT + 自动识别口误重来与语气词
+    srt_path = tmp_path / "demo.srt"
+    srt_path.write_text(
+        """1
+00:00:00,100 --> 00:00:00,800
+今天我们聊聊
+
+2
+00:00:00,900 --> 00:00:01,800
+今天我们聊聊AI怎么帮你省下两小时。
+
+3
+00:00:01,900 --> 00:00:02,200
+嗯
+
+4
+00:00:02,300 --> 00:00:02,900
+真正厉害的创作者都在用这套工作流。
+""",
+        encoding="utf-8",
+    )
+    plan = cutter.parse_srt(srt_path)
+    assert plan["engine"] == "srt"
+    assert len(plan["lines"]) == 4
+    # 第 1 句（重来前废句）与第 3 句（语气词）应自动标删
+    assert 0 in plan["drop"]
+    assert 2 in plan["drop"]
+    assert 1 not in plan["drop"]
+    assert 3 not in plan["drop"]
+
+    # 2. 若本机装有 ffmpeg，做真实 3 秒合成视频的一键粗剪（-16 LUFS + ASS 字幕 + faststart）并自动落盘发布工作台
+    if env["ffmpeg"]:
+        raw_mp4 = tmp_path / "raw_demo.mp4"
+        subprocess.run(
+            [
+                env["ffmpegPath"], "-nostdin", "-hide_banner", "-y",
+                "-f", "lavfi", "-i", "color=c=0x1e1e1e:s=320x180:r=25:d=3",
+                "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+                str(raw_mp4),
+            ],
+            check=True,
+            capture_output=True,
+        )
+
+        # API 级测试：导入视频 + SRT 毫秒解析 + 导出 worktable.json
+        client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+        env_res = client.get("/api/cut/env").json()
+        assert env_res["ffmpeg"] is True
+
+        cut_id = client.get("/api/bootstrap").json()["cutProject"]["id"]
+        imp = client.post(
+            f"/api/cut/{cut_id}/import-media",
+            json={"video_path": str(raw_mp4), "srt_path": str(srt_path), "mode": "rough"},
+        )
+        assert imp.status_code == 200
+        imp_data = imp.json()
+        assert imp_data["ok"] is True
+        assert imp_data["cutProject"]["videoInfo"]["width"] == 320
+        assert len(imp_data["cutProject"]["lines"]) == 4
+
+        exp = client.post(f"/api/cut/{cut_id}/export-worktable")
+        assert exp.status_code == 200
+        assert Path(exp.json()["path"]).is_file()
+
+        # 真渲染 + 自动落盘到统一工程目录并导入发布工作台
+        out_mp4 = tmp_path / "rendered.mp4"
+        rendered = cutter.render_rough_cut(
+            raw_mp4,
+            plan,
+            out_mp4,
+            drop=plan["drop"],
+            hooks=[3],
+            burn_subs=bool(env["filters"]),
+        )
+        assert Path(rendered["file"]).is_file()
+        assert rendered["seconds"] > 0.5
+        assert publisher.check_mp4_faststart(out_mp4)["faststart"] is True
+
+        conn = db.connect(tmp_path / "data" / "studio.db")
+        db.init_db(conn)
+        landed = cutter.land_into_publish_project(
+            conn,
+            title="双模式剪辑实测视频",
+            rendered_mp4=out_mp4,
+            cfg=cfg,
+        )
+        assert Path(landed["videoPath"]).is_file()
+        assert landed["publishEpisode"]["preflight"]["video"]["faststart"] is True
+
+
+
 

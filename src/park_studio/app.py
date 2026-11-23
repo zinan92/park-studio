@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, benchmarks, cdp, config, daemon, dailies, db, materials, metrics, platforms, projects, publisher, studiopos, vault
+from . import ai, benchmarks, cdp, config, cutter, daemon, dailies, db, materials, metrics, platforms, projects, publisher, studiopos, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -34,11 +35,36 @@ class TopicUpdate(BaseModel):
 
 
 class CutUpdate(BaseModel):
+    title: str | None = None
     density: str | None = None
     burn_subs: bool | None = None
     hook_idx: list[int] | None = None
+    drop_idx: list[int] | None = None
+    pause_s: float | None = None
+    mode: str | None = None
     shots: list[dict[str, Any]] | None = None
     status: str | None = None
+
+
+class CutImportMediaReq(BaseModel):
+    video_path: str = ""
+    srt_path: str = ""
+    title: str = ""
+    mode: str = "rough"
+
+
+class CutTranscribeReq(BaseModel):
+    video_path: str = ""
+    lang: str = "zh"
+    model: str = ""
+
+
+class CutRenderReq(BaseModel):
+    mode: str = "rough"
+    drop_idx: list[int] | None = None
+    hook_idx: list[int] | None = None
+    pause_s: float | None = None
+    burn_subs: bool | None = None
 
 
 class SaidCreate(BaseModel):
@@ -239,7 +265,18 @@ def create_app(db_file: Path | None = None) -> FastAPI:
                 "kline": vault.scan_bucket("kline", limit=10, cfg=cfg),
             },
             "topics": topics,
-            "cutProject": cuts[0] if cuts else None,
+            "cutProject": (
+                {
+                    **cuts[0],
+                    **(
+                        json.loads(r["v"])
+                        if (r := conn.execute("SELECT v FROM kv WHERE k=?", (f"cut_meta:{cuts[0]['id']}",)).fetchone())
+                        else {"mode": "rough", "dropIdx": [], "pauseS": 0.8, "srtPath": "", "outputPath": "", "publishFolder": "", "hasRealTranscript": False}
+                    ),
+                }
+                if cuts
+                else None
+            ),
             "said": said,
             "tree": tree,
             "clients": clients,
@@ -249,6 +286,7 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg, limit=80),
             "kb": vault.list_kb_folders(cfg),
             "materials": materials.get_materials(kind="image", limit=24, cfg=cfg),
+            "cutEnv": cutter.check_env(cfg),
         }
 
     # ---------- AI 日报按期/按条解析（对齐 xuanti 工作台） ----------
@@ -441,31 +479,294 @@ def create_app(db_file: Path | None = None) -> FastAPI:
                 db.log_event(conn, f"#{topic_id}", "选题台", "稿子定稿", title[:40])
         return _row_topic(conn.execute("SELECT * FROM topics WHERE id=?", (topic_id,)).fetchone())
 
-    # ---------- 剪辑镜头表 Spec Table + 真实 worktable.json 导出 ----------
+    # ---------- 双模式真实本地剪辑引擎（一键粗剪 + 高级动效模式 + 独立剪辑 Agent + 实时任务日志） ----------
+    def _load_cut_meta(cut_id: int) -> dict[str, Any]:
+        r = conn.execute("SELECT v FROM kv WHERE k=?", (f"cut_meta:{cut_id}",)).fetchone()
+        if not r:
+            return {"mode": "rough", "dropIdx": [], "pauseS": 0.8, "srtPath": "", "outputPath": "", "publishFolder": "", "videoInfo": None, "hasRealTranscript": False}
+        try:
+            d = json.loads(r["v"])
+            return d if isinstance(d, dict) else {}
+        except Exception:
+            return {}
+
+    def _save_cut_meta(c: sqlite3.Connection, cut_id: int, patch: dict[str, Any]) -> dict[str, Any]:
+        r = c.execute("SELECT v FROM kv WHERE k=?", (f"cut_meta:{cut_id}",)).fetchone()
+        cur = json.loads(r["v"]) if r else {}
+        merged = {**cur, **patch}
+        c.execute("INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)", (f"cut_meta:{cut_id}", json.dumps(merged, ensure_ascii=False)))
+        c.commit()
+        return merged
+
+    def _load_cut_plan(cut_id: int) -> dict[str, Any] | None:
+        r = conn.execute("SELECT v FROM kv WHERE k=?", (f"cut_plan:{cut_id}",)).fetchone()
+        if not r:
+            return None
+        try:
+            return json.loads(r["v"])
+        except Exception:
+            return None
+
+    def _full_cut(cut_id: int) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "剪辑工程不存在")
+        base = _row_cut(row)
+        meta = _load_cut_meta(cut_id)
+        return {**base, **meta}
+
+    @app.get("/api/cut/env")
+    def api_cut_env() -> dict[str, Any]:
+        return cutter.check_env(config.load_config())
+
+    @app.get("/api/cut/{cut_id}")
+    def api_get_cut(cut_id: int) -> dict[str, Any]:
+        return _full_cut(cut_id)
+
     @app.patch("/api/cut/{cut_id}")
     def update_cut(cut_id: int, req: CutUpdate) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
         if not row:
             raise HTTPException(404, "剪辑工程不存在")
         ts = db.now_iso()
+        title = req.title if req.title is not None else row["title"]
         density = req.density if req.density is not None else row["density"]
         burn_subs = int(req.burn_subs) if req.burn_subs is not None else row["burn_subs"]
         hook_idx_json = json.dumps(req.hook_idx) if req.hook_idx is not None else row["hook_idx_json"]
         shots_json = json.dumps(req.shots, ensure_ascii=False) if req.shots is not None else row["shots_json"]
         status = req.status if req.status is not None else row["status"]
         conn.execute(
-            "UPDATE cut_projects SET density=?, burn_subs=?, hook_idx_json=?, shots_json=?, status=?, updated_at=? WHERE id=?",
-            (density, burn_subs, hook_idx_json, shots_json, status, ts, cut_id),
+            "UPDATE cut_projects SET title=?, density=?, burn_subs=?, hook_idx_json=?, shots_json=?, status=?, updated_at=? WHERE id=?",
+            (title, density, burn_subs, hook_idx_json, shots_json, status, ts, cut_id),
         )
         conn.commit()
-        return _row_cut(conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone())
+        meta_patch: dict[str, Any] = {}
+        if req.drop_idx is not None:
+            meta_patch["dropIdx"] = req.drop_idx
+        if req.pause_s is not None:
+            meta_patch["pauseS"] = float(req.pause_s)
+        if req.mode is not None:
+            meta_patch["mode"] = req.mode
+        if meta_patch:
+            _save_cut_meta(conn, cut_id, meta_patch)
+        return _full_cut(cut_id)
+
+    @app.post("/api/cut/{cut_id}/import-media")
+    def api_cut_import_media(cut_id: int, req: CutImportMediaReq) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "剪辑工程不存在")
+        vp_str = req.video_path.strip()
+        srt_str = req.srt_path.strip()
+        if not vp_str and not srt_str:
+            raise HTTPException(400, "请填写本地视频路径（.mp4/.mov）或字幕路径（.srt）")
+
+        vinfo = None
+        dur_txt = row["duration"]
+        title = req.title.strip() or row["title"]
+        if vp_str:
+            vp = Path(vp_str).expanduser()
+            try:
+                vinfo = cutter.probe_video(vp)
+            except cutter.CutError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            dur_txt = vinfo["durationText"]
+            if not req.title.strip():
+                title = vp.stem
+            # 若同目录下或 subtitles/ 下自动存在 .srt 且用户未指定，自动顺带载入
+            if not srt_str:
+                for cand in (vp.with_suffix(".srt"), vp.parent / "subtitles" / "source.srt"):
+                    if cand.is_file():
+                        srt_str = str(cand)
+                        break
+
+        meta_patch: dict[str, Any] = {
+            "mode": req.mode or ("motion" if srt_str else "rough"),
+            "srtPath": srt_str,
+            "videoInfo": vinfo,
+        }
+        lines_json = row["lines_json"]
+        if srt_str:
+            try:
+                plan_data = cutter.parse_srt(Path(srt_str).expanduser())
+            except cutter.CutError as exc:
+                raise HTTPException(400, str(exc)) from exc
+            conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)", (f"cut_plan:{cut_id}", json.dumps(plan_data, ensure_ascii=False)))
+            lines_json = json.dumps(plan_data["lines"], ensure_ascii=False)
+            meta_patch["dropIdx"] = plan_data["drop"]
+            meta_patch["hasRealTranscript"] = True
+
+        conn.execute(
+            "UPDATE cut_projects SET title=?, source_file=?, duration=?, lines_json=?, updated_at=? WHERE id=?",
+            (title, vp_str or row["source_file"], dur_txt, lines_json, db.now_iso(), cut_id),
+        )
+        conn.commit()
+        _save_cut_meta(conn, cut_id, meta_patch)
+        db.log_event(conn, f"EP{row['episode']}", "剪辑台", "导入原片/SRT", Path(vp_str or srt_str).name[:44])
+        return {"ok": True, "cutProject": _full_cut(cut_id)}
+
+    @app.post("/api/cut/{cut_id}/transcribe")
+    def api_cut_transcribe(cut_id: int, req: CutTranscribeReq | None = None) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "剪辑工程不存在")
+        vp_str = (req.video_path.strip() if req and req.video_path else "") or str(row["source_file"] or "")
+        vp = Path(vp_str).expanduser()
+        if not vp_str or not vp.is_file():
+            raise HTTPException(400, f"找不到本地原片文件：{vp_str or '请先导入原片路径'}")
+        cfg = config.load_config()
+        lang = req.lang if req else "zh"
+        model = req.model if req else ""
+
+        def run_job(log_fn) -> dict[str, Any]:
+            vinfo = cutter.probe_video(vp)
+            tr = cutter.transcribe_video(vp, cfg=cfg, lang=lang, model=model, log=log_fn)
+            plan_data = cutter.build_plan_from_transcript(tr)
+            # 保存 transcript.json & plan.json 到 ~/.park-studio/projects/EPxx/
+            ep_dir = config.projects_dir() / f"EP{row['episode']}"
+            ep_dir.mkdir(parents=True, exist_ok=True)
+            (ep_dir / "transcript.json").write_text(json.dumps(tr, ensure_ascii=False), encoding="utf-8")
+            (ep_dir / "plan.json").write_text(json.dumps(plan_data, ensure_ascii=False), encoding="utf-8")
+
+            c2 = db.connect(db_file)
+            try:
+                c2.execute("INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)", (f"cut_plan:{cut_id}", json.dumps(plan_data, ensure_ascii=False)))
+                c2.execute(
+                    "UPDATE cut_projects SET source_file=?, duration=?, lines_json=?, updated_at=? WHERE id=?",
+                    (str(vp), vinfo["durationText"], json.dumps(plan_data["lines"], ensure_ascii=False), db.now_iso(), cut_id),
+                )
+                c2.commit()
+                _save_cut_meta(c2, cut_id, {"dropIdx": plan_data["drop"], "videoInfo": vinfo, "hasRealTranscript": True})
+                db.log_event(c2, f"EP{row['episode']}", tr.get("engine", "whisper"), "本地转写与口误分析", f"{len(plan_data['lines'])} 句 · 标出 {len(plan_data['drop'])} 处可剪")
+            finally:
+                c2.close()
+            log_fn(f"分析完成：共 {len(plan_data['lines'])} 句，自动标出 {len(plan_data['drop'])} 处重来/语气词可剪")
+            return {"linesCount": len(plan_data["lines"]), "dropCount": len(plan_data["drop"]), "engine": tr.get("engine")}
+
+        job = cutter.JOBS.start("transcribe", f"本地转写 {vp.name}", run_job)
+        return {"ok": True, "job": job}
+
+    @app.post("/api/cut/{cut_id}/ai-plan")
+    def api_cut_ai_plan(cut_id: int) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "剪辑工程不存在")
+        plan_data = _load_cut_plan(cut_id)
+        if not plan_data:
+            # 若还没有转写，尝试直接用当前 lines
+            lines = json.loads(row["lines_json"] or "[]")
+            if not lines:
+                raise HTTPException(400, "请先导入原片并转写（或导入 .srt），再让剪辑 Agent 排镜头表")
+            plan_data = {"lines": lines, "drop": _load_cut_meta(cut_id).get("dropIdx") or []}
+        cfg = config.load_config()
+        pos_txt = _positioning_text()
+
+        def run_job(log_fn) -> dict[str, Any]:
+            eff = cfg.get("cutAgentBackend") or "inherit"
+            log_fn(f"正在调用独立剪辑 Agent（{eff}）分析逐字稿、挑 Hook 并排动效镜头表…")
+            res = cutter.ai_plan_shots(plan_data, title=row["title"], density=row["density"], cfg=cfg, positioning_text=pos_txt)
+            # 将镜头编号反写回对应逐字稿行
+            lines = list(plan_data.get("lines") or [])
+            for ln in lines:
+                ln["shot"] = 0
+            for sh in res["shots"]:
+                for ln in lines:
+                    if ln["i"] == sh.get("line_idx"):
+                        ln["shot"] = sh["id"]
+                        break
+            c2 = db.connect(db_file)
+            try:
+                c2.execute(
+                    "UPDATE cut_projects SET hook_idx_json=?, shots_json=?, lines_json=?, updated_at=? WHERE id=?",
+                    (json.dumps(res["hooks"]), json.dumps(res["shots"], ensure_ascii=False), json.dumps(lines, ensure_ascii=False), db.now_iso(), cut_id),
+                )
+                c2.commit()
+                db.log_event(c2, f"EP{row['episode']}", f"{res['backend']}/{res['model']}", "独立剪辑 Agent 排镜头", f"Hook {len(res['hooks'])} 句 · {len(res['shots'])} 镜")
+            finally:
+                c2.close()
+            log_fn(f"规划完成 ✓ 挑出 {len(res['hooks'])} 句原话 Hook + {len(res['shots'])} 个动效镜头（{res['backend']}/{res['model']}）")
+            return res
+
+        job = cutter.JOBS.start("ai_plan", f"独立剪辑 Agent 排镜头表", run_job)
+        return {"ok": True, "job": job}
+
+    @app.post("/api/cut/{cut_id}/render")
+    def api_cut_render(cut_id: int, req: CutRenderReq | None = None) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "剪辑工程不存在")
+        meta = _load_cut_meta(cut_id)
+        mode = (req.mode if req and req.mode else None) or meta.get("mode") or "rough"
+        vp = Path(str(row["source_file"] or "")).expanduser()
+        if not str(row["source_file"] or "").strip() or not vp.is_file():
+            raise HTTPException(400, f"找不到本地原片文件：{row['source_file'] or '请先导入原片'}")
+        cfg = config.load_config()
+        drop = req.drop_idx if (req and req.drop_idx is not None) else (meta.get("dropIdx") or [])
+        hooks = req.hook_idx if (req and req.hook_idx is not None) else json.loads(row["hook_idx_json"] or "[]")
+        pause_s = float(req.pause_s if (req and req.pause_s is not None) else (meta.get("pauseS") or 0.8))
+        burn_subs = bool(req.burn_subs if (req and req.burn_subs is not None) else row["burn_subs"])
+
+        if mode == "rough":
+            plan_data = _load_cut_plan(cut_id)
+            if not plan_data or not plan_data.get("sentences"):
+                raise HTTPException(400, "尚未完成本机语音转写（请先点「1. 本地转写与口误分析」）")
+
+            def run_rough(log_fn) -> dict[str, Any]:
+                ep_dir = config.projects_dir() / f"EP{row['episode']}"
+                ep_dir.mkdir(parents=True, exist_ok=True)
+                tmp_out = ep_dir / "rendered.mp4"
+                r_res = cutter.render_rough_cut(vp, plan_data, tmp_out, drop=drop, hooks=hooks, pause_s=pause_s, burn_subs=burn_subs, log=log_fn)
+                c2 = db.connect(db_file)
+                try:
+                    landed = cutter.land_into_publish_project(c2, title=row["title"], rendered_mp4=tmp_out, cfg=cfg, log=log_fn)
+                    c2.execute("UPDATE cut_projects SET status='done', updated_at=? WHERE id=?", (db.now_iso(), cut_id))
+                    c2.commit()
+                    _save_cut_meta(c2, cut_id, {
+                        "outputPath": landed["videoPath"],
+                        "publishFolder": landed["folder"],
+                        "dropIdx": drop,
+                        "pauseS": pause_s,
+                    })
+                    db.log_event(c2, f"EP{row['episode']}", "一键粗剪", "渲染成片并落盘", f"{r_res['durationText']} · {r_res['sizeMb']}MB")
+                finally:
+                    c2.close()
+                return {**r_res, **landed}
+
+            job = cutter.JOBS.start("render_rough", f"一键粗剪渲染 · {row['title'][:20]}", run_rough)
+            return {"ok": True, "job": job}
+
+        # 高级动效模式：导出 worktable.json + 后台触发独立剪辑 Agent
+        wt = export_worktable(cut_id)
+
+        def run_motion_agent(log_fn) -> dict[str, Any]:
+            wt_path = wt["path"]
+            log_fn(f"已导出标准镜头表：{wt_path}")
+            cut_backend = str(cfg.get("cutAgentBackend") or "inherit")
+            log_fn(f"正在通过独立剪辑 Agent（{cut_backend}）执行高级动效方案…")
+            prompt = (
+                f"请读取 {wt_path} 中的 Hook 与镜头表（Spec Table），原片路径为 {vp}，"
+                f"字幕烧录={burn_subs}。请输出剪辑执行计划与下一步命令（成片请输出到统一工程目录 final/上传/）。"
+            )
+            res = ai.run_cut_prompt(prompt, cfg=cfg, timeout=180)
+            log_fn(f"独立剪辑 Agent 执行完毕（{res['backend']}/{res['model']}）")
+            return {"worktablePath": wt_path, "agentReply": res["text"], "backend": res["backend"], "model": res["model"]}
+
+        job = cutter.JOBS.start("render_motion", f"高级动效 Agent · {row['title'][:20]}", run_motion_agent)
+        return {"ok": True, "job": job}
+
+    @app.get("/api/cut/jobs/{job_id}")
+    def api_cut_job(job_id: str) -> dict[str, Any]:
+        job = cutter.JOBS.get(job_id)
+        if not job:
+            raise HTTPException(404, "找不到该剪辑任务")
+        return job
 
     @app.post("/api/cut/{cut_id}/export-worktable")
     def export_worktable(cut_id: int) -> dict[str, Any]:
         row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
         if not row:
             raise HTTPException(404, "剪辑工程不存在")
-        cut = _row_cut(row)
+        cut = _full_cut(cut_id)
         ep_dir = config.projects_dir() / f"EP{cut['episode']}"
         ep_dir.mkdir(parents=True, exist_ok=True)
         out_path = ep_dir / "worktable.json"
@@ -473,9 +774,13 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "schema": "park-studio/worktable/v1",
             "episode": cut["episode"],
             "title": cut["title"],
+            "mode": cut.get("mode", "rough"),
             "source_file": cut["sourceFile"],
+            "srt_path": cut.get("srtPath", ""),
             "burn_subtitles": cut["burnSubs"],
+            "pause_s": cut.get("pauseS", 0.8),
             "density": cut["density"],
+            "drop_idx": cut.get("dropIdx", []),
             "hook_lines": [l for l in cut["lines"] if l["i"] in cut["hookIdx"]],
             "shots": cut["shots"],
             "exported_at": db.now_iso(),
