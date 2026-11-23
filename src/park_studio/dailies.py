@@ -45,7 +45,7 @@ def _short_label(label: str) -> str:
     for key, word in _WORDS:
         if key.lower() in low:
             return word
-    return re.sub(r"\s+", " ", _FILLER.sub("", plain)).strip()[:8]
+    return re.sub(r"\s+", " ", _FILLER.sub("", plain)).strip()[:12]
 
 
 def _rank_stat(r: dict[str, Any]) -> int:

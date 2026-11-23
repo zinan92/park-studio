@@ -26,6 +26,7 @@
           <p>Park Studio 本机运行状态、7 平台专用浏览器体检、飞书/站点集成与 Park 开源社区连接。</p>
         </div>
         <div class="acts">
+          <a class="btn" href="#position">${PS.icon('star', 'sm')}我的定位</a>
           <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.1.2</a>
           <a class="btn" href="https://github.com/zinan92/park-studio/issues" target="_blank" rel="noopener">GitHub Issues ↗</a>
         </div>
@@ -559,7 +560,7 @@
   PS.pages.position = function () {
     const pos = PS.S.positioning;
     const rows = [['你是谁（定位卡）', 'who'], ['你怎么赚钱', 'money'], ['你和别人哪里不一样', 'diff'], ['你守的规矩', 'rules'], ['对外简介', 'bio']];
-    const main = PS.shell('position', [['选题工作台', '#source'], ['我的定位', '#position']], `
+    const main = PS.shell('position', [['系统', '#settings'], ['我的定位', '#position']], `
       <div class="ph"><div><h1>我的定位</h1><p>每次写稿、生成钩子和三路审稿都会自动带上这份定位（持久化到本地 SQLite）。</p></div><div class="acts"><button class="btn primary" id="savePos">保存定位</button></div></div>
       <div class="card stack">${rows.map(([l, k]) => `<div><label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px">${l}</label><textarea data-pk="${k}" rows="2">${PS.esc(pos[k])}</textarea></div>`).join('')}</div>
     `, 'narrow');

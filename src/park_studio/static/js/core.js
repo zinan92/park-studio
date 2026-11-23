@@ -127,7 +127,7 @@
 
   function wsOf(active) {
     if (['dashboard', 'home'].includes(active)) return 'hub';
-    if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done', 'position'].includes(active)) return 'topic';
+    if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done'].includes(active)) return 'topic';
     if (['cut-todo', 'cut', 'cut-done'].includes(active)) return 'cut';
     if (['pub-todo', 'pub-pack', 'pub-confirm', 'pub-sent'].includes(active)) return 'publish';
     if (['review', 'conversion'].includes(active)) return 'review';
@@ -143,10 +143,9 @@
     if (ws === 'hub') return [];
     if (ws === 'topic') {
       return [
-        { id: 'source',   label: '日报 · 对标', href: '#source',   on: ['source', 'feed', 'chai'].includes(active) },
-        { id: 'pool',     label: '选题池',      href: '#pool',     on: ['pool', 'write', 'audit'].includes(active), count: poolN },
-        { id: 'scripts',  label: '定稿',        href: '#scripts',  on: ['scripts', 'done'].includes(active), count: doneN },
-        { id: 'position', label: '我的定位',    href: '#position', on: active === 'position' },
+        { id: 'source',  label: '日报 · 对标', href: '#source',  on: ['source', 'feed', 'chai'].includes(active) },
+        { id: 'pool',    label: '选题池',      href: '#pool',    on: ['pool', 'write', 'audit'].includes(active), count: poolN },
+        { id: 'scripts', label: '定稿',        href: '#scripts', on: ['scripts', 'done'].includes(active), count: doneN },
       ];
     }
     if (ws === 'cut') {
@@ -173,17 +172,17 @@
       }
       return list;
     }
-    // 系统与开源资产二级快捷切换
+    // 系统、我的定位与开源资产二级快捷切换
     const m = PS.S.settings.modules;
     const more = [
-      { id: 'settings', label: '系统', href: '#settings', on: active === 'settings' },
-      { id: 'releases', label: '上新', href: '#releases', on: active === 'releases' },
+      { id: 'settings', label: '系统',     href: '#settings', on: active === 'settings' },
+      { id: 'position', label: '我的定位', href: '#position', on: active === 'position' },
     ];
     if (m.tree) more.push({ id: 'tree', label: '知识树', href: '#tree', on: active === 'tree' });
     more.push({ id: 'said', label: '说过的话', href: '#said', on: active === 'said' });
     if (m.clients) more.push({ id: 'clients', label: '客户', href: '#clients', on: active === 'clients' });
     if (m.site) more.push({ id: 'site', label: '个人网站', href: '#site', on: active === 'site' });
-    more.push({ id: 'position', label: '我的定位', href: '#position', on: active === 'position' });
+    more.push({ id: 'releases', label: '上新', href: '#releases', on: active === 'releases' });
     return more;
   }
 
@@ -350,8 +349,9 @@
       const onlineN = PS.activePlats().filter(p => PS.S.platformStatus[p]?.state === 'ok').length;
       const activeN = PS.activePlats().length;
       host.insertAdjacentHTML('beforeend', `<div class="lg-menu" role="menu">
-        <div class="rp-lbl">系统与开源社区</div>
+        <div class="rp-lbl">系统与创作者定位</div>
         <a href="#settings">${PS.icon('sliders', 'sm')}系统与体检 <span class="sub" style="margin-left:auto;font-size:11px">${onlineN}/${activeN}</span></a>
+        <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
         <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.1.2</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
@@ -362,7 +362,6 @@
         ${m.kline ? `<a href="#source/kline">${PS.icon('chart', 'sm')}K 线日报</a>` : ''}
         ${m.clients ? `<a href="#clients">${PS.icon('users', 'sm')}咨询客户 CRM</a>` : ''}
         ${m.site ? `<a href="#site">${PS.icon('globe', 'sm')}个人网站</a>` : ''}
-        <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
         <div class="rp-sep"></div>
         <button type="button" id="themeToggleMenu">◐ 切换深浅外观</button>
       </div>`);
@@ -421,8 +420,8 @@
       el.classList.toggle('on', isOn);
       el.setAttribute('aria-selected', isOn ? 'true' : 'false');
     });
-    document.getElementById('sysNavBtn')?.classList.toggle('on', active === 'settings');
-    document.getElementById('moreMenuBtn')?.classList.toggle('on', ws === 'more' && active !== 'settings');
+    document.getElementById('sysNavBtn')?.classList.toggle('on', active === 'settings' || active === 'position');
+    document.getElementById('moreMenuBtn')?.classList.toggle('on', ws === 'more' && active !== 'settings' && active !== 'position');
     updateChromeBadges();
     requestAnimationFrame(() => moveThumb(mainPill, mainThumb, '.lg-tab.on', firstRender));
 
