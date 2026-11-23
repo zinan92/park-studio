@@ -76,39 +76,46 @@
     const active = PS.activePlats();
     const cut = PS.S.cutProject;
     const iss = PS._newsletterIssue;
+    const savedDaily = PS._savedDaily;
     const topNews = iss?.parts?.length
       ? iss.parts.flatMap(p => p.groups.flatMap(g => g.items)).slice(0, 3)
       : PS.S.sources.newsletter.slice(0, 3);
     const newsCount = iss?.total || PS.S.sources.newsletter.length;
-    const eps = PS.S.episodes;
-    const slides = [eps[0], eps[1], eps[3]].filter(Boolean);
+    const savedCount = (savedDaily?.cards?.length || 0) + (savedDaily?.items?.length || 0) || PS.S.sources.saved.length;
+
+    const an = PS.S.analytics || {};
+    const realEps = an.episodes || [];
+    const slides = realEps.slice(0, 4);
     if (heroIdx >= slides.length) heroIdx = 0;
+
+    // 真实待确认发布期次（来自 SQLite publish_episodes，而非演示种子）
+    const pubList = PS.S.publishEpisodes || [];
+    const activePub = pubList.find(e => Object.values(e.tasks || {}).some(t => t.state === 'awaiting_user')) || pubList[0];
+    const pubTodoPlats = activePub ? active.filter(pid => activePub.tasks?.[pid]?.state === 'awaiting_user') : [];
+    const pubDoneN = activePub ? active.filter(pid => activePub.tasks?.[pid]?.state === 'published').length : 0;
 
     const pStats = active.map(id => ({ id, ...PS.fanStats(id) }));
     const totFans = pStats.reduce((s, x) => s + x.total, 0);
     const totToday = pStats.reduce((s, x) => s + x.today, 0);
     const tot7 = pStats.reduce((s, x) => s + x.d7, 0);
     const tot30 = pStats.reduce((s, x) => s + x.d30, 0);
-    const topFan7 = [...pStats].sort((a, b) => b.d7 - a.d7)[0];
-    const ep41 = eps[0], t41 = epTotals(ep41);
-    const waitNames = active.filter(pid => ep41.tasks[pid]?.state === 'awaiting_user').map(pid => PS.PLATFORMS[pid].name);
 
-    const insights = [
-      { cls: 'g', tag: '涨粉', html: `近 7 天涨粉最多的是 <b>${PS.PLATFORMS[topFan7.id].name} ${PS.sgn(topFan7.d7)}</b>，占全网近 7 天合计 ${PS.sgn(tot7)} 的 <b>${PS.pct(topFan7.d7, tot7, 0)}</b>。` },
-      { cls: 'o', tag: '发布日', html: `「${PS.esc(ep41.nick)}」首日全网播放 <b>${PS.fmt(t41.views)}</b>，是上期同龄的 <b>1.7 倍</b>；还有 ${t41.todo} 家国内平台等你点发。` },
-      { cls: 'b', tag: '互动', html: `近 3 期平均互动率最高是 <b>小红书 18.8%</b>、<b>B站 16.4%</b>，干货收藏比远超泛流量平台。` },
-      { cls: 'p', tag: '转化', html: `${PS.esc(PS.S.settings.siteName)}近 30 日归因收入 <b>¥20,350</b>，B 站注册→付费转化率最高（14.3%）。` },
+    const insights = (an.insights && an.insights.length) ? an.insights : [
+      { cls: 'g', tag: '粉丝', html: `当前全网实测总粉 <b>${PS.fmt(totFans)}</b>，点击右上角「<b>立即采数</b>」即可同步各平台最新粉丝与单期作品播放。` },
     ];
+
+    // 给堆叠图准备真实发布日虚线标记
+    const fanMarksEps = realEps.map(e => ({ episode: e.index, nick: e.nick, schedule: e.published_at || '' }));
 
     const main = PS.shell('dashboard', [['中控', '#dashboard']], `
       <div class="ph">
         <div>
           <h1>中控大屏</h1>
-          <p>一眼看清全盘状态和当前停在哪一步 · 上次自动采数：${PS.esc(PS.S.daemon.lastMetricsAt)}。</p>
+          <p>全盘真实数据总览（已采集 ${an.totalWorks || 0} 条真实作品 · 上次采数：${PS.esc(an.lastMetricsAt || PS.S.daemon.lastMetricsAt || '未采集')}）。</p>
         </div>
         <div class="acts">
           <button class="btn" id="quickImportBtn">${PS.icon('upload', 'sm')}导入素材 / 贴稿</button>
-          <button class="btn primary" id="dashCollect">${PS.icon('refresh', 'sm')}立即采数</button>
+          <button class="btn primary" id="dashCollect">${PS.icon('refresh', 'sm')}立即采数（粉丝+流量）</button>
         </div>
       </div>
 
@@ -116,21 +123,21 @@
         <button type="button" class="wip-card primary" onclick="location.hash='#cut'">
           <span class="wip-ic">${PS.icon('film')}</span>
           <div class="min0 grow">
-            <div class="wip-tag"><span>正在做 · EP${cut.episode}</span></div>
+            <div class="wip-tag"><span>正在做 · 剪辑工作台</span></div>
             <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(cut.title)}</b>
-            <div class="sub clip1" style="font-size:12px">停在「剪辑 · 镜头表 (${(cut.shots || []).length} 镜)」</div>
+            <div class="sub clip1" style="font-size:12px">停在「镜头表 (${(cut.shots || []).length} 镜)」</div>
           </div>
           <span class="wip-go">接着剪 ›</span>
         </button>
 
-        <button type="button" class="wip-card ${t41.todo ? 'warn' : ''}" onclick="location.hash='#pub-confirm'">
-          <span class="wip-ic">${PS.icon(t41.todo ? 'send' : 'check')}</span>
+        <button type="button" class="wip-card ${pubTodoPlats.length ? 'warn' : ''}" onclick="location.hash='#pub-confirm'">
+          <span class="wip-ic">${PS.icon(pubTodoPlats.length ? 'send' : 'check')}</span>
           <div class="min0 grow">
-            <div class="wip-tag"><span>${t41.todo ? `待确认发布 · ${t41.todo} 平台` : '最新一期已闭环'}</span></div>
-            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">EP${ep41.episode} ${PS.esc(ep41.nick)}</b>
-            <div class="sub clip1" style="font-size:12px">${t41.todo ? `${PS.esc(waitNames.join('、'))} 已由专用 Chrome 填表` : `${t41.pub}/${t41.total} 平台已发布`}</div>
+            <div class="wip-tag"><span>${pubTodoPlats.length ? `待确认发布 · ${pubTodoPlats.length} 平台` : (activePub ? '当前发布包' : '准备发布')}</span></div>
+            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(activePub ? activePub.nick : '从本地工程目录一键载入')}</b>
+            <div class="sub clip1" style="font-size:12px">${pubTodoPlats.length ? `${PS.esc(pubTodoPlats.map(p => PS.PLATFORMS[p].name).join('、'))} 已由专用 Chrome 填表` : `${pubDoneN}/${active.length} 平台已发布`}</div>
           </div>
-          <span class="wip-go">${t41.todo ? '去点发 ›' : '看矩阵 ›'}</span>
+          <span class="wip-go">${pubTodoPlats.length ? '去点发 ›' : '去发布 ›'}</span>
         </button>
 
         <button type="button" class="wip-card" onclick="location.hash='#source'">
@@ -138,7 +145,7 @@
           <div class="min0 grow">
             <div class="wip-tag"><span>今日信源 · AI 日报 ${newsCount} 条</span></div>
             <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(topNews[0]?.title || '查看今日 AI 情报')}</b>
-            <div class="sub clip1" style="font-size:12px">搞钱 ${PS.S.sources.saved.length} 篇 · 选题池 ${PS.S.topics.filter(t => !t.trash).length} 条</div>
+            <div class="sub clip1" style="font-size:12px">搞钱日报 ${savedCount} 条 · 选题池 ${PS.S.topics.filter(t => !t.trash).length} 条</div>
           </div>
           <span class="wip-go">看日报 ›</span>
         </button>
@@ -150,7 +157,7 @@
         <div class="card">
           <div class="card-h">
             <h3>全平台总粉丝</h3>
-            <span class="sub">每日按平台堆叠 · 虚线为发布日</span>
+            <span class="sub">实测数据 · 每日按平台堆叠 · 虚线为发布日</span>
           </div>
           <div class="row" style="align-items:baseline;margin-bottom:10px">
             <div class="kpi-val xl">${PS.fmt(totFans)}</div>
@@ -164,7 +171,7 @@
         <div class="card">
           <div class="card-h">
             <h3>人话结论</h3>
-            <a class="sub" href="#review">看 1/3/7 天复盘 ›</a>
+            <a class="sub" href="#review">看复盘与作品分析 ›</a>
           </div>
           <div class="ins-list">
             ${insights.map(i => `<div class="ins-item"><em class="${i.cls}">${i.tag}</em><div>${i.html}</div></div>`).join('')}
@@ -175,13 +182,14 @@
       <section>
         <div class="card-h" style="margin-bottom:10px">
           <h3>各平台趋势（${active.length} 家启用中）</h3>
-          <a class="sub" href="#settings/platforms">管理专用 Chrome 与平台开关 ›</a>
+          <a class="sub" href="#settings">管理专用 Chrome 与平台开关 ›</a>
         </div>
         <div class="plat-cards">
           ${pStats.map(ps => {
             const p = PS.PLATFORMS[ps.id], st = PS.S.platformStatus[ps.id];
+            const wc = an.platformCounts?.[ps.id] || 0;
             return `<div class="pc">
-              <div class="row" style="gap:7px">${PS.plogo(ps.id, 22)}<b style="font-size:13.5px">${p.name}</b><span class="grow"></span><i class="dot ${st.state === 'ok' ? 'live' : 'warn'}"></i></div>
+              <div class="row" style="gap:7px">${PS.plogo(ps.id, 22)}<b style="font-size:13.5px">${p.name}</b><span class="grow"></span>${wc ? `<span class="sub" style="font-size:11px">${wc} 作品</span>` : ''}<i class="dot ${st.state === 'ok' ? 'live' : 'warn'}"></i></div>
               <div class="pc-val">${PS.fmt(ps.total)}</div>
               <div class="row" style="gap:5px"><span class="gpill">今<b>${PS.sgn(ps.today)}</b></span><span class="gpill">7日<b>${PS.sgn(ps.d7)}</b></span></div>
               <div class="pc-sp">${PS.sparklineSVG(ps.id, PS.S.followers[ps.id])}</div>
@@ -192,67 +200,80 @@
     `);
 
     function renderHero() {
-      const ep = slides[heroIdx];
-      const t = epTotals(ep);
       const host = main.querySelector('#heroHost');
+      if (!slides.length) {
+        host.innerHTML = `<div class="stack tight" style="width:100%;padding:8px 4px">
+          <div class="row"><span class="pill">真实作品数据待采集</span><span class="grow"></span><button class="btn primary s" id="heroEmptyCollect">${PS.icon('refresh', 'sm')}立即采集各平台作品</button></div>
+          <h3 class="m0">还没有采集到你的真实已发作品</h3>
+          <p class="sub m0">点右上角「立即采数」，专用 Chrome 会自动从抖音、视频号、B站、YouTube、小红书拉取你真实发过的每期作品播放、点赞、收藏与时长（绝不用演示假数据充数）。</p>
+        </div>`;
+        host.querySelector('#heroEmptyCollect')?.addEventListener('click', () => main.querySelector('#dashCollect')?.click());
+        return;
+      }
+      const ep = slides[heroIdx];
       host.innerHTML = `
-        <div class="hero-cv" style="background:${ep.coverGrad}" onclick="location.hash='#pub-confirm'">
-          <span class="pill" style="background:rgba(0,0,0,.35);color:#fff;width:fit-content">第 ${ep.episode} 期</span>
+        <div class="hero-cv" style="background:${ep.coverGrad}" onclick="location.hash='#review'">
+          <span class="pill" style="background:rgba(0,0,0,.35);color:#fff;width:fit-content">${PS.esc(ep.published_at || '已发布')}</span>
           <h4>${PS.esc(ep.coverTitle).replace(/\n/g, '<br>')}</h4>
-          <span style="font-size:11px;opacity:.9">${t.pub}/${t.total} 平台已发布</span>
+          <span style="font-size:11px;opacity:.9">已归并 ${ep.platformCount} 个平台实测数据</span>
         </div>
         <div class="min0 grow stack tight">
-          <div class="row">
+          <div class="row" style="flex-wrap:wrap;gap:6px">
             <div class="seg">
-              ${slides.map((s, i) => `<button class="${i === heroIdx ? 'on' : ''}" data-hi="${i}">EP${s.episode} ${PS.esc(s.nick)}</button>`).join('')}
+              ${slides.map((s, i) => `<button class="${i === heroIdx ? 'on' : ''}" data-hi="${i}">${PS.esc(s.nick.slice(0, 12))}</button>`).join('')}
             </div>
             <span class="grow"></span>
-            ${t.todo ? `<a class="btn primary s" href="#pub-confirm">去确认点发（${t.todo}）</a>` : `<span class="pill good">全平台已闭环</span>`}
+            <a class="btn s" href="#review">查看全部 ${an.totalEpisodes} 期复盘 ›</a>
           </div>
           <h2 class="m0" style="font-size:18px">${PS.esc(ep.title)}</h2>
           <div class="hero-plats">
             ${active.map(pid => {
-              const tk = ep.tasks[pid]; if (!tk) return '';
-              const cls = tk.state === 'published' ? 'on' : tk.state === 'awaiting_user' ? 'todo' : '';
-              const lbl = tk.state === 'published' ? (tk.m ? PS.kfmt(tk.m.views) : '已发') : tk.state === 'awaiting_user' ? '等你点发' : tk.state === 'scheduled' ? '定时' : '待发';
-              return `<div class="hpl ${cls}" onclick="location.hash='#pub-confirm'">${PS.plogo(pid, 17)}<span>${PS.PLATFORMS[pid].name}</span><span class="st">${lbl}</span></div>`;
+              const pw = ep.platforms?.[pid];
+              if (!pw) {
+                return `<div class="hpl" style="opacity:.52">${PS.plogo(pid, 17)}<span>${PS.PLATFORMS[pid].name}</span><span class="st">未采到</span></div>`;
+              }
+              const tip = `${PS.PLATFORMS[pid].name} · ${pw.title}\n播放 ${PS.fmt(pw.views)} · 赞 ${PS.fmt(pw.likes)} · 藏 ${PS.fmt(pw.favorites)} · 评 ${PS.fmt(pw.comments)}`;
+              return `<a class="hpl on" href="${PS.esc(pw.url || '#review')}" target="_blank" rel="noopener" data-tip="${PS.esc(tip)}">${PS.plogo(pid, 17)}<span>${PS.PLATFORMS[pid].name}</span><span class="st">${PS.kfmt(pw.views)}</span></a>`;
             }).join('')}
           </div>
           <div class="row" style="gap:24px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line-soft)">
-            <div><div class="kpi-lab">全平台播放</div><div class="kpi-val" style="font-size:22px">${t.views ? PS.fmt(t.views) : '–'}</div></div>
-            <div><div class="kpi-lab">总互动</div><div class="kpi-val" style="font-size:22px">${t.inter ? PS.fmt(t.inter) : '–'}</div></div>
-            <div><div class="kpi-lab">互动率</div><div class="kpi-val" style="font-size:22px">${t.views ? PS.pct(t.inter, t.views, 1) : '–'}</div></div>
+            <div><div class="kpi-lab">全平台实测播放</div><div class="kpi-val" style="font-size:22px">${ep.views ? PS.fmt(ep.views) : '0'}</div></div>
+            <div><div class="kpi-lab">总互动（赞+藏+评+转）</div><div class="kpi-val" style="font-size:22px">${PS.fmt(ep.inter)}</div></div>
+            <div><div class="kpi-lab">综合互动率</div><div class="kpi-val" style="font-size:22px">${ep.views ? ep.interRate + '%' : '–'}</div></div>
+            <div><div class="kpi-lab">收藏 / 赞</div><div class="kpi-val" style="font-size:22px">${ep.likes ? PS.pct(ep.favorites, ep.likes, 0) : '–'}</div></div>
           </div>
         </div>`;
       host.querySelectorAll('[data-hi]').forEach(b => b.onclick = () => { heroIdx = +b.dataset.hi; renderHero(); });
     }
 
     renderHero();
-    PS.drawStackedFans(main.querySelector('#fansChart'), PS.S.followers, active, eps);
+    PS.drawStackedFans(main.querySelector('#fansChart'), PS.S.followers, active, fanMarksEps);
     main.querySelector('#quickImportBtn').onclick = openQuickImportModal;
     main.querySelector('#dashCollect').onclick = async e => {
       const btn = e.currentTarget;
       const old = btn.innerHTML;
       btn.disabled = true;
-      btn.textContent = '专用 Chrome 采数中…';
+      btn.textContent = '正在采集粉丝与作品流量…';
       try {
-        const res = await PS.api('POST', '/api/collect/followers', {});
-        if (res.chromeStatus) {
-          PS.S.chromeStatus = res.chromeStatus;
-          PS.S.daemon.chromeOnline = !!res.chromeStatus.online;
-        }
-        if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
-        if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
-        if (res.followersLive) {
-          PS.S.liveFollowerPlats = Object.keys(res.followersLive);
-          for (const [pid, dayMap] of Object.entries(res.followersLive)) {
+        const resF = await PS.api('POST', '/api/collect/followers', {});
+        if (resF.followersLive) {
+          PS.S.liveFollowerPlats = Object.keys(resF.followersLive);
+          for (const [pid, dayMap] of Object.entries(resF.followersLive)) {
             if (dayMap && Object.keys(dayMap).length) PS.S.followers[pid] = { ...dayMap };
           }
         }
+        const resM = await PS.api('POST', '/api/collect/metrics', {});
+        if (resM.chromeStatus) {
+          PS.S.chromeStatus = resM.chromeStatus;
+          PS.S.daemon.chromeOnline = !!resM.chromeStatus.online;
+        }
+        if (resM.daemonLogs) PS.S.daemonLogs = resM.daemonLogs;
+        if (resM.last_metrics_at) PS.S.daemon.lastMetricsAt = resM.last_metrics_at;
+        if (resM.analytics) PS.S.analytics = resM.analytics;
         PS.save();
         PS.toast(
-          res.collected ? `专用 Chrome 已实测采集 ${res.collected} 家平台粉丝数` : '暂未读到已登录平台，请先到右上角「系统 → 打开全部登录页」扫码',
-          res.collected ? 'good' : 'warn'
+          `采数完成：${resF.collected || 0} 家粉丝 + ${resM.collected || 0} 条真实作品已入库`,
+          (resF.collected || resM.collected) ? 'good' : 'warn'
         );
         PS.pages.dashboard();
       } catch (err) {

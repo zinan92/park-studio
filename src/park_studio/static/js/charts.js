@@ -106,46 +106,53 @@
     </svg>`;
   };
 
-  PS.drawDouyinScatter = function (el) {
+  PS.drawDouyinScatter = function (el, rawPts, medViews) {
     if (!el) return;
-    const pts = [
-      { t: 'EP41 本地 Agent 填 7 平台', sec: 462, views: 38420, mult: 2.4 },
-      { t: 'EP40 AI 知识树内化', sec: 518, views: 62400, mult: 3.9 },
-      { t: 'EP39 三路审稿拉高完播', sec: 395, views: 89100, mult: 5.5 },
-      { t: 'EP38 Obsidian 接入工作台', sec: 310, views: 44800, mult: 2.8 },
-      { t: 'EP37 别再用提示词模板了', sec: 185, views: 19200, mult: 1.2 },
-      { t: 'EP36 独立开发者内容获客', sec: 440, views: 53600, mult: 3.3 },
-      { t: 'EP35 选题打分 15 分法', sec: 260, views: 27400, mult: 1.7 },
-      { t: 'EP34 口播去口水话实测', sec: 210, views: 16200, mult: 1.0 },
-      { t: 'EP33 为什么 99% 人不复盘', sec: 360, views: 71800, mult: 4.5 },
-    ];
-    const W = Math.max(400, el.clientWidth || 620), H = 240;
-    const L = 52, R = 18, T = 16, B = 30;
+    const pts = Array.isArray(rawPts) ? rawPts.filter(p => (p.views || 0) > 0 || (p.sec || 0) > 0) : [];
+    if (!pts.length) {
+      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:180px;color:var(--ink-3);font-size:13px">暂无抖音作品实测数据 · 点击右上角「立即采流量」即可自动绘制真实散点图</div>';
+      return;
+    }
+    const W = Math.max(400, el.clientWidth || 620), H = 250;
+    const L = 56, R = 20, T = 18, B = 32;
     const pw = W - L - R, ph = H - T - B;
-    const maxSec = 600, maxV = 100000;
-    const X = s => L + (s / maxSec) * pw;
-    const Y = v => T + ph - (v / maxV) * ph;
+    const maxSecRaw = Math.max(120, ...pts.map(p => p.sec || 60));
+    const maxSec = Math.ceil(maxSecRaw / 120) * 120;
+    const maxVRaw = Math.max(1000, ...pts.map(p => p.views || 0));
+    const stepV = maxVRaw <= 10000 ? 2500 : maxVRaw <= 50000 ? 10000 : maxVRaw <= 200000 ? 50000 : Math.ceil(maxVRaw / 4 / 50000) * 50000;
+    const maxV = Math.ceil(maxVRaw / stepV) * stepV;
+    const med = medViews || 0;
+    const X = s => L + (Math.min(s, maxSec) / maxSec) * pw;
+    const Y = v => T + ph - (Math.min(v, maxV) / maxV) * ph;
 
     let svg = `<svg viewBox="0 0 ${W} ${H}">`;
-    for (const v of [0, 25000, 50000, 75000, 100000]) {
+    for (let i = 0; i <= 4; i++) {
+      const v = Math.round((maxV / 4) * i);
       const y = Y(v).toFixed(1);
       svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--line-soft)" stroke-dasharray="${v ? '3 3' : ''}"/>`;
-      svg += `<text x="${L - 8}" y="${+y + 4}" text-anchor="end">${v ? (v / 10000) + '万' : '0'}</text>`;
+      const lbl = v === 0 ? '0' : (v >= 10000 ? `${(v / 10000).toFixed(v % 10000 === 0 ? 0 : 1)}万` : PS.fmt(v));
+      svg += `<text x="${L - 8}" y="${+y + 4}" text-anchor="end">${lbl}</text>`;
     }
-    for (const s of [120, 240, 360, 480, 600]) {
+    for (let i = 1; i <= 5; i++) {
+      const s = Math.round((maxSec / 5) * i);
       const x = X(s).toFixed(1);
-      svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${s / 60}分钟</text>`;
+      svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${(s / 60).toFixed(s % 60 === 0 ? 0 : 1)}分钟</text>`;
     }
-    // 中位数基线
-    svg += `<line x1="${L}" x2="${W - R}" y1="${Y(16000).toFixed(1)}" y2="${Y(16000).toFixed(1)}" stroke="var(--ink-3)" stroke-dasharray="5 4" stroke-opacity="0.5"/>`;
-    svg += `<text x="${W - R - 4}" y="${Y(16000) - 5}" text-anchor="end" style="fill:var(--ink-3)">账号中位数 1.6万</text>`;
+    if (med > 0) {
+      const my = Y(med).toFixed(1);
+      svg += `<line x1="${L}" x2="${W - R}" y1="${my}" y2="${my}" stroke="var(--ink-3)" stroke-dasharray="5 4" stroke-opacity="0.55"/>`;
+      svg += `<text x="${W - R - 4}" y="${+my - 5}" text-anchor="end" style="fill:var(--ink-3)">账号中位数 ${PS.kfmt(med)}</text>`;
+    }
 
     for (const p of pts) {
-      const cx = X(p.sec).toFixed(1), cy = Y(p.views).toFixed(1);
-      const gold = p.mult >= 3;
+      const sec = p.sec || 60;
+      const cx = X(sec).toFixed(1), cy = Y(p.views || 0).toFixed(1);
+      const mult = Number(p.mult || 1);
+      const gold = mult >= 3;
       const r = gold ? 8 : 5.5;
-      const tip = `${p.t}\n时长：${Math.floor(p.sec / 60)}分${p.sec % 60}秒\n播放：${PS.fmt(p.views)}（${p.mult}× 平时）`;
-      svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${gold ? '#E2A21B' : 'var(--accent)'}" fill-opacity="${gold ? 0.92 : 0.65}" stroke="var(--surface)" stroke-width="2" data-tip="${PS.esc(tip)}" style="cursor:pointer"/>`;
+      const durStr = sec >= 60 ? `${Math.floor(sec / 60)}分${sec % 60}秒` : `${sec}秒`;
+      const tip = `${p.title}\n发布：${p.published_at || '未知'} · 时长：${durStr}\n播放：${PS.fmt(p.views)}（${mult}× 中位数）\n赞 ${PS.fmt(p.likes)} · 收藏 ${PS.fmt(p.favorites)} · 评 ${PS.fmt(p.comments)}`;
+      svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${gold ? '#E2A21B' : 'var(--accent)'}" fill-opacity="${gold ? 0.92 : 0.7}" stroke="var(--surface)" stroke-width="2" data-tip="${PS.esc(tip)}" style="cursor:pointer"/>`;
     }
     svg += '</svg>';
     el.innerHTML = svg;

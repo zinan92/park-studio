@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, cdp, config, daemon, dailies, db, platforms, projects, publisher, vault
+from . import ai, cdp, config, daemon, dailies, db, metrics, platforms, projects, publisher, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -200,6 +200,7 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "launchd": daemon.daemon_status(),
             "followersLive": followers_live,
             "hasLiveFollowers": bool(followers_live),
+            "analytics": metrics.build_analytics(conn),
             "lastMetricsAt": last_metrics_at,
             "agents": ai.detect_agents(),
             "newsletterIssue": vault.parse_newsletter_issue(None, cfg=cfg),
@@ -567,8 +568,25 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         return {
             **res,
             "followersLive": platforms.get_followers_map(conn, days=30),
+            "analytics": metrics.build_analytics(conn),
             "chromeStatus": cdp.chrome_status(cfg),
             "daemonLogs": _recent_logs(),
+        }
+
+    @app.get("/api/metrics/overview")
+    def api_metrics_overview() -> dict[str, Any]:
+        return metrics.build_analytics(conn)
+
+    @app.post("/api/collect/metrics")
+    async def api_collect_metrics(req: PlatformActionReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await metrics.collect_all_works(conn, cfg=cfg, target_platforms=req.platforms if req else None)
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {
+            **res,
+            "chromeStatus": cdp.chrome_status(cfg),
         }
 
     @app.post("/api/feishu/test")

@@ -405,58 +405,117 @@
     main.querySelector('#vCal').onclick = () => { sentView = 'cal'; PS.pages['pub-sent'](); };
   };
 
-  // ==================== 复盘 · 同龄复盘与抖音分析（#review） ====================
+  // ==================== 复盘 · 同龄复盘与抖音分析（#review · 100% 真实作品数据） ====================
   let revTab = 'douyin';
 
   PS.pages.review = function (sub) {
     if (['douyin', 'age', 'weekly'].includes(sub)) revTab = sub;
+    const an = PS.S.analytics || {};
+    const dy = an.douyin || { count: 0, medianViews: 0, medianLikes: 0, favLikePct: 0, hit3xCount: 0, scatter: [] };
+    const ageList = an.ageReviews || [];
+    const fmtDur = s => s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : (s ? `${s}s` : '–');
     let body = '';
 
     if (revTab === 'douyin') {
       body = `
         <div class="kpi-row">
           <div class="kpi-card"><div class="kpi-lab">抖音粉丝</div><div class="kpi-val">${PS.fmt(PS.fanStats('douyin').total)}</div></div>
-          <div class="kpi-card"><div class="kpi-lab">近 10 条点赞中位数</div><div class="kpi-val">1,860</div></div>
-          <div class="kpi-card"><div class="kpi-lab">平时一条播放</div><div class="kpi-val">1.6万</div></div>
-          <div class="kpi-card"><div class="kpi-lab">收藏 / 赞</div><div class="kpi-val">82%</div></div>
-          <div class="kpi-card"><div class="kpi-lab">3× 以上爆款</div><div class="kpi-val" style="color:var(--accent)">4 条</div></div>
+          <div class="kpi-card"><div class="kpi-lab">近 ${dy.count || 0} 条点赞中位数</div><div class="kpi-val">${dy.count ? PS.fmt(dy.medianLikes) : '–'}</div></div>
+          <div class="kpi-card"><div class="kpi-lab">平时一条播放（中位数）</div><div class="kpi-val">${dy.count ? PS.kfmt(dy.medianViews) : '–'}</div></div>
+          <div class="kpi-card"><div class="kpi-lab">收藏 / 赞</div><div class="kpi-val">${dy.count ? dy.favLikePct + '%' : '–'}</div></div>
+          <div class="kpi-card"><div class="kpi-lab">3× 以上爆款</div><div class="kpi-val" style="color:var(--accent)">${dy.count ? `${dy.hit3xCount} 条` : '–'}</div></div>
         </div>
         <div class="card stack">
-          <div class="card-h"><h3>时长 × 播放散点图</h3><span class="sub">金色圆点 = 高于中位数 3 倍以上</span></div>
+          <div class="card-h"><h3>时长 × 播放散点图（真实采集 ${dy.count || 0} 条）</h3><span class="sub">金色圆点 = 高于中位数 3 倍以上 · 悬停看明细</span></div>
           <div class="chart-box tall" id="dyScatter"></div>
         </div>
+        ${dy.scatter?.length ? `
+          <section class="card pad-0">
+            <div class="card-h" style="padding:14px 16px 6px"><h3>抖音作品实测明细</h3><span class="sub">按发布时间倒序 · 来自专用 Chrome 实时拉取</span></div>
+            <div class="tbl-wrap"><table class="tbl">
+              <thead><tr><th>标题</th><th>发布日</th><th class="n">时长</th><th class="n">播放</th><th class="n">倍数</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">转发</th></tr></thead>
+              <tbody>${dy.scatter.map(w => `<tr>
+                <td><a href="${PS.esc(w.url || '#')}" target="_blank" rel="noopener" style="font-weight:600">${PS.esc(w.title)}</a></td>
+                <td class="mono sub" style="font-size:12px">${PS.esc(w.published_at || '–')}</td>
+                <td class="n mono sub">${fmtDur(w.sec)}</td>
+                <td class="n"><b>${PS.fmt(w.views)}</b></td>
+                <td class="n"><span class="pill ${w.mult >= 3 ? 'accent' : ''}">${w.mult}×</span></td>
+                <td class="n">${PS.fmt(w.likes)}</td>
+                <td class="n">${PS.fmt(w.favorites)}</td>
+                <td class="n">${PS.fmt(w.comments)}</td>
+                <td class="n">${PS.fmt(w.shares)}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>
+          </section>
+        ` : ''}
       `;
     } else if (revTab === 'age') {
-      body = `<div class="hm-grid">
-        ${PS.S.episodes.slice(0, 2).map(ep => `<div class="card stack">
-          <div class="row"><span class="pill accent">EP${ep.episode} · 同龄复盘</span><span class="grow"></span><button class="btn s" onclick="PS.toast('已推飞书复盘卡片','good')">推飞书卡片</button></div>
-          <h3 class="m0">${PS.esc(ep.nick)}</h3>
-          ${ep.reviews.map(r => `<div style="padding:10px 12px;background:var(--sunk);border-radius:9px;font-size:13.5px">
-            <b>第 ${r.age} 天：</b>全平台 <b>${PS.fmt(r.views)}</b> 播放（上期同龄 ${PS.fmt(r.prevViews)}，达 <b style="color:var(--good)">${(r.views / r.prevViews).toFixed(1)}×</b>）· 涨粉 <b style="color:var(--good)">+${r.fans}</b> · 收入 <b>¥${PS.fmt(r.convRev)}</b>
+      if (!ageList.length) {
+        body = `<div class="card stack"><b>暂无跨平台单期复盘数据</b><p class="sub m0">点击右上角「立即采流量」，系统会自动归并你在抖音、视频号、B站、YouTube、小红书发过的每一期真实作品，并持续按天记录快照生成 1/3/7 天同龄对比。</p></div>`;
+      } else {
+        body = `<div class="hm-grid">
+          ${ageList.map(ep => `<div class="card stack tight">
+            <div class="row">
+              <span class="pill accent">${PS.esc(ep.published_at || '已发布')}</span>
+              <span class="sub" style="font-size:12px">已归并 ${Object.keys(ep.platforms || {}).length} 平台</span>
+              <span class="grow"></span>
+              ${ep.ratio != null ? `<span class="pill ${ep.ratio >= 1 ? 'good' : ''}">较上期 ${ep.ratio}×</span>` : ''}
+            </div>
+            <h3 class="m0" style="font-size:15.5px">${PS.esc(ep.title)}</h3>
+            <div style="padding:10px 12px;background:var(--sunk);border-radius:9px;font-size:13px">
+              全平台实测 <b>${PS.fmt(ep.views)}</b> 播放 · 总互动 <b>${PS.fmt(ep.inter)}</b>（互动率 <b>${ep.interRate}%</b>）
+              ${ep.prevViews ? `· 上期「${PS.esc(ep.prevTitle)}」${PS.fmt(ep.prevViews)} 播放` : ''}
+            </div>
+            <div class="row" style="flex-wrap:wrap;gap:6px">
+              ${Object.entries(ep.platforms || {}).map(([pid, pw]) => `<a class="pill" href="${PS.esc(pw.url || '#')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px">${PS.plogo(pid, 14)}${PS.PLATFORMS[pid]?.name || pid} <b>${PS.kfmt(pw.views)}</b></a>`).join('')}
+            </div>
+            ${ep.snapshots?.length ? `<div class="sub" style="font-size:11.5px">快照记录：${ep.snapshots.map(s => `${s.day}（第 ${s.age} 天 · ${PS.kfmt(s.views)}）`).join(' → ')}</div>` : ''}
           </div>`).join('')}
-        </div>`).join('')}
-      </div>`;
+        </div>`;
+      }
     } else {
       body = `<div class="card stack">
-        <div class="row"><b>每周一自动周报</b><span class="grow"></span><button class="btn primary s" onclick="PS.toast('周报已推送至飞书群与微信','good')">立即推送</button></div>
-        <pre class="codebox">🗓 Park Studio 周报｜近 7 天
-发了 2 期：「AI 知识树怎么搭」、「本地 Agent 自动填 7 平台」
-全平台新增播放 332,880（较上周 +41%）
-各平台净涨粉 +2,553（抖音 +673 · 小红书 +490 · B站 +397 · X +316 · 视频号 +250）
-Park 知识站：新注册 384｜付费会员 53｜归因收入 ¥11,360</pre>
+        <div class="row"><b>真实数据周报（自动从 SQLite 汇总）</b><span class="grow"></span><button class="btn s" id="copyWeeklyBtn">复制文本</button></div>
+        <pre class="codebox" id="weeklyPre">${PS.esc(an.weeklyReport || '暂无数据，请先点击右上角「立即采流量」。')}</pre>
       </div>`;
     }
 
     const main = PS.shell('review', [['复盘工作台', '#dashboard'], ['同龄复盘 · 抖音分析', '#review']], `
-      <div class="ph"><div><h1>复盘与作品分析</h1><p>结合 Park 抖音散点分析与麦田 1/3/7 天同龄对比复盘。</p></div></div>
+      <div class="ph">
+        <div><h1>复盘与作品分析</h1><p>100% 来自专用 Chrome 实测采集（已入库 ${an.totalWorks || 0} 条作品 · 跨平台归并 ${an.totalEpisodes || 0} 期）。</p></div>
+        <div class="acts"><button class="btn primary" id="revCollectBtn">${PS.icon('refresh', 'sm')}立即采流量</button></div>
+      </div>
       <div class="utabs">
-        <button class="utab ${revTab === 'douyin' ? 'on' : ''}" onclick="location.hash='#review/douyin'">抖音作品分析</button>
-        <button class="utab ${revTab === 'age' ? 'on' : ''}" onclick="location.hash='#review/age'">1/3/7 天同龄复盘</button>
-        <button class="utab ${revTab === 'weekly' ? 'on' : ''}" onclick="location.hash='#review/weekly'">每周自动周报</button>
+        <button class="utab ${revTab === 'douyin' ? 'on' : ''}" onclick="location.hash='#review/douyin'">抖音作品分析 (${dy.count || 0})</button>
+        <button class="utab ${revTab === 'age' ? 'on' : ''}" onclick="location.hash='#review/age'">跨平台单期复盘 (${ageList.length})</button>
+        <button class="utab ${revTab === 'weekly' ? 'on' : ''}" onclick="location.hash='#review/weekly'">真实数据周报</button>
       </div>
       ${body}
     `, 'mid');
-    if (revTab === 'douyin') PS.drawDouyinScatter(main.querySelector('#dyScatter'));
+    if (revTab === 'douyin') PS.drawDouyinScatter(main.querySelector('#dyScatter'), dy.scatter, dy.medianViews);
+    main.querySelector('#copyWeeklyBtn')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(an.weeklyReport || '');
+      PS.toast('周报已复制到剪贴板', 'good');
+    });
+    main.querySelector('#revCollectBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = '专用 Chrome 采集作品中…';
+      try {
+        const res = await PS.api('POST', '/api/collect/metrics', {});
+        if (res.analytics) PS.S.analytics = res.analytics;
+        if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
+        if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
+        PS.save();
+        PS.toast(`已实测采集 ${res.collected || 0} 条作品流量并写入 SQLite`, res.collected ? 'good' : 'warn');
+        PS.pages.review(revTab);
+      } catch (err) {
+        PS.toast(err.message || '采集失败', 'warn');
+        btn.disabled = false;
+        btn.innerHTML = old;
+      }
+    });
   };
 
   // ==================== 复盘 · 转化归因（#conversion） ====================

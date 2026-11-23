@@ -162,3 +162,104 @@ def test_saved_daily_pete_cards_and_dev_daily(tmp_path: Path, monkeypatch) -> No
     assert len(dv["sections"]) >= 1
 
 
+def test_metrics_upsert_and_cross_platform_grouping(tmp_path: Path, monkeypatch):
+    from park_studio import db, metrics
+
+    monkeypatch.setenv("PARK_STUDIO_DATA_DIR", str(tmp_path / "data"))
+    conn = db.connect(tmp_path / "data" / "studio.db")
+    db.init_db(conn)
+
+    # 空态不能伪造数据
+    empty = metrics.build_analytics(conn)
+    assert empty["hasLiveWorks"] is False
+    assert empty["episodes"] == []
+
+    metrics.upsert_works(
+        conn,
+        [
+            {
+                "platform": "douyin",
+                "work_id": "dy1",
+                "title": "一条视频涨粉5k，AI时代新手博主的版本答案",
+                "url": "https://www.douyin.com/video/dy1",
+                "published_at": "2026-10-14",
+                "published_ts": 1791900000,
+                "duration_sec": 1000,
+                "views": 120000,
+                "likes": 3000,
+                "comments": 80,
+                "favorites": 2400,
+                "shares": 400,
+            },
+            {
+                "platform": "douyin",
+                "work_id": "dy2",
+                "title": "普通日常视频测试",
+                "url": "https://www.douyin.com/video/dy2",
+                "published_at": "2026-10-10",
+                "published_ts": 1791550000,
+                "duration_sec": 300,
+                "views": 20000,
+                "likes": 400,
+                "comments": 10,
+                "favorites": 200,
+                "shares": 20,
+            },
+            {
+                "platform": "douyin",
+                "work_id": "dy3",
+                "title": "另一条常规视频测试",
+                "url": "https://www.douyin.com/video/dy3",
+                "published_at": "2026-10-08",
+                "published_ts": 1791380000,
+                "duration_sec": 280,
+                "views": 18000,
+                "likes": 350,
+                "comments": 8,
+                "favorites": 180,
+                "shares": 15,
+            },
+            {
+                "platform": "bilibili",
+                "work_id": "BV1SGpC6YERF",
+                "title": "一条视频涨粉5k，AI时代新手博主的版本答案",
+                "url": "https://www.bilibili.com/video/BV1SGpC6YERF",
+                "published_at": "2026-10-14",
+                "published_ts": 1791937730,
+                "duration_sec": 1000,
+                "views": 18,
+                "likes": 1,
+                "comments": 0,
+                "favorites": 0,
+                "shares": 0,
+            },
+            {
+                "platform": "youtube",
+                "work_id": "geyAcj3gUuQ",
+                "title": "一条视频涨粉5k，AI时代新手博主的版本答案",
+                "url": "https://youtu.be/geyAcj3gUuQ",
+                "published_at": "2026-10-14",
+                "published_ts": 1791940000,
+                "duration_sec": 1000,
+                "views": 2,
+                "likes": 0,
+                "comments": 0,
+                "favorites": 0,
+                "shares": 0,
+            },
+        ],
+    )
+
+    an = metrics.build_analytics(conn)
+    assert an["hasLiveWorks"] is True
+    assert an["totalWorks"] == 5
+    # 同一期视频自动归并 3 平台：120000 + 18 + 2 = 120020
+    top = an["episodes"][0]
+    assert top["platformCount"] == 3
+    assert top["views"] == 120020
+    # 抖音中位数 = 20000，dy1 = 6.0× 命中 3× 爆款
+    assert an["douyin"]["medianViews"] == 20000
+    assert an["douyin"]["hit3xCount"] == 1
+
+
+

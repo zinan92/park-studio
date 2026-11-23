@@ -245,6 +245,7 @@
       if (res.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...res.platformStatus };
       if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
       if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
+      if (res.analytics) PS.S.analytics = res.analytics;
       if (res.followersLive) {
         PS.S.liveFollowerPlats = Object.keys(res.followersLive);
         for (const [pid, dayMap] of Object.entries(res.followersLive)) {
@@ -306,10 +307,10 @@
       PS.toast(`已生成 ${res.launchd.plistPath}`, 'good');
       PS.pages.settings();
     }));
-    main.querySelector('#btnMetrics').onclick = e => runBtn(e.currentTarget, '正在采集数据…', async () => {
-      const res = await PS.api('POST', '/api/collect/followers', {});
+    main.querySelector('#btnMetrics').onclick = e => runBtn(e.currentTarget, '正在采集各平台作品流量…', async () => {
+      const res = await PS.api('POST', '/api/collect/metrics', {});
       applySysRes(res);
-      PS.toast(res.collected ? `已实测采集 ${res.collected} 个平台最新数据并写入 SQLite` : '暂未读到已登录平台数据，请先点「打开全部登录页」扫码', res.collected ? 'good' : 'warn');
+      PS.toast(res.collected ? `已实测采集 ${res.collected} 条真实作品流量并写入 SQLite` : '暂未读到已登录平台作品，请确认登录态后重试', res.collected ? 'good' : 'warn');
       PS.pages.settings();
     });
     main.querySelector('#btnFollowers').onclick = e => runBtn(e.currentTarget, '正在采集粉丝…', async () => {

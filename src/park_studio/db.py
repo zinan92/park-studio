@@ -150,6 +150,38 @@ CREATE TABLE IF NOT EXISTS publish_tasks (
     PRIMARY KEY (episode_id, platform)
 );
 
+CREATE TABLE IF NOT EXISTS platform_works (
+    platform TEXT NOT NULL,
+    work_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL DEFAULT '',
+    published_at TEXT NOT NULL DEFAULT '',
+    published_ts INTEGER NOT NULL DEFAULT 0,
+    duration_sec INTEGER NOT NULL DEFAULT 0,
+    views INTEGER NOT NULL DEFAULT 0,
+    likes INTEGER NOT NULL DEFAULT 0,
+    comments INTEGER NOT NULL DEFAULT 0,
+    favorites INTEGER NOT NULL DEFAULT 0,
+    shares INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    collected_at TEXT NOT NULL,
+    PRIMARY KEY (platform, work_id)
+);
+
+CREATE TABLE IF NOT EXISTS work_snapshots (
+    day TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    work_id TEXT NOT NULL,
+    age_days INTEGER NOT NULL DEFAULT 0,
+    views INTEGER NOT NULL DEFAULT 0,
+    likes INTEGER NOT NULL DEFAULT 0,
+    comments INTEGER NOT NULL DEFAULT 0,
+    favorites INTEGER NOT NULL DEFAULT 0,
+    shares INTEGER NOT NULL DEFAULT 0,
+    collected_at TEXT NOT NULL,
+    PRIMARY KEY (day, platform, work_id)
+);
+
 CREATE TABLE IF NOT EXISTS kv (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
