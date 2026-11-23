@@ -125,83 +125,133 @@ def _fetch_json_js(url: str) -> str:
     return f"fetch({json.dumps(url)}, {{credentials:'include'}}).then(r => r.json()).catch(() => null)"
 
 
+def _day_from_any(raw: Any) -> str | None:
+    """兼容毫秒时间戳 (1794672000000)、秒时间戳与 'YYYY-MM-DD' 字符串。"""
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)) or (isinstance(raw, str) and raw.strip().isdigit()):
+        num = float(raw)
+        if num > 1e11:
+            num /= 1000.0
+        try:
+            return datetime.fromtimestamp(num).strftime("%Y-%m-%d")
+        except Exception:
+            return None
+    s = str(raw).strip()
+    m = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})", s)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    return None
+
+
 async def _probe_one(client: cdp.CDPClient, pid: str) -> dict[str, Any]:
     spec = PLATFORM_SPECS[pid]
     url = spec["home_url"]
 
     async def inspect(sid: str, _tid: str) -> dict[str, Any]:
-        href = str(await client.evaluate(sid, "location.href") or "")
-        low = href.lower()
+        last_reason = "页面加载超时，建议点「去登录」确认状态"
+        for attempt in range(11):  # 最长轮询 ~14 秒，命中立刻提前返回
+            await asyncio.sleep(1.3 if attempt else 1.5)
+            try:
+                href = str(await client.evaluate(sid, "location.href") or "")
+            except Exception:
+                continue
+            low = href.lower()
+            if not low or low == "about:blank" or low.startswith("chrome://"):
+                continue
 
-        if pid == "douyin":
-            if "login" in low or "passport" in low:
-                return {"state": "warn", "detail": "未登录（已跳回抖音登录页），请点「去登录」扫码"}
-            info = await client.evaluate(sid, _fetch_json_js("/web/api/media/user/info/"))
-            if isinstance(info, dict) and isinstance(info.get("user"), dict):
-                nick = info["user"].get("nickname") or "创作者"
-                fans = info["user"].get("follower_count")
-                extra = f" · {fans:,} 粉" if isinstance(fans, int) else ""
-                return {"state": "ok", "detail": f"抖音已登录（{nick}{extra}）"}
-            return {"state": "warn", "detail": "未能读取创作者账号信息，建议重新扫码"}
+            if pid == "douyin":
+                if "login" in low or "passport" in low:
+                    return {"state": "warn", "detail": "抖音未登录（已跳回登录页），请点「去登录」扫码"}
+                info = await client.evaluate(sid, _fetch_json_js("/web/api/media/user/info/"))
+                if isinstance(info, dict) and isinstance(info.get("user"), dict):
+                    nick = info["user"].get("nickname") or "创作者"
+                    fans = info["user"].get("follower_count")
+                    extra = f" · {int(fans):,} 粉" if isinstance(fans, (int, float)) else ""
+                    return {"state": "ok", "detail": f"已登录（{nick}{extra}）"}
+                if attempt >= 3 and "creator.douyin.com/creator-micro" in low:
+                    text = str(await client.evaluate(sid, "(document.body && document.body.innerText || '').slice(0, 600)") or "")
+                    if any(k in text for k in ("高清发布", "发布视频", "作品管理", "粉丝", "内容管理")):
+                        return {"state": "ok", "detail": "已登录（抖音创作者中心正常）"}
+                last_reason = "抖音未返回创作者账号信息，请确认已扫码登录"
 
-        if pid == "xhs":
-            if "login" in low:
-                return {"state": "warn", "detail": "小红书未登录，请点「去登录」扫码"}
-            info = await client.evaluate(sid, _fetch_json_js("/api/galaxy/creator/data/fans/overall_new"))
-            if isinstance(info, dict) and info.get("data"):
-                cnt = ((info["data"].get("thirty") or {}).get("fans_count"))
-                extra = f" · {int(cnt):,} 粉" if cnt is not None else ""
-                return {"state": "ok", "detail": f"小红书创作平台已登录{extra}"}
-            return {"state": "warn", "detail": "小红书登录态疑似过期，请重新扫码"}
+            elif pid == "xhs":
+                if "/login" in low:
+                    return {"state": "warn", "detail": "小红书未登录，请点「去登录」扫码"}
+                info = await client.evaluate(sid, _fetch_json_js("/api/galaxy/creator/data/fans/overall_new"))
+                if isinstance(info, dict) and info.get("code") in (0, None) and isinstance(info.get("data"), dict):
+                    data = info["data"]
+                    cnt = ((data.get("thirty") or data.get("seven") or {}).get("fans_count"))
+                    extra = f" · {int(cnt):,} 粉" if cnt is not None else ""
+                    return {"state": "ok", "detail": f"已登录（小红书创作平台{extra}）"}
+                last_reason = "小红书未登录或登录态已过期，请点「去登录」扫码"
 
-        if pid == "bilibili":
-            if "passport.bilibili.com" in low or "login" in low:
-                return {"state": "warn", "detail": "B 站未登录，请点「去登录」扫码"}
-            info = await client.evaluate(sid, _fetch_json_js("/x/web/index/stat"))
-            if isinstance(info, dict) and info.get("code") == 0 and isinstance(info.get("data"), dict):
-                fans = info["data"].get("total_fans")
-                extra = f" · {int(fans):,} 粉" if fans is not None else ""
-                return {"state": "ok", "detail": f"B 站创作中心已登录{extra}"}
-            return {"state": "warn", "detail": "B 站创作中心接口未返回数据，请检查登录"}
+            elif pid == "bilibili":
+                if "passport.bilibili.com" in low or "/login" in low:
+                    return {"state": "warn", "detail": "B 站未登录，请点「去登录」扫码"}
+                info = await client.evaluate(sid, _fetch_json_js("/x/web/index/stat"))
+                if isinstance(info, dict) and info.get("code") == 0 and isinstance(info.get("data"), dict):
+                    fans = info["data"].get("total_fans")
+                    extra = f" · {int(fans):,} 粉" if fans is not None else ""
+                    return {"state": "ok", "detail": f"已登录（B 站创作中心{extra}）"}
+                if isinstance(info, dict) and info.get("code") in (-101, -111):
+                    return {"state": "warn", "detail": "B 站未登录或登录态过期，请点「去登录」扫码"}
+                last_reason = "B 站创作中心响应较慢，请稍后再试或重新登录"
 
-        if pid == "channels":
-            if "login" in low:
-                return {"state": "warn", "detail": "视频号未登录（需扫码保活）"}
-            text = str(await client.evaluate(sid, SHADOW_TEXT_JS) or "")
-            if "关注者" in text or "发表" in text or "数据" in text:
-                return {"state": "ok", "detail": "视频号助手已登录，后台正常"}
-            return {"state": "warn", "detail": "视频号后台未就绪或已掉线，请扫码保活"}
+            elif pid == "channels":
+                if "/login" in low:
+                    return {"state": "warn", "detail": "视频号未登录，请点「去登录」扫码"}
+                auth = await client.evaluate(
+                    sid,
+                    "fetch('/cgi-bin/mmfinderassistant-bin/auth/auth_data',"
+                    "{method:'POST',headers:{'content-type':'application/json'},body:'{}',credentials:'include'})"
+                    ".then(r=>r.json()).catch(()=>null)",
+                )
+                if isinstance(auth, dict):
+                    if auth.get("errCode") == 0:
+                        fu = (auth.get("data") or {}).get("finderUser") or {}
+                        nick = fu.get("nickname") or "视频号"
+                        fans = fu.get("fansCount")
+                        extra = f" · {int(fans):,} 粉" if isinstance(fans, (int, float)) else ""
+                        return {"state": "ok", "detail": f"已登录（{nick}{extra}）"}
+                    if auth.get("errCode") is not None:
+                        return {"state": "warn", "detail": "视频号登录已失效，请点「去登录」重新扫码"}
+                last_reason = "视频号后台暂未返回账号状态"
 
-        if pid == "youtube":
-            if "accounts.google.com" in low or "signin" in low:
-                return {"state": "warn", "detail": "YouTube Studio 未登录 Google 账号"}
-            if "studio.youtube.com/channel/" in low:
-                return {"state": "ok", "detail": "YouTube Studio 已登录，频道后台正常"}
-            text = str(await client.evaluate(sid, "document.body ? document.body.innerText.slice(0, 800) : ''") or "")
-            if "订阅" in text or "Subscribers" in text or "信息中心" in text or "Dashboard" in text:
-                return {"state": "ok", "detail": "YouTube Studio 已登录"}
-            return {"state": "warn", "detail": "未确认 YouTube Studio 登录态，请检查浏览器窗口"}
+            elif pid == "youtube":
+                if "accounts.google.com" in low or "signin" in low:
+                    return {"state": "warn", "detail": "YouTube 未登录 Google 账号"}
+                if "studio.youtube.com/channel/" in low:
+                    return {"state": "ok", "detail": "已登录（YouTube Studio 频道后台正常）"}
+                text = str(await client.evaluate(sid, "(document.body && document.body.innerText || '').slice(0, 600)") or "")
+                if any(k in text for k in ("Subscribers", "Dashboard", "Your channel", "订阅", "信息中心", "你的频道")):
+                    return {"state": "ok", "detail": "已登录（YouTube Studio 正常）"}
+                last_reason = "YouTube Studio 加载较慢（请确认代理通畅或已登录 Google）"
 
-        if pid == "x":
-            if "/i/flow/login" in low or "/login" in low:
-                return {"state": "warn", "detail": "X 未登录，请点「去登录」"}
-            prof = await client.evaluate(
-                sid, "(document.querySelector('a[data-testid=AppTabBar_Profile_Link]')||{}).getAttribute?.('href')||''"
-            )
-            if prof:
-                handle = str(prof).strip("/")
-                return {"state": "ok", "detail": f"X 已登录（@{handle}）"}
-            return {"state": "warn", "detail": "未检测到 X 个人主页入口，可能掉线或网络受限"}
+            elif pid == "x":
+                if "/i/flow/login" in low or "/login" in low:
+                    return {"state": "warn", "detail": "X 未登录，请点「去登录」"}
+                prof = await client.evaluate(
+                    sid, "(document.querySelector('a[data-testid=AppTabBar_Profile_Link]')||{}).getAttribute?.('href')||''"
+                )
+                if prof:
+                    handle = str(prof).strip("/")
+                    return {"state": "ok", "detail": f"已登录（@{handle}）"}
+                last_reason = "未检测到 X 登录态（可能未登录或代理受限）"
 
-        if pid == "wechat":
-            if "token=" in low:
-                return {"state": "ok", "detail": "微信公众号后台已登录"}
-            return {"state": "warn", "detail": "公众号后台未登录（每次需微信扫码）"}
+            elif pid == "wechat":
+                if "token=" in low:
+                    return {"state": "ok", "detail": "已登录（微信公众号后台正常）"}
+                if attempt >= 2:
+                    text = str(await client.evaluate(sid, "(document.body && document.body.innerText || '').slice(0, 400)") or "")
+                    if "扫码" in text or "登录" in text:
+                        return {"state": "warn", "detail": "公众号未登录（需微信扫码登录）"}
+                last_reason = "公众号未登录（需微信扫码）"
 
-        return {"state": "warn", "detail": "未知平台"}
+        return {"state": "warn", "detail": last_reason}
 
     try:
-        return await client.with_tab(url, inspect, wait_s=5.0, active=False, keep_open=False)
+        return await client.with_tab(url, inspect, wait_s=0.0, active=False, keep_open=False)
     except Exception as exc:
         return {"state": "warn", "detail": f"检查出错：{str(exc)[:90]}"}
 
@@ -211,8 +261,14 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
     url = spec["home_url"]
 
     async def grab(sid: str, _tid: str) -> dict[str, Any] | None:
-        href = str(await client.evaluate(sid, "location.href") or "").lower()
-        if "login" in href or "passport" in href or "accounts.google.com" in href:
+        # 先等待真实页面离开 about:blank
+        href = ""
+        for _ in range(8):
+            await asyncio.sleep(1.2)
+            href = str(await client.evaluate(sid, "location.href") or "").lower()
+            if href and href != "about:blank" and not href.startswith("chrome://"):
+                break
+        if not href or "login" in href or "passport" in href or "accounts.google.com" in href:
             return None
 
         if pid == "bilibili":
@@ -226,9 +282,8 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                 return None
             hist = []
             for x in r.get("tend") or []:
-                dk = x.get("date_key")
-                if dk:
-                    day_s = datetime.fromtimestamp(int(dk)).strftime("%Y-%m-%d")
+                day_s = _day_from_any(x.get("date_key"))
+                if day_s:
                     hist.append({"day": day_s, "net": int(x.get("total_inc") or 0)})
             return {"total": int(r["total"]), "today_net": int(r.get("inc") or 0), "history": hist}
 
@@ -239,41 +294,49 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
 
         if pid == "xhs":
             expr = (
-                f"{_fetch_json_js('/api/galaxy/creator/data/fans/overall_new')}.then(x=>{{if(!x||!x.data||!x.data.thirty)return null;"
-                "const d=x.data.thirty, m=a=>Object.fromEntries((a||[]).map(i=>[i.date,i.count]));"
+                f"{_fetch_json_js('/api/galaxy/creator/data/fans/overall_new')}.then(x=>{{if(!x||!x.data)return null;"
+                "const d=x.data.thirty||x.data.seven; if(!d) return null;"
+                "const m=a=>Object.fromEntries((a||[]).map(i=>[String(i.date),i.count]));"
                 "const g=m(d.rise_fans_list), l=m(d.leave_fans_list);"
-                "return {total:d.fans_count, list:(d.fans_list||[]).map(i=>({date:i.date,total:i.count,gain:g[i.date],loss:l[i.date]}))};})"
+                "return {total:d.fans_count, list:(d.fans_list||[]).map(i=>({date:i.date,total:i.count,gain:g[String(i.date)],loss:l[String(i.date)]}))};})"
             )
             r = await client.evaluate(sid, expr)
             if not isinstance(r, dict) or r.get("total") is None:
                 return None
             hist = []
             for x in r.get("list") or []:
-                ds = str(x.get("date") or "")[:10]
-                if len(ds) == 10:
+                ds = _day_from_any(x.get("date"))
+                if ds:
                     hist.append({"day": ds, "total": parse_cn_num(x.get("total")), "gain": parse_cn_num(x.get("gain")), "loss": parse_cn_num(x.get("loss"))})
             return {"total": int(r["total"]), "history": hist}
 
         if pid == "channels":
-            text = ""
-            for _ in range(5):
+            auth = await client.evaluate(
+                sid,
+                "fetch('/cgi-bin/mmfinderassistant-bin/auth/auth_data',"
+                "{method:'POST',headers:{'content-type':'application/json'},body:'{}',credentials:'include'})"
+                ".then(r=>r.json()).catch(()=>null)",
+            )
+            total = None
+            if isinstance(auth, dict) and auth.get("errCode") == 0:
+                total = parse_cn_num(((auth.get("data") or {}).get("finderUser") or {}).get("fansCount"))
+            hist = []
+            for _ in range(3):
                 text = str(await client.evaluate(sid, SHADOW_TEXT_JS) or "")
-                if re.search(r"关注者总数 \| \d", text):
+                if re.search(r"\d{4}/\d{1,2}/\d{1,2} \|", text):
+                    if total is None:
+                        m = re.search(r"关注者总数 \| ([\d,.万]+)", text)
+                        total = parse_cn_num(m.group(1)) if m else None
+                    for row in re.finditer(r"(\d{4})/(\d{1,2})/(\d{1,2}) \| (-?[\d,]+) \| ([\d,]+) \| ([\d,]+) \| ([\d,]+)", text):
+                        day_s = f"{row.group(1)}-{int(row.group(2)):02d}-{int(row.group(3)):02d}"
+                        hist.append({"day": day_s, "total": parse_cn_num(row.group(7)), "gain": parse_cn_num(row.group(5)), "loss": parse_cn_num(row.group(6))})
                     break
                 await asyncio.sleep(1.5)
-            m = re.search(r"关注者总数 \| ([\d,.万]+)", text)
-            total = parse_cn_num(m.group(1)) if m else None
-            if total is None:
-                return None
-            hist = []
-            for row in re.finditer(r"(\d{4})/(\d{1,2})/(\d{1,2}) \| (-?[\d,]+) \| ([\d,]+) \| ([\d,]+) \| ([\d,]+)", text):
-                day_s = f"{row.group(1)}-{int(row.group(2)):02d}-{int(row.group(3)):02d}"
-                hist.append({"day": day_s, "total": parse_cn_num(row.group(7)), "gain": parse_cn_num(row.group(5)), "loss": parse_cn_num(row.group(6))})
-            return {"total": total, "history": hist}
+            return {"total": total, "history": hist} if total is not None else None
 
         if pid == "youtube":
             text = ""
-            for _ in range(5):
+            for _ in range(7):
                 text = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
                 if re.search(r"当前订阅人数|Current subscribers", text):
                     break
@@ -283,22 +346,30 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
             return {"total": total, "history": []} if total is not None else None
 
         if pid == "x":
-            prof = await client.evaluate(
-                sid, "(document.querySelector('a[data-testid=AppTabBar_Profile_Link]')||{}).href||''"
-            )
+            prof = None
+            for _ in range(6):
+                prof = await client.evaluate(
+                    sid, "(document.querySelector('a[data-testid=AppTabBar_Profile_Link]')||{}).href||''"
+                )
+                if prof:
+                    break
+                await asyncio.sleep(1.5)
             if not prof:
                 return None
             await client.evaluate(sid, f"(location.href={json.dumps(prof)}, 1)")
-            await asyncio.sleep(5.0)
-            txt = str(
-                await client.evaluate(
-                    sid,
-                    "(document.querySelector('a[href$=\"/verified_followers\"],a[href$=\"/followers\"]')||{}).innerText||''",
+            for _ in range(6):
+                await asyncio.sleep(1.5)
+                txt = str(
+                    await client.evaluate(
+                        sid,
+                        "(document.querySelector('a[href$=\"/verified_followers\"],a[href$=\"/followers\"]')||{}).innerText||''",
+                    )
+                    or ""
                 )
-                or ""
-            )
-            total = parse_cn_num(txt.replace("\n", " "))
-            return {"total": total, "history": []} if total is not None else None
+                total = parse_cn_num(txt.replace("\n", " "))
+                if total is not None:
+                    return {"total": total, "history": []}
+            return None
 
         if pid == "wechat":
             if "token=" not in href:
@@ -311,7 +382,7 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
         return None
 
     try:
-        return await client.with_tab(url, grab, wait_s=5.0, active=False, keep_open=False)
+        return await client.with_tab(url, grab, wait_s=0.0, active=False, keep_open=False)
     except Exception:
         return None
 

@@ -13,9 +13,10 @@
     const curEp = PS.S.episodes[0];
 
     const stChip = st => {
-      if (st.disabled) return '<span class="pill">– 已停用</span>';
+      if (st.disabled) return '<span class="pill">已停用</span>';
       if (st.state === 'ok') return '<span class="pill good">✓ 已登录</span>';
-      return '<span class="pill wait">! 待保活</span>';
+      if (st.checkedAt === '未检查') return '<span class="pill">未检查</span>';
+      return '<span class="pill wait">未登录</span>';
     };
 
     const main = PS.shell('settings', [['系统', '#settings']], `
@@ -49,7 +50,7 @@
         <div class="stile">
           <div class="lab">平台登录</div>
           <div class="val ${warnPlats.length ? 'warn' : 'ok'}">${warnPlats.length ? `${okCount}/${active.length} 正常` : `全部正常`}</div>
-          <div class="dl">上次体检 ${PS.esc(d.lastMetricsAt)}${warnPlats.length ? ` · ${warnPlats.map(p => PS.PLATFORMS[p].name).join('、')}待保活` : ''}</div>
+          <div class="dl">上次体检 ${PS.esc(d.lastMetricsAt)}${warnPlats.length ? ` · ${warnPlats.map(p => PS.PLATFORMS[p].name).join('、')}未登录` : ''}</div>
         </div>
       </section>
 

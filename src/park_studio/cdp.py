@@ -178,6 +178,8 @@ class CDPClient:
         self._seq = 0
         self._pending: dict[int, asyncio.Future[Any]] = {}
         self._reader_task: asyncio.Task[Any] | None = None
+        self._session_targets: dict[str, str] = {}
+        self._session_aliases: dict[str, str] = {}
 
     async def __aenter__(self) -> "CDPClient":
         self._ws = await websockets.connect(self.ws_url, max_size=16 * 1024 * 1024, proxy=None)
@@ -258,19 +260,39 @@ class CDPClient:
     async def attach(self, target_id: str) -> str:
         res = await self.send("Target.attachToTarget", {"targetId": target_id, "flatten": True})
         sid = str(res["sessionId"])
+        self._session_targets[sid] = target_id
         await self.send("Page.enable", {}, session_id=sid)
         return sid
 
     async def evaluate(self, session_id: str, expression: str, *, await_promise: bool = True) -> Any:
-        res = await self.send(
-            "Runtime.evaluate",
-            {
-                "expression": expression,
-                "returnByValue": True,
-                "awaitPromise": await_promise,
-            },
-            session_id=session_id,
-        )
+        active_sid = self._session_aliases.get(session_id, session_id)
+        try:
+            res = await self.send(
+                "Runtime.evaluate",
+                {
+                    "expression": expression,
+                    "returnByValue": True,
+                    "awaitPromise": await_promise,
+                },
+                session_id=active_sid,
+            )
+        except RuntimeError as exc:
+            # 跨源导航切换渲染进程可能导致旧 sessionId 失效，自动重新 attach 到同一 targetId
+            tid = self._session_targets.get(active_sid) or self._session_targets.get(session_id)
+            if tid and ("Session" in str(exc) or "Target" in str(exc) or "Execution context" in str(exc)):
+                new_sid = await self.attach(tid)
+                self._session_aliases[session_id] = new_sid
+                res = await self.send(
+                    "Runtime.evaluate",
+                    {
+                        "expression": expression,
+                        "returnByValue": True,
+                        "awaitPromise": await_promise,
+                    },
+                    session_id=new_sid,
+                )
+            else:
+                raise
         if "exceptionDetails" in res:
             desc = (res["exceptionDetails"].get("exception") or {}).get("description") or res["exceptionDetails"].get("text")
             raise RuntimeError(str(desc or "JS evaluation error"))
@@ -287,6 +309,7 @@ class CDPClient:
     ) -> Any:
         target_id = await self.create_tab(url, active=active)
         try:
+            await asyncio.sleep(0.5)
             session_id = await self.attach(target_id)
             if wait_s > 0:
                 await asyncio.sleep(wait_s)
