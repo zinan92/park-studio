@@ -159,7 +159,25 @@ def _copy_for_platform(ep: dict[str, Any], pid: str) -> tuple[str, str, list[str
     return title, desc, tags
 
 
-async def _set_input_value(client: cdp.CDPClient, sid: str, selector: str, value: str) -> bool:
+async def _wait_for_selector(client: cdp.CDPClient, sid: str, selector: str, *, timeout_s: float = 12.0) -> bool:
+    """轮询等待 SPA 页面的目标输入元素真正挂载到 DOM。"""
+    import time
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            ok = await client.evaluate(sid, f"!!document.querySelector({json.dumps(selector)})")
+            if ok:
+                return True
+        except Exception:
+            pass
+        await asyncio.sleep(0.6)
+    return False
+
+
+async def _set_input_value(client: cdp.CDPClient, sid: str, selector: str, value: str, *, wait_s: float = 10.0) -> bool:
+    if not await _wait_for_selector(client, sid, selector, timeout_s=wait_s):
+        return False
     js = f"""(() => {{
       const el = document.querySelector({json.dumps(selector)});
       if (!el) return false;
@@ -175,18 +193,28 @@ async def _set_input_value(client: cdp.CDPClient, sid: str, selector: str, value
     return bool(await client.evaluate(sid, js))
 
 
-async def _focus_and_insert(client: cdp.CDPClient, sid: str, selector: str, text: str) -> bool:
-    focused = await client.evaluate(
+async def _focus_and_insert(client: cdp.CDPClient, sid: str, selector: str, text: str, *, wait_s: float = 12.0) -> bool:
+    """等待元素挂载 → 用原生 CDP 鼠标点击真实聚焦（兼容 X DraftJS / React 编辑器）→ Input.insertText 写入。"""
+    if not await _wait_for_selector(client, sid, selector, timeout_s=wait_s):
+        return False
+    rect = await client.evaluate(
         sid,
         f"""(() => {{
           const el = document.querySelector({json.dumps(selector)});
-          if (!el) return false;
+          if (!el) return null;
+          el.scrollIntoView({{ block: 'center' }});
           el.focus();
-          return true;
+          const r = el.getBoundingClientRect();
+          return {{ x: r.left + Math.min(24, r.width / 2), y: r.top + Math.min(18, r.height / 2) }};
         }})()""",
     )
-    if not focused:
+    if not isinstance(rect, dict):
         return False
+    active_sid = client._session_aliases.get(sid, sid)
+    x, y = float(rect["x"]), float(rect["y"])
+    await client.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1}, session_id=active_sid)
+    await client.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1}, session_id=active_sid)
+    await asyncio.sleep(0.25)
     await client.insert_text(sid, text)
     return True
 
@@ -251,43 +279,56 @@ async def fill_platform(
             conn.commit()
             return {"ok": False, "reason": "平台未登录，已在专用 Chrome 打开登录页，扫码后重试"}
 
-        # 1. 如绑定了本地视频文件，尝试通过原生 CDP setFileInputFiles 自动注入
+        # 1. 如绑定了本地视频文件，等待上传框挂载并通过原生 CDP setFileInputFiles 自动注入
         if has_video and video_file is not None:
+            uploaded = False
             for sel in ("input[type=file][accept*='video']", "input[data-testid=fileInput]", "input[type=file]"):
+                if not await _wait_for_selector(client, sid, sel, timeout_s=6.0):
+                    continue
                 try:
                     if await client.set_file_input(sid, sel, [str(video_file)]):
-                        filled_notes.append(f"已选片 {video_file.name}")
-                        await asyncio.sleep(2.5)
+                        filled_notes.append(f"已自动选片 {video_file.name}")
+                        uploaded = True
+                        await asyncio.sleep(3.5)
                         break
                 except Exception:
                     continue
-        else:
-            filled_notes.append("未绑定本地视频文件（已打开页面，可直接在页面拖入成片）")
+            if not uploaded:
+                filled_notes.append("未找到视频上传框，请在页面手动拖入成片")
+        elif pid in ("douyin", "xhs", "bilibili", "channels", "youtube"):
+            filled_notes.append("未在「发布 → 打包」绑定本地 .mp4（抖音/小红书/B站需先选片才会出现标题和文案框）")
 
-        # 2. 按平台填写标题 / 文案（绝不点击最终发布按钮！）
+        # 2. 按平台等待输入框挂载并填写标题 / 文案（绝不点击最终发布按钮！）
         try:
             if pid == "x":
-                if await _focus_and_insert(client, sid, "[data-testid=tweetTextarea_0]", full_body[:275]):
-                    filled_notes.append("已填 X 文案")
+                if await _focus_and_insert(client, sid, "[data-testid=tweetTextarea_0]", full_body[:275], wait_s=14.0):
+                    filled_notes.append("已自动填入 X 文案")
+                else:
+                    filled_notes.append("未等到 X 发帖输入框挂载")
             elif pid == "douyin":
-                if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:30]):
-                    filled_notes.append("已填抖音标题")
-                if await _focus_and_insert(client, sid, "[contenteditable=true]", full_body[:400]):
-                    filled_notes.append("已填简介与话题")
+                if has_video:
+                    if await _set_input_value(client, sid, "input[placeholder*='标题'], input[placeholder*='作品标题']", title[:30], wait_s=14.0):
+                        filled_notes.append("已填抖音标题")
+                    if await _focus_and_insert(client, sid, ".zone-container[contenteditable=true], [contenteditable=true]", full_body[:400], wait_s=6.0):
+                        filled_notes.append("已填简介与话题")
             elif pid == "xhs":
-                if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:20]):
-                    filled_notes.append("已填小红书标题")
-                if await _focus_and_insert(client, sid, "#post-textarea, [contenteditable=true]", full_body[:600]):
-                    filled_notes.append("已填正文与标签")
+                if has_video:
+                    if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:20], wait_s=14.0):
+                        filled_notes.append("已填小红书标题")
+                    if await _focus_and_insert(client, sid, "#post-textarea, [contenteditable=true]", full_body[:600], wait_s=6.0):
+                        filled_notes.append("已填正文与标签")
             elif pid == "bilibili":
-                if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:80]):
-                    filled_notes.append("已填 B 站标题")
+                if has_video:
+                    if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:80], wait_s=14.0):
+                        filled_notes.append("已填 B 站标题")
             elif pid == "channels":
-                if await _focus_and_insert(client, sid, "[contenteditable=true]", full_body[:500]):
-                    filled_notes.append("已填视频号描述")
+                if has_video:
+                    if await _focus_and_insert(client, sid, "[contenteditable=true]", full_body[:500], wait_s=12.0):
+                        filled_notes.append("已填视频号描述")
             elif pid == "youtube":
-                if await _focus_and_insert(client, sid, "#textbox", title[:100]):
-                    filled_notes.append("已填 YouTube 标题")
+                if has_video:
+                    if await _focus_and_insert(client, sid, "#textbox", title[:100], wait_s=14.0):
+                        filled_notes.append("已填 YouTube 标题")
             elif pid == "wechat":
                 filled_notes.append("已打开公众号后台（准备图文/草稿发布）")
         except Exception as exc:
