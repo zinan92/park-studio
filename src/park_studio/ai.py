@@ -35,12 +35,19 @@ def _which(name: str) -> str | None:
 def detect_agents() -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for key, binary, hint in (
-        ("gemini", "gemini", "brew install gemini-cli && gemini"),
+        ("agy", "agy", "安装 Antigravity CLI（antigravity.google）并运行 agy 登录"),
+        ("gemini", "gemini", "brew install gemini-cli 或改用 Antigravity CLI / GEMINI_API_KEY"),
         ("claude", "claude", "安装 Claude Code 后在终端运行 claude 登录"),
         ("codex", "codex", "安装 Codex CLI 后在终端运行 codex login"),
     ):
         path = _which(binary)
         out[key] = {"installed": bool(path), "path": path or "", "hint": hint}
+    has_gkey = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    out["gemini-api"] = {
+        "installed": has_gkey,
+        "path": "ENV:GOOGLE_API_KEY" if os.environ.get("GOOGLE_API_KEY") else ("ENV:GEMINI_API_KEY" if has_gkey else ""),
+        "hint": "设置环境变量 GEMINI_API_KEY 或 GOOGLE_API_KEY（无需单独登录 CLI）",
+    }
     return out
 
 
@@ -48,6 +55,15 @@ def _env() -> dict[str, str]:
     env = dict(os.environ)
     env["PATH"] = f"{EXTRA_PATH}:{env.get('PATH', '')}"
     return env
+
+
+def build_agy_argv(prompt: str, *, model: str = "") -> list[str]:
+    binary = _which("agy") or "agy"
+    argv = [binary, "-p", prompt, "--output-format", "text"]
+    m = (model or "").strip()
+    if m and m.lower() != "neon":
+        argv += ["--model", m]
+    return argv
 
 
 def build_gemini_argv(prompt: str, *, model: str = "") -> list[str]:
@@ -108,9 +124,34 @@ def run_prompt(
     if backend == "api":
         return _run_api(full_prompt, cfg=cfg, timeout=timeout)
 
+    if backend == "gemini-api":
+        return _run_gemini_api(full_prompt, model=model, cfg=cfg, timeout=timeout)
+
+    if backend == "agy":
+        if not _which("agy") and runner is subprocess.run:
+            if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+                return _run_gemini_api(full_prompt, model=model, cfg=cfg, timeout=timeout)
+            raise AIError("本机未检测到 agy（Antigravity CLI），可前往 antigravity.google 安装，或直接改用 Gemini API（自动读取 GOOGLE_API_KEY / GEMINI_API_KEY）")
+        argv = build_agy_argv(full_prompt, model=model)
+        try:
+            done = runner(argv, capture_output=True, text=True, timeout=timeout, env=_env(), check=False)
+        except subprocess.TimeoutExpired as exc:
+            raise AIError(f"Antigravity CLI (agy) 超时（>{timeout}s），请稍后重试") from exc
+        if done.returncode != 0:
+            detail = (done.stderr or done.stdout or "未知错误").strip()[-280:]
+            raise AIError(f"Antigravity CLI (agy) 执行失败：{detail}")
+        text = _clean_cli_output(done.stdout)
+        if not text:
+            raise AIError("Antigravity CLI (agy) 返回为空，请检查登录状态")
+        return {"text": text, "backend": "agy", "model": model or "default"}
+
     if backend == "gemini":
         if not _which("gemini") and runner is subprocess.run:
-            raise AIError("本机未检测到 gemini CLI，请先安装并登录（brew install gemini-cli）")
+            if _which("agy"):
+                return run_prompt(prompt, system=system, cfg={**cfg, "aiBackend": "agy"}, timeout=timeout, runner=runner)
+            if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+                return _run_gemini_api(full_prompt, model=model, cfg=cfg, timeout=timeout)
+            raise AIError("本机未检测到 gemini / agy CLI，且未设置 GEMINI_API_KEY / GOOGLE_API_KEY")
         argv = build_gemini_argv(full_prompt, model=model)
         try:
             done = runner(argv, capture_output=True, text=True, timeout=timeout, env=_env(), check=False)
@@ -125,6 +166,12 @@ def run_prompt(
                 if done.returncode == 0:
                     model = "default (fallback)"
         if done.returncode != 0:
+            # 个人版 gemini-cli Code Assist 停服时，自动无缝回退到 Antigravity CLI 或本机 GOOGLE_API_KEY / GEMINI_API_KEY
+            if runner is subprocess.run:
+                if _which("agy"):
+                    return run_prompt(prompt, system=system, cfg={**cfg, "aiBackend": "agy"}, timeout=timeout, runner=runner)
+                if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+                    return _run_gemini_api(full_prompt, model=model, cfg=cfg, timeout=timeout)
             detail = (done.stderr or done.stdout or "未知错误").strip()[-280:]
             raise AIError(f"Gemini CLI 执行失败：{detail}")
         text = _clean_cli_output(done.stdout)
@@ -167,6 +214,40 @@ def run_prompt(
                 pass
 
     raise AIError(f"不支持的 AI 后端：{backend}")
+
+
+def _run_gemini_api(prompt: str, *, model: str = "", cfg: dict[str, Any], timeout: int) -> dict[str, Any]:
+    key = str(cfg.get("geminiApiKey") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or cfg.get("apiKey") or "").strip()
+    if not key:
+        raise AIError("未找到 GEMINI_API_KEY 或 GOOGLE_API_KEY，请在环境变量中设置或改用 Antigravity CLI (agy)")
+    m = (model or "").strip()
+    if not m or m.lower() in ("neon", "default", "default (fallback)") or not m.lower().startswith("gemini"):
+        m = "gemini-2.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+    resp = httpx.post(
+        url,
+        params={"key": key},
+        headers={"Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
+        timeout=timeout,
+    )
+    if resp.status_code == 404 and m != "gemini-2.5-flash":
+        m = "gemini-2.5-flash"
+        resp = httpx.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+            params={"key": key},
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=timeout,
+        )
+    if resp.status_code >= 400:
+        raise AIError(f"Gemini API 返回 {resp.status_code}：{resp.text[:220]}")
+    data = resp.json()
+    parts = (((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [])
+    text = "".join(str(p.get("text") or "") for p in parts).strip()
+    if not text:
+        raise AIError("Gemini API 返回为空")
+    return {"text": text, "backend": "gemini-api", "model": m}
 
 
 def _run_api(prompt: str, *, cfg: dict[str, Any], timeout: int) -> dict[str, Any]:

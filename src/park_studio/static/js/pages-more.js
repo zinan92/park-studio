@@ -97,15 +97,17 @@
             <span class="pill good">${PS.S.agents?.[s.aiBackend]?.installed ? '✓ CLI 已就绪' : '本机运行'}</span>
           </div>
           <div>
-            <label class="sub" style="display:block;margin-bottom:6px">全局 Coding Agent 引擎</label>
-            <div class="seg">
+            <label class="sub" style="display:block;margin-bottom:6px">全局 Coding Agent 引擎（主用 Gemini 推荐 Antigravity CLI 或 Gemini API）</label>
+            <div class="seg" style="flex-wrap:wrap">
+              <button class="${s.aiBackend === 'gemini-api' ? 'on' : ''}" data-aib="gemini-api">Gemini API${PS.S.agents?.['gemini-api']?.installed ? ' ✓' : ''}</button>
+              <button class="${s.aiBackend === 'agy' ? 'on' : ''}" data-aib="agy">Antigravity (agy)${PS.S.agents?.agy?.installed ? ' ✓' : ''}</button>
               <button class="${s.aiBackend === 'gemini' ? 'on' : ''}" data-aib="gemini">Gemini CLI${PS.S.agents?.gemini?.installed ? ' ✓' : ''}</button>
               <button class="${s.aiBackend === 'claude' ? 'on' : ''}" data-aib="claude">Claude Code${PS.S.agents?.claude?.installed ? ' ✓' : ''}</button>
               <button class="${s.aiBackend === 'codex' ? 'on' : ''}" data-aib="codex">Codex${PS.S.agents?.codex?.installed ? ' ✓' : ''}</button>
               <button class="${s.aiBackend === 'api' ? 'on' : ''}" data-aib="api">可选 API</button>
             </div>
           </div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">全局模型名称（默认 neon；留空走该 CLI 默认模型）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || 'neon')}" placeholder="neon / gemini-2.5-pro / 留空走默认"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">全局模型名称（Gemini API 默认 gemini-2.5-flash；留空走该引擎默认）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || '')}" placeholder="gemini-2.5-pro / gemini-2.5-flash / 留空走默认"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 知识库根目录（只读 · <a href="#kb">去选接入文件夹 ›</a>）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿自动建目录 / 打包自动扫描）</label><input type="text" id="projRootIn" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}"></div>
         </div>
@@ -116,9 +118,11 @@
             <span class="pill accent">${(s.cutAgentBackend && s.cutAgentBackend !== 'inherit') ? s.cutAgentBackend : '跟随全局'}</span>
           </div>
           <div>
-            <label class="sub" style="display:block;margin-bottom:6px">可与写作拆分（例如写作选 Codex，剪辑单独用 Claude Code / 自定义剪辑 Agent）</label>
-            <div class="seg">
+            <label class="sub" style="display:block;margin-bottom:6px">可与写作拆分（例如写作和剪辑都用 Gemini，或剪辑单独挂自定义剪辑 Agent）</label>
+            <div class="seg" style="flex-wrap:wrap">
               <button class="${(!s.cutAgentBackend || s.cutAgentBackend === 'inherit') ? 'on' : ''}" data-caib="inherit">跟随全局</button>
+              <button class="${s.cutAgentBackend === 'gemini-api' ? 'on' : ''}" data-caib="gemini-api">Gemini API</button>
+              <button class="${s.cutAgentBackend === 'agy' ? 'on' : ''}" data-caib="agy">Antigravity</button>
               <button class="${s.cutAgentBackend === 'gemini' ? 'on' : ''}" data-caib="gemini">Gemini CLI</button>
               <button class="${s.cutAgentBackend === 'claude' ? 'on' : ''}" data-caib="claude">Claude Code</button>
               <button class="${s.cutAgentBackend === 'codex' ? 'on' : ''}" data-caib="codex">Codex</button>
