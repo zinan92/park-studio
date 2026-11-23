@@ -135,7 +135,7 @@
             <div class="sys-2col">
               <div>
                 <label class="sub" style="display:block;margin-bottom:4px">本地成片路径</label>
-                <input type="text" id="pkVideo" class="mono" value="${PS.esc(ep.videoPath || '')}" placeholder="/Volumes/Phone SSD/视频/exports/.../视频.mp4">
+                <input type="text" id="pkVideo" class="mono" value="${PS.esc(ep.videoPath || '')}" placeholder="~/Movies/ParkStudio/.../final/上传/视频.mp4">
               </div>
               <div>
                 <label class="sub" style="display:block;margin-bottom:4px">计划发布时间（ISO）</label>

@@ -246,7 +246,7 @@
         if (res.followersLive) {
           PS.S.liveFollowerPlats = Object.keys(res.followersLive);
           for (const [pid, dayMap] of Object.entries(res.followersLive)) {
-            if (dayMap && Object.keys(dayMap).length) PS.S.followers[pid] = { ...(PS.S.followers[pid] || {}), ...dayMap };
+            if (dayMap && Object.keys(dayMap).length) PS.S.followers[pid] = { ...dayMap };
           }
         }
         PS.save();

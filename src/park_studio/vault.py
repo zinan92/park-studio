@@ -1,4 +1,4 @@
-"""只读扫描本地 Obsidian 笔记库（兼容 Park 的 /Users/wendy/park-hands 及任意通用 Obsidian 目录）。
+"""只读扫描本地 Obsidian 笔记库（兼容任意标准 Obsidian 笔记目录）。
 
 支持：
 1. AI 日报按期/按条解析（快讯分区 + 视频更新 + 深读按 URL 挂载 + 本地日报管道原文匹配），严格对齐 xuanti 工作台体验。

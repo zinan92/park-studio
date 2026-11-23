@@ -525,7 +525,8 @@
       if (b.followersLive) {
         for (const [pid, dayMap] of Object.entries(b.followersLive)) {
           if (dayMap && Object.keys(dayMap).length) {
-            PS.S.followers[pid] = { ...(PS.S.followers[pid] || {}), ...dayMap };
+            // 有真实实测粉丝数据时完全替换演示基线，避免和虚假基线混在一起算出假暴跌
+            PS.S.followers[pid] = { ...dayMap };
           }
         }
       }
