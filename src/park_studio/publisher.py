@@ -17,7 +17,7 @@ from . import cdp, config, db, platforms, projects
 
 UPLOAD_URLS: dict[str, str] = {
     "douyin": "https://creator.douyin.com/creator-micro/content/upload",
-    "xhs": "https://creator.xiaohongshu.com/publish/publish?source=official&target=video",
+    "xhs": "https://creator.xiaohongshu.com/publish/publish?from=menu&target=video",
     "bilibili": "https://member.bilibili.com/platform/upload/video/frame",
     "channels": "https://channels.weixin.qq.com/platform/post/create",
     "youtube": "https://studio.youtube.com/",
@@ -245,14 +245,37 @@ def _copy_for_platform(ep: dict[str, Any], pid: str) -> tuple[str, str, list[str
     return title, desc, tags
 
 
-async def _wait_for_selector(client: cdp.CDPClient, sid: str, selector: str, *, timeout_s: float = 12.0) -> bool:
-    """轮询等待 SPA 页面的目标输入元素真正挂载到 DOM。"""
+_DEEP_QUERY_FN = """
+function __psQueryAllDeep(root, sel, out) {
+  if (!root) return out;
+  try {
+    for (const el of root.querySelectorAll(sel)) out.push(el);
+  } catch (e) {}
+  for (const el of root.querySelectorAll('*')) {
+    if (el.shadowRoot) __psQueryAllDeep(el.shadowRoot, sel, out);
+  }
+  return out;
+}
+function __psQueryDeep(sel, nth = 0) {
+  const list = __psQueryAllDeep(document, sel, []);
+  return list[nth] || null;
+}
+"""
+
+
+def _is_login_url(href: str) -> bool:
+    low = (href or "").lower()
+    return any(k in low for k in ("passport.", "/login", "login.html", "accounts.google.com"))
+
+
+async def _wait_for_selector(client: cdp.CDPClient, sid: str, selector: str, *, nth: int = 0, timeout_s: float = 12.0) -> bool:
+    """轮询等待 SPA 页面的目标输入元素真正挂载到 DOM（支持递归穿透 Shadow DOM）。"""
     import time
 
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         try:
-            ok = await client.evaluate(sid, f"!!document.querySelector({json.dumps(selector)})")
+            ok = await client.evaluate(sid, f"(() => {{ {_DEEP_QUERY_FN} return !!__psQueryDeep({json.dumps(selector)}, {nth}); }})()")
             if ok:
                 return True
         except Exception:
@@ -261,11 +284,23 @@ async def _wait_for_selector(client: cdp.CDPClient, sid: str, selector: str, *, 
     return False
 
 
-async def _set_input_value(client: cdp.CDPClient, sid: str, selector: str, value: str, *, wait_s: float = 10.0) -> bool:
-    if not await _wait_for_selector(client, sid, selector, timeout_s=wait_s):
+async def _click_selector(client: cdp.CDPClient, sid: str, selector: str, *, nth: int = 0, wait_s: float = 10.0) -> bool:
+    if not await _wait_for_selector(client, sid, selector, nth=nth, timeout_s=wait_s):
+        return False
+    return bool(
+        await client.evaluate(
+            sid,
+            f"(() => {{ {_DEEP_QUERY_FN} const el = __psQueryDeep({json.dumps(selector)}, {nth}); if (!el) return false; el.click(); return true; }})()",
+        )
+    )
+
+
+async def _set_input_value(client: cdp.CDPClient, sid: str, selector: str, value: str, *, nth: int = 0, wait_s: float = 10.0) -> bool:
+    if not await _wait_for_selector(client, sid, selector, nth=nth, timeout_s=wait_s):
         return False
     js = f"""(() => {{
-      const el = document.querySelector({json.dumps(selector)});
+      {_DEEP_QUERY_FN}
+      const el = __psQueryDeep({json.dumps(selector)}, {nth});
       if (!el) return false;
       el.focus();
       const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -279,19 +314,29 @@ async def _set_input_value(client: cdp.CDPClient, sid: str, selector: str, value
     return bool(await client.evaluate(sid, js))
 
 
-async def _focus_and_insert(client: cdp.CDPClient, sid: str, selector: str, text: str, *, wait_s: float = 12.0) -> bool:
-    """等待元素挂载 → 用原生 CDP 鼠标点击真实聚焦（兼容 X DraftJS / React 编辑器）→ Input.insertText 写入。"""
-    if not await _wait_for_selector(client, sid, selector, timeout_s=wait_s):
+async def _focus_and_insert(
+    client: cdp.CDPClient,
+    sid: str,
+    selector: str,
+    text: str,
+    *,
+    nth: int = 0,
+    clear_first: bool = False,
+    wait_s: float = 12.0,
+) -> bool:
+    """等待元素挂载 → 用原生 CDP 鼠标点击真实聚焦（兼容 X DraftJS / YouTube Polymer / 视频号 wujie）→ Input.insertText 写入。"""
+    if not await _wait_for_selector(client, sid, selector, nth=nth, timeout_s=wait_s):
         return False
     rect = await client.evaluate(
         sid,
         f"""(() => {{
-          const el = document.querySelector({json.dumps(selector)});
+          {_DEEP_QUERY_FN}
+          const el = __psQueryDeep({json.dumps(selector)}, {nth});
           if (!el) return null;
           el.scrollIntoView({{ block: 'center' }});
           el.focus();
           const r = el.getBoundingClientRect();
-          return {{ x: r.left + Math.min(24, r.width / 2), y: r.top + Math.min(18, r.height / 2) }};
+          return {{ x: r.left + Math.min(24, Math.max(4, r.width / 2)), y: r.top + Math.min(18, Math.max(4, r.height / 2)) }};
         }})()""",
     )
     if not isinstance(rect, dict):
@@ -301,6 +346,9 @@ async def _focus_and_insert(client: cdp.CDPClient, sid: str, selector: str, text
     await client.send("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1}, session_id=active_sid)
     await client.send("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1}, session_id=active_sid)
     await asyncio.sleep(0.25)
+    if clear_first:
+        await client.clear_focused_text(sid)
+        await asyncio.sleep(0.15)
     await client.insert_text(sid, text)
     return True
 
@@ -312,9 +360,9 @@ async def fill_platform(
     *,
     cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """在专用 Chrome (:9333) 打开对应平台创作页、上传成片（若有）、填好标题/正文/标签并截图留档。
+    """在专用 Chrome (:9333) 打开对应平台创作页、上传成片（若有）、填好标题/正文/标签/封面并截图留档。
 
-    国内 4 家（douyin/xhs/bilibili/channels）严格只填不点发，保留标签页打开供创作者亲自点最后一下发布！
+    所有平台均严格「只填不点发布」，保留标签页打开供创作者亲自核对后点最后一下发布！
     """
     if pid not in UPLOAD_URLS:
         raise ValueError(f"不支持的平台：{pid}")
@@ -327,8 +375,12 @@ async def fill_platform(
     title, desc, tags = _copy_for_platform(ep, pid)
     tag_line = " ".join(f"#{t}" for t in tags)
     full_body = f"{desc}\n{tag_line}".strip() if tag_line and "#" not in desc else desc
+    # 抖音标题和简介是上下两个紧邻框，若简介与标题相同则只填话题避免重复
+    douyin_body = tag_line if (desc == title and tag_line) else full_body
     video_file = Path(ep["videoPath"]).expanduser() if ep.get("videoPath") else None
     has_video = bool(video_file and video_file.is_file())
+    cover_h_file = Path(ep["coverHPath"]).expanduser() if ep.get("coverHPath") else None
+    has_cover_h = bool(cover_h_file and cover_h_file.is_file())
 
     shots_dir = config.projects_dir() / f"EP{ep['episode']}" / "publish_shots"
     shots_dir.mkdir(parents=True, exist_ok=True)
@@ -336,46 +388,88 @@ async def fill_platform(
 
     filled_notes: list[str] = []
 
+    def _fail_login(msg: str) -> dict[str, Any]:
+        ts_now = db.now_iso()
+        conn.execute(
+            """INSERT INTO publish_tasks(episode_id, platform, state, detail, url, screenshot_path, metrics_json, updated_at)
+               VALUES (?,?, 'failed', ?, '', '', '{}', ?)
+               ON CONFLICT(episode_id, platform) DO UPDATE SET state='failed', detail=excluded.detail, updated_at=excluded.updated_at""",
+            (episode_id, pid, msg, ts_now),
+        )
+        conn.commit()
+        return {"ok": False, "platform": pid, "state": "failed", "reason": msg}
+
     async with cdp.CDPClient(st["ws_url"]) as client:
         tid = await client.create_tab(UPLOAD_URLS[pid], active=True)
         await client.send("Target.activateTarget", {"targetId": tid})
         await asyncio.sleep(0.8)
         sid = await client.attach(tid)
 
-        # 等待页面离开 about:blank 并完成基础加载
+        # 等待页面离开 about:blank 并稳定下来（吸收 B站/视频号 的 JS 延迟登录跳转）
         href = ""
-        for _ in range(8):
-            await asyncio.sleep(1.3)
+        for _ in range(10):
+            await asyncio.sleep(1.2)
             try:
                 href = str(await client.evaluate(sid, "location.href") or "")
             except Exception:
                 continue
             if href and href != "about:blank" and not href.startswith("chrome://"):
+                await asyncio.sleep(1.5)
+                try:
+                    href = str(await client.evaluate(sid, "location.href") or href)
+                except Exception:
+                    pass
                 break
 
-        low = href.lower()
-        if any(k in low for k in ("passport.", "/login", "accounts.google.com")):
-            ts = db.now_iso()
-            conn.execute(
-                """INSERT INTO publish_tasks(episode_id, platform, state, detail, url, screenshot_path, metrics_json, updated_at)
-                   VALUES (?,?, 'failed', '该平台尚未登录，请先在专用 Chrome 扫码登录', '', '', '{}', ?)
-                   ON CONFLICT(episode_id, platform) DO UPDATE SET state='failed', detail=excluded.detail, updated_at=excluded.updated_at""",
-                (episode_id, pid, ts),
-            )
-            conn.commit()
-            return {"ok": False, "reason": "平台未登录，已在专用 Chrome 打开登录页，扫码后重试"}
+        if not href or href == "about:blank":
+            return _fail_login(f"{platforms.PLATFORM_SPECS[pid]['name']} 页面加载超时（请检查网络/代理后重试）")
 
-        # 1. 如绑定了本地视频文件，等待上传框挂载并通过原生 CDP setFileInputFiles 自动注入
-        if has_video and video_file is not None:
+        if _is_login_url(href):
+            return _fail_login("该平台登录已过期，已在专用 Chrome 打开登录页，扫码后重试")
+
+        # YouTube Studio 需要先点顶部 ↑ 上传按钮才会弹出文件上传框
+        if pid == "youtube" and has_video:
+            if await _click_selector(client, sid, "#upload-icon, ytcp-icon-button#upload-icon", wait_s=10.0):
+                await asyncio.sleep(2.0)
+
+        # 公众号：若已登录首页（URL 带 token），直接跳到新建图文草稿编辑器
+        if pid == "wechat":
+            import re
+
+            m_tok = re.search(r"[?&]token=(\d+)", href)
+            if m_tok:
+                edit_url = (
+                    f"https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit_v2"
+                    f"&action=edit&isNew=1&type=77&createType=0&token={m_tok.group(1)}&lang=zh_CN"
+                )
+                await client.send("Page.navigate", {"url": edit_url}, session_id=client._session_aliases.get(sid, sid))
+                await asyncio.sleep(4.5)
+            else:
+                return _fail_login("公众号尚未登录（未检测到 token），请扫码后重试")
+
+        # 1. 如绑定了本地视频文件，等待上传框挂载并通过原生 CDP setFileInputFiles 自动注入（支持穿透 Shadow DOM）
+        if has_video and video_file is not None and pid != "wechat":
             uploaded = False
-            for sel in ("input[type=file][accept*='video']", "input[data-testid=fileInput]", "input[type=file]"):
+            sels = ("input[type=file]",) if pid == "youtube" else (
+                "input[type=file][accept*='video']",
+                "input[data-testid=fileInput]",
+                "input[type=file]",
+            )
+            for sel in sels:
                 if not await _wait_for_selector(client, sid, sel, timeout_s=6.0):
+                    # 二次检查是否发生了延迟登录跳转
+                    try:
+                        cur_href = str(await client.evaluate(sid, "location.href") or "")
+                        if _is_login_url(cur_href):
+                            return _fail_login("该平台登录已过期，已在专用 Chrome 打开登录页，扫码后重试")
+                    except Exception:
+                        pass
                     continue
                 try:
                     if await client.set_file_input(sid, sel, [str(video_file)]):
                         filled_notes.append(f"已自动选片 {video_file.name}")
                         uploaded = True
-                        await asyncio.sleep(3.5)
+                        await asyncio.sleep(5.0 if pid == "youtube" else 3.5)
                         break
                 except Exception:
                     continue
@@ -384,7 +478,7 @@ async def fill_platform(
         elif pid in ("douyin", "xhs", "bilibili", "channels", "youtube"):
             filled_notes.append("未在「发布 → 打包」绑定本地 .mp4（抖音/小红书/B站需先选片才会出现标题和文案框）")
 
-        # 2. 按平台等待输入框挂载并填写标题 / 文案（绝不点击最终发布按钮！）
+        # 2. 按平台等待输入框挂载并填写标题 / 文案 / 封面（绝不点击最终发布按钮！）
         try:
             if pid == "x":
                 if await _focus_and_insert(client, sid, "[data-testid=tweetTextarea_0]", full_body[:275], wait_s=14.0):
@@ -395,7 +489,7 @@ async def fill_platform(
                 if has_video:
                     if await _set_input_value(client, sid, "input[placeholder*='标题'], input[placeholder*='作品标题']", title[:30], wait_s=14.0):
                         filled_notes.append("已填抖音标题")
-                    if await _focus_and_insert(client, sid, ".zone-container[contenteditable=true], [contenteditable=true]", full_body[:400], wait_s=6.0):
+                    if douyin_body and await _focus_and_insert(client, sid, ".zone-container[contenteditable=true], [contenteditable=true]", douyin_body[:400], wait_s=6.0):
                         filled_notes.append("已填简介与话题")
             elif pid == "xhs":
                 if has_video:
@@ -413,10 +507,31 @@ async def fill_platform(
                         filled_notes.append("已填视频号描述")
             elif pid == "youtube":
                 if has_video:
-                    if await _focus_and_insert(client, sid, "#textbox", title[:100], wait_s=14.0):
+                    if await _focus_and_insert(client, sid, "#textbox", title[:100], nth=0, clear_first=True, wait_s=14.0):
                         filled_notes.append("已填 YouTube 标题")
+                    if full_body and await _focus_and_insert(client, sid, "#textbox", full_body[:4500], nth=1, wait_s=6.0):
+                        filled_notes.append("已填 YouTube 简介与标签")
+                    if has_cover_h and cover_h_file is not None and await _wait_for_selector(client, sid, "input#file-loader", timeout_s=5.0):
+                        if await client.set_file_input(sid, "input#file-loader", [str(cover_h_file)]):
+                            filled_notes.append(f"已上传 16:9 封面 {cover_h_file.name}")
+                            await asyncio.sleep(1.5)
             elif pid == "wechat":
-                filled_notes.append("已打开公众号后台（准备图文/草稿发布）")
+                # 先关掉公众号编辑器首次弹出的功能引导弹窗（「我知道了」）
+                await client.evaluate(
+                    sid,
+                    """(() => {
+                      for (const btn of document.querySelectorAll('button, .weui-desktop-btn')) {
+                        if ((btn.innerText || '').trim() === '我知道了') { btn.click(); break; }
+                      }
+                    })()""",
+                )
+                await asyncio.sleep(0.5)
+                if await _set_input_value(client, sid, "#title, textarea[placeholder*='标题'], input[placeholder*='标题']", title[:64], wait_s=12.0):
+                    filled_notes.append("已填公众号标题")
+                if await _focus_and_insert(client, sid, ".ProseMirror, [contenteditable=true]", full_body[:4000], wait_s=8.0):
+                    filled_notes.append("已填公众号正文草稿")
+                if not filled_notes:
+                    filled_notes.append("已打开公众号新建图文编辑器")
         except Exception as exc:
             filled_notes.append(f"部分字段待人工补全({str(exc)[:40]})")
 
@@ -425,7 +540,7 @@ async def fill_platform(
             await client.capture_screenshot(sid, shot_path)
             filled_notes.append("已截图留档")
         except Exception:
-            shot_path = Path("")
+            shot_path = None
 
     detail = " · ".join(filled_notes) + " · 请在专用 Chrome 核对后亲自点「发布」"
     ts = db.now_iso()
