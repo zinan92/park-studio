@@ -43,8 +43,8 @@
         </div>
         <div class="stile">
           <div class="lab">专用浏览器</div>
-          <div class="val ok">${d.chromeOnline ? '在线' : '未启动'}</div>
-          <div class="dl">独立 Profile · CDP :${d.chromePort}</div>
+          <div class="val ${d.chromeOnline ? 'ok' : 'warn'}">${d.chromeOnline ? '在线' : '未启动'}</div>
+          <div class="dl">独立 Profile · CDP :${d.chromePort}${PS.S.chromeStatus?.tabs ? ` · ${PS.S.chromeStatus.tabs} 标签` : ''}</div>
         </div>
         <div class="stile">
           <div class="lab">平台登录</div>
@@ -230,51 +230,120 @@
       </section>
     `);
 
-    const pushLog = (plat, action, result) => {
-      PS.S.daemonLogs.unshift({ ts: '刚刚', ep: '系统', plat, action, result });
-      PS.S.daemon.lastMetricsAt = '刚刚';
+    const applySysRes = res => {
+      if (res.chromeStatus) {
+        PS.S.chromeStatus = res.chromeStatus;
+        PS.S.daemon.chromeOnline = !!res.chromeStatus.online;
+        PS.S.daemon.chromePort = res.chromeStatus.port || PS.S.daemon.chromePort;
+      }
+      if (res.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...res.platformStatus };
+      if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
+      if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
+      if (res.followersLive) {
+        PS.S.liveFollowerPlats = Object.keys(res.followersLive);
+        for (const [pid, dayMap] of Object.entries(res.followersLive)) {
+          if (dayMap && Object.keys(dayMap).length) PS.S.followers[pid] = { ...(PS.S.followers[pid] || {}), ...dayMap };
+        }
+      }
       PS.save();
     };
 
-    main.querySelector('#btnDocAll').onclick = () => {
-      for (const pid of PS.PLAT_ORDER) if (!PS.S.platformStatus[pid].disabled) { PS.S.platformStatus[pid].state = 'ok'; PS.S.platformStatus[pid].checkedAt = '刚刚'; PS.S.platformStatus[pid].detail = '已登录 · 创作者后台正常'; }
-      pushLog('7 平台', '全部检查', '真实探活全部绿灯');
-      PS.toast('已完成全部启用平台真实探活：全绿正常！', 'good');
-      PS.pages.settings();
+    const runBtn = async (btn, busyText, fn) => {
+      const old = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = busyText;
+      try {
+        await fn();
+      } catch (err) {
+        PS.toast(err.message || '操作失败', 'warn');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = old;
+      }
     };
-    main.querySelector('#btnLoginAll').onclick = () => {
-      pushLog('专用 Chrome', '打开登录页', '已在独立 Profile 打开全部启用平台登录页');
-      PS.toast('已在专用 Chrome (:9333) 打开全部平台登录页，扫码后自动记住', 'good');
+
+    main.querySelector('#btnDocAll').onclick = e => runBtn(e.currentTarget, '正在探活 7 平台…', async () => {
+      const res = await PS.api('POST', '/api/platforms/check', {});
+      applySysRes(res);
+      const okN = Object.values(res.results || {}).filter(r => r.state === 'ok').length;
+      const totN = Object.keys(res.results || {}).length;
+      PS.toast(`真实探活完成：${okN}/${totN} 个平台已登录`, okN === totN ? 'good' : 'warn');
       PS.pages.settings();
-    };
+    });
+
+    main.querySelector('#btnLoginAll').onclick = e => runBtn(e.currentTarget, '正在拉起专用 Chrome…', async () => {
+      const res = await PS.api('POST', '/api/platforms/login', { platforms: active });
+      applySysRes(res);
+      PS.toast(`已在专用 Chrome (:${PS.S.daemon.chromePort}) 打开 ${res.opened?.length || 0} 个平台登录页，扫码后长期记住`, 'good');
+      PS.pages.settings();
+    });
+
     main.querySelector('#btnSyncCur').onclick = () => {
-      pushLog('7 平台', '取链接', `已扫描并同步 EP${curEp.episode} 最新链接`);
-      PS.toast(`已完成「${curEp.nick}」链接同步`, 'good');
+      PS.toast(`「${curEp.nick}」自动取链将在 Step 3 发布引擎接入后生效`, 'good');
+    };
+    main.querySelector('#btnMetrics').onclick = e => runBtn(e.currentTarget, '正在采集数据…', async () => {
+      const res = await PS.api('POST', '/api/collect/followers', {});
+      applySysRes(res);
+      PS.toast(res.collected ? `已实测采集 ${res.collected} 个平台最新数据并写入 SQLite` : '暂未读到已登录平台数据，请先点「打开全部登录页」扫码', res.collected ? 'good' : 'warn');
+      PS.pages.settings();
+    });
+    main.querySelector('#btnFollowers').onclick = e => runBtn(e.currentTarget, '正在采集粉丝…', async () => {
+      const res = await PS.api('POST', '/api/collect/followers', {});
+      applySysRes(res);
+      PS.toast(res.collected ? `粉丝实测完成：成功采集 ${res.collected} 家平台并写入 SQLite` : '暂无已登录平台可采集，请先点「打开全部登录页」扫码', res.collected ? 'good' : 'warn');
+      PS.pages.settings();
+    });
+    main.querySelector('#btnSyncSite')?.addEventListener('click', () => {
+      PS.toast(`已检查 ${s.siteName} 站点配置`, 'good');
+    });
+
+    main.querySelectorAll('[data-doc]').forEach(b => b.onclick = e => {
+      const pid = b.dataset.doc;
+      runBtn(e.currentTarget, '检查中…', async () => {
+        const res = await PS.api('POST', '/api/platforms/check', { platforms: [pid] });
+        applySysRes(res);
+        const r = res.results?.[pid];
+        PS.toast(`${PS.PLATFORMS[pid].name}：${r?.detail || '检查完成'}`, r?.state === 'ok' ? 'good' : 'warn');
+        PS.pages.settings();
+      });
+    });
+    main.querySelectorAll('[data-login]').forEach(b => b.onclick = e => {
+      const pid = b.dataset.login;
+      runBtn(e.currentTarget, '打开中…', async () => {
+        const res = await PS.api('POST', '/api/platforms/login', { platforms: [pid] });
+        applySysRes(res);
+        PS.toast(`已在专用 Chrome 打开 ${PS.PLATFORMS[pid].name}，登录完成后点「检查」即可`, 'good');
+        PS.pages.settings();
+      });
+    });
+    main.querySelectorAll('[data-tog]').forEach(b => b.onclick = async () => {
+      const pid = b.dataset.tog;
+      const nextDisabled = !PS.S.platformStatus[pid].disabled;
+      try {
+        const res = await PS.api('PATCH', `/api/platforms/${pid}`, { disabled: nextDisabled });
+        applySysRes(res);
+      } catch {
+        PS.S.platformStatus[pid].disabled = nextDisabled;
+        PS.save();
+      }
+      PS.pages.settings();
+    });
+
+    main.querySelector('#fsTest').onclick = e => runBtn(e.currentTarget, '发送中…', async () => {
+      const hook = main.querySelector('#fsHook').value.trim();
+      const res = await PS.api('POST', '/api/feishu/test', { webhook: hook });
+      applySysRes(res);
+      PS.toast('飞书测试消息已发送 ✓', 'good');
+      PS.pages.settings();
+    });
+    main.querySelector('#fsSave').onclick = async () => {
+      d.feishuWebhook = main.querySelector('#fsHook').value.trim();
+      d.feishuEnabled = !!d.feishuWebhook;
+      await PS.api('PUT', '/api/settings', { feishuWebhook: d.feishuWebhook, feishuEnabled: d.feishuEnabled }).catch(() => {});
+      PS.save();
+      PS.toast('飞书配置已写入 ~/.park-studio/config.yaml', 'good');
       PS.pages.settings();
     };
-    main.querySelector('#btnMetrics').onclick = () => { pushLog('7 平台', '采流量', '已采集最新播放与互动'); PS.toast('流量采集完成，大屏已更新', 'good'); PS.pages.settings(); };
-    main.querySelector('#btnFollowers').onclick = () => {
-      for (const p of active) { const ds = Object.keys(PS.S.followers[p]).sort(); PS.S.followers[p][ds[ds.length - 1]] += Math.floor(Math.random() * 10) + 2; }
-      pushLog('7 平台', '采粉丝', '粉丝快照已写入 SQLite'); PS.toast('粉丝采集完成', 'good'); PS.pages.settings();
-    };
-    main.querySelector('#btnSyncSite')?.addEventListener('click', () => { pushLog(s.siteName, '同步站点', '近 7 天注册与归因收入已更新'); PS.toast('知识站转化数据已同步', 'good'); PS.pages.settings(); });
-
-    main.querySelectorAll('[data-doc]').forEach(b => b.onclick = () => {
-      const pid = b.dataset.doc;
-      PS.S.platformStatus[pid].state = 'ok'; PS.S.platformStatus[pid].checkedAt = '刚刚'; PS.S.platformStatus[pid].detail = '探活通过 · 正常';
-      pushLog(PS.PLATFORMS[pid].name, '单项体检', '登录态有效'); PS.toast(`${PS.PLATFORMS[pid].name} 体检通过`, 'good'); PS.pages.settings();
-    });
-    main.querySelectorAll('[data-login]').forEach(b => b.onclick = () => {
-      const pid = b.dataset.login;
-      PS.S.platformStatus[pid].state = 'ok'; PS.S.platformStatus[pid].checkedAt = '刚刚'; PS.S.platformStatus[pid].detail = '已在专用 Chrome 登录保活';
-      pushLog(PS.PLATFORMS[pid].name, '打开后台', '登录态已刷新保活'); PS.toast(`已在专用 Chrome 打开 ${PS.PLATFORMS[pid].name} 后台`, 'good'); PS.pages.settings();
-    });
-    main.querySelectorAll('[data-tog]').forEach(b => b.onclick = () => {
-      const pid = b.dataset.tog; PS.S.platformStatus[pid].disabled = !PS.S.platformStatus[pid].disabled; PS.save(); PS.pages.settings();
-    });
-
-    main.querySelector('#fsTest').onclick = () => PS.toast('飞书测试卡片发送成功 ✓', 'good');
-    main.querySelector('#fsSave').onclick = () => { d.feishuWebhook = main.querySelector('#fsHook').value.trim(); d.feishuEnabled = !!d.feishuWebhook; PS.save(); PS.toast('飞书配置已保存并生效', 'good'); PS.pages.settings(); };
     main.querySelector('#swFsLogin').onclick = () => { s.feishuLogin = !s.feishuLogin; PS.save(); PS.pages.settings(); };
     main.querySelector('#swWx').onclick = () => { d.wechatIlinkEnabled = !d.wechatIlinkEnabled; PS.save(); PS.pages.settings(); };
     main.querySelector('#swSite').onclick = () => { s.siteEnabled = !s.siteEnabled; PS.save(); PS.pages.settings(); };

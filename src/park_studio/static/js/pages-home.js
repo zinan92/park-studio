@@ -230,15 +230,36 @@
     renderHero();
     PS.drawStackedFans(main.querySelector('#fansChart'), PS.S.followers, active, eps);
     main.querySelector('#quickImportBtn').onclick = openQuickImportModal;
-    main.querySelector('#dashCollect').onclick = () => {
-      for (const p of active) {
-        const days = Object.keys(PS.S.followers[p]).sort();
-        PS.S.followers[p][days[days.length - 1]] += Math.floor(Math.random() * 12) + 4;
+    main.querySelector('#dashCollect').onclick = async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = '专用 Chrome 采数中…';
+      try {
+        const res = await PS.api('POST', '/api/collect/followers', {});
+        if (res.chromeStatus) {
+          PS.S.chromeStatus = res.chromeStatus;
+          PS.S.daemon.chromeOnline = !!res.chromeStatus.online;
+        }
+        if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
+        if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
+        if (res.followersLive) {
+          PS.S.liveFollowerPlats = Object.keys(res.followersLive);
+          for (const [pid, dayMap] of Object.entries(res.followersLive)) {
+            if (dayMap && Object.keys(dayMap).length) PS.S.followers[pid] = { ...(PS.S.followers[pid] || {}), ...dayMap };
+          }
+        }
+        PS.save();
+        PS.toast(
+          res.collected ? `专用 Chrome 已实测采集 ${res.collected} 家平台粉丝数` : '暂未读到已登录平台，请先到右上角「系统 → 打开全部登录页」扫码',
+          res.collected ? 'good' : 'warn'
+        );
+        PS.pages.dashboard();
+      } catch (err) {
+        PS.toast(err.message || '采数失败', 'warn');
+        btn.disabled = false;
+        btn.innerHTML = old;
       }
-      PS.S.daemon.lastMetricsAt = '刚刚';
-      PS.save();
-      PS.toast('专用 Chrome 采数完成，大屏已更新', 'good');
-      PS.pages.dashboard();
     };
   };
 })();

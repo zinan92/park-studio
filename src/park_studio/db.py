@@ -19,7 +19,9 @@ def db_path() -> Path:
 
 
 def connect(path: Path | None = None) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(path or db_path()), check_same_thread=False)
+    target = Path(path) if path else db_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(target), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -99,6 +101,26 @@ CREATE TABLE IF NOT EXISTS daemon_logs (
     platform TEXT DEFAULT '',
     action TEXT NOT NULL,
     result TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS platform_status (
+    platform TEXT PRIMARY KEY,
+    state TEXT NOT NULL DEFAULT 'warn',
+    detail TEXT NOT NULL DEFAULT '',
+    disabled INTEGER NOT NULL DEFAULT 0,
+    checked_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS followers_daily (
+    day TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    total INTEGER NOT NULL,
+    gain INTEGER,
+    loss INTEGER,
+    source TEXT NOT NULL DEFAULT 'live',
+    collected_at TEXT NOT NULL,
+    PRIMARY KEY (day, platform)
 );
 
 CREATE TABLE IF NOT EXISTS kv (
@@ -225,6 +247,22 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
             "bio": "把一个人的内容团队做成开源软件：选题、剪辑、7 平台填表发布与运营复盘合一。",
         }
         conn.execute("INSERT INTO kv(k, v) VALUES ('positioning', ?)", (json.dumps(pos, ensure_ascii=False),))
+
+    if conn.execute("SELECT COUNT(*) FROM platform_status").fetchone()[0] == 0:
+        defaults = [
+            ("douyin", "warn", "尚未体检，点击「全部检查」验证专用 Chrome 登录态"),
+            ("xhs", "warn", "尚未体检，点击「全部检查」验证专用 Chrome 登录态"),
+            ("bilibili", "warn", "尚未体检，点击「全部检查」验证专用 Chrome 登录态"),
+            ("channels", "warn", "尚未体检，视频号需定期扫码保活"),
+            ("youtube", "warn", "尚未体检，点击「全部检查」验证 YouTube Studio 登录态"),
+            ("x", "warn", "尚未体检，点击「全部检查」验证 X 登录态"),
+            ("wechat", "warn", "尚未体检，公众号每次发布需扫码确认"),
+        ]
+        for pid, st, det in defaults:
+            conn.execute(
+                "INSERT INTO platform_status(platform, state, detail, disabled, checked_at, updated_at) VALUES (?,?,?,0,'未检查',?)",
+                (pid, st, det, ts),
+            )
 
     if conn.execute("SELECT COUNT(*) FROM daemon_logs").fetchone()[0] == 0:
         conn.execute("INSERT INTO daemon_logs(ts, episode, platform, action, result) VALUES (?,?,?,?,?)",

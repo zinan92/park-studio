@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, config, db, vault
+from . import ai, cdp, config, db, platforms, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -62,6 +62,18 @@ class AIRequest(BaseModel):
     url: str = ""
     slug: str = "content-ops"
     density: str = "中"
+
+
+class PlatformActionReq(BaseModel):
+    platforms: list[str] | None = None
+
+
+class PlatformToggleReq(BaseModel):
+    disabled: bool
+
+
+class FeishuTestReq(BaseModel):
+    webhook: str = ""
 
 
 def _row_topic(r) -> dict[str, Any]:
@@ -147,9 +159,17 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         ]
         pos_row = conn.execute("SELECT v FROM kv WHERE k='positioning'").fetchone()
         positioning = json.loads(pos_row["v"]) if pos_row else {}
+        lm_row = conn.execute("SELECT v FROM kv WHERE k='last_metrics_at'").fetchone()
+        last_metrics_at = lm_row["v"] if lm_row else ""
+        followers_live = platforms.get_followers_map(conn, days=30)
         return {
             "config": cfg,
             "vaultStatus": vault.vault_status(cfg),
+            "chromeStatus": cdp.chrome_status(cfg),
+            "platformStatus": platforms.get_platform_status_map(conn),
+            "followersLive": followers_live,
+            "hasLiveFollowers": bool(followers_live),
+            "lastMetricsAt": last_metrics_at,
             "agents": ai.detect_agents(),
             "newsletterIssue": vault.parse_newsletter_issue(None, cfg=cfg),
             "vault": {
@@ -395,7 +415,105 @@ def create_app(db_file: Path | None = None) -> FastAPI:
     def put_settings(patch: dict[str, Any]) -> dict[str, Any]:
         merged = config.save_config(patch)
         db.log_event(conn, "系统", "配置", "保存本地配置", f"AI={merged.get('aiBackend')}/{merged.get('aiModel')}")
-        return {"config": merged, "vaultStatus": vault.vault_status(merged), "agents": ai.detect_agents()}
+        return {
+            "config": merged,
+            "vaultStatus": vault.vault_status(merged),
+            "chromeStatus": cdp.chrome_status(merged),
+            "agents": ai.detect_agents(),
+        }
+
+    # ---------- Step 2：统一专用 Chrome CDP + 7 平台真实体检、登录与粉丝采集 ----------
+    def _recent_logs() -> list[dict[str, Any]]:
+        return [
+            {"ts": r["ts"], "ep": r["episode"], "plat": r["platform"], "action": r["action"], "result": r["result"]}
+            for r in conn.execute("SELECT * FROM daemon_logs ORDER BY id DESC LIMIT 30").fetchall()
+        ]
+
+    @app.get("/api/system/status")
+    def system_status() -> dict[str, Any]:
+        cfg = config.load_config()
+        lm = conn.execute("SELECT v FROM kv WHERE k='last_metrics_at'").fetchone()
+        return {
+            "chromeStatus": cdp.chrome_status(cfg),
+            "vaultStatus": vault.vault_status(cfg),
+            "platformStatus": platforms.get_platform_status_map(conn),
+            "daemonLogs": _recent_logs(),
+            "lastMetricsAt": lm["v"] if lm else "",
+        }
+
+    @app.post("/api/chrome/launch")
+    def chrome_launch(foreground: bool = True) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            st = cdp.ensure_chrome(cfg, foreground=foreground)
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        db.log_event(conn, "系统", "Chrome", "启动专用浏览器", f"CDP :{st['port']} 在线")
+        return {"ok": True, "chromeStatus": st, "daemonLogs": _recent_logs()}
+
+    @app.post("/api/platforms/login")
+    async def api_platforms_login(req: PlatformActionReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await platforms.open_login_pages(req.platforms if req else None, conn, cfg=cfg)
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {**res, "chromeStatus": cdp.chrome_status(cfg), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/platforms/check")
+    async def api_platforms_check(req: PlatformActionReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await platforms.check_platforms(req.platforms if req else None, conn, cfg=cfg)
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {
+            **res,
+            "platformStatus": platforms.get_platform_status_map(conn),
+            "chromeStatus": cdp.chrome_status(cfg),
+            "daemonLogs": _recent_logs(),
+        }
+
+    @app.patch("/api/platforms/{pid}")
+    def api_platform_toggle(pid: str, req: PlatformToggleReq) -> dict[str, Any]:
+        if pid not in platforms.PLATFORM_SPECS:
+            raise HTTPException(404, "未知平台")
+        ts = db.now_iso()
+        conn.execute(
+            """INSERT INTO platform_status(platform, state, detail, disabled, checked_at, updated_at)
+               VALUES (?,'warn','未体检',?,'未检查',?)
+               ON CONFLICT(platform) DO UPDATE SET disabled=excluded.disabled, updated_at=excluded.updated_at""",
+            (pid, int(req.disabled), ts),
+        )
+        conn.commit()
+        name = platforms.PLATFORM_SPECS[pid]["name"]
+        db.log_event(conn, "系统", name, "平台开关", "已停用" if req.disabled else "已启用")
+        return {"ok": True, "platformStatus": platforms.get_platform_status_map(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/collect/followers")
+    async def api_collect_followers(req: PlatformActionReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = await platforms.collect_followers(req.platforms if req else None, conn, cfg=cfg)
+        except Exception as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {
+            **res,
+            "followersLive": platforms.get_followers_map(conn, days=30),
+            "chromeStatus": cdp.chrome_status(cfg),
+            "daemonLogs": _recent_logs(),
+        }
+
+    @app.post("/api/feishu/test")
+    def api_feishu_test(req: FeishuTestReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        hook = req.webhook.strip() or str(cfg.get("feishuWebhook") or "").strip()
+        try:
+            res = platforms.send_feishu_test(hook)
+        except Exception as exc:
+            raise HTTPException(400, str(exc)) from exc
+        db.log_event(conn, "系统", "飞书", "测试发送", "连通成功")
+        return {**res, "daemonLogs": _recent_logs()}
 
     # ---------- 静态前端托管 ----------
     app.mount("/css", StaticFiles(directory=str(STATIC_DIR / "css")), name="css")

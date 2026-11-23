@@ -555,8 +555,25 @@
       const b = await PS.api('GET', '/api/bootstrap');
       PS.backendOnline = true;
       PS.S.vaultStatus = b.vaultStatus;
+      PS.S.chromeStatus = b.chromeStatus;
       PS.S.agents = b.agents;
       if (b.newsletterIssue) PS._newsletterIssue = b.newsletterIssue;
+      if (b.chromeStatus) {
+        PS.S.daemon.chromeOnline = !!b.chromeStatus.online;
+        PS.S.daemon.chromePort = b.chromeStatus.port || PS.S.daemon.chromePort;
+      }
+      if (b.platformStatus) {
+        PS.S.platformStatus = { ...PS.S.platformStatus, ...b.platformStatus };
+      }
+      if (b.lastMetricsAt) PS.S.daemon.lastMetricsAt = b.lastMetricsAt;
+      PS.S.liveFollowerPlats = Object.keys(b.followersLive || {});
+      if (b.followersLive) {
+        for (const [pid, dayMap] of Object.entries(b.followersLive)) {
+          if (dayMap && Object.keys(dayMap).length) {
+            PS.S.followers[pid] = { ...(PS.S.followers[pid] || {}), ...dayMap };
+          }
+        }
+      }
       if (b.config) {
         PS.S.settings = { ...PS.S.settings, ...b.config, modules: { ...PS.S.settings.modules, ...(b.config.modules || {}) } };
         PS.S.daemon.chromePort = b.config.chromePort || 9333;
