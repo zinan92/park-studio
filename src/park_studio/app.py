@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, cdp, config, daemon, db, platforms, projects, publisher, vault
+from . import ai, cdp, config, daemon, dailies, db, platforms, projects, publisher, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -97,6 +97,11 @@ class MarkPublishReq(BaseModel):
 
 class ImportProjectReq(BaseModel):
     folder: str
+
+
+class MoneyCardStateReq(BaseModel):
+    id: str
+    state: str
 
 
 def _row_topic(r) -> dict[str, Any]:
@@ -198,6 +203,8 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "lastMetricsAt": last_metrics_at,
             "agents": ai.detect_agents(),
             "newsletterIssue": vault.parse_newsletter_issue(None, cfg=cfg),
+            "savedDaily": dailies.get_saved_daily(None, conn=conn, cfg=cfg),
+            "devDaily": dailies.get_dev_daily(cfg=cfg, days=14),
             "vault": {
                 "newsletter": vault.scan_bucket("newsletter", limit=15, cfg=cfg),
                 "saved": vault.scan_bucket("saved", limit=25, cfg=cfg),
@@ -229,6 +236,36 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         if item is None:
             raise HTTPException(404, "找不到这一条日报快讯")
         return item
+
+    # ---------- 搞钱日报（Pete 卡 + 收藏按天一期） & 开发日报（本地 Git 变更） ----------
+    @app.get("/api/source/saved")
+    def get_saved_daily_api(day: str | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        return dailies.get_saved_daily(day, conn=conn, cfg=cfg)
+
+    @app.post("/api/source/moneycard-state")
+    def set_moneycard_state_api(req: MoneyCardStateReq) -> dict[str, Any]:
+        try:
+            dailies.set_card_state(conn, req.id, req.state)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True, "id": req.id, "state": req.state}
+
+    @app.get("/api/source/pete-image")
+    def get_pete_image(path: str):
+        cfg = config.load_config()
+        pics_root = (dailies.pete_dir(cfg) / "图").resolve()
+        if not pics_root.is_dir():
+            raise HTTPException(404, "找不到配图目录")
+        target = (pics_root / path).resolve()
+        if pics_root not in target.parents or not target.is_file():
+            raise HTTPException(404, "找不到配图")
+        return FileResponse(target)
+
+    @app.get("/api/source/dev")
+    def get_dev_daily_api(days: int = 14) -> dict[str, Any]:
+        cfg = config.load_config()
+        return dailies.get_dev_daily(cfg=cfg, days=days)
 
     # ---------- Obsidian 只读 ----------
     @app.get("/api/vault/{bucket}")

@@ -213,6 +213,34 @@
   background: var(--sunk); color: var(--ink-3); border: 1px solid var(--line-soft);
 }
 
+/* 搞钱日报（Pete 赚钱卡）与开发日报（完全对齐 topic-studio 管理员版） */
+.money-detail { display: flex; flex-direction: column; gap: 16px; }
+.money-media { display: flex; flex-direction: column; gap: 8px; }
+.money-media figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.money-hero img { display: block; width: 100%; max-height: 440px; object-fit: contain; border-radius: 10px; background: var(--sunk); border: 1px solid var(--line-soft); }
+.money-thumbs { display: flex; gap: 8px; overflow-x: auto; }
+.money-thumb { flex: 0 0 auto; width: 120px; }
+.money-thumb img { display: block; width: 100%; height: 80px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line-soft); }
+.money-thumb figcaption { font-size: 11.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.money-what { font-size: 15.5px; line-height: 1.75; color: var(--ink-2); }
+.money-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(136px, 1fr)); gap: 9px; }
+.money-stat { background: var(--accent-soft); border-radius: 10px; padding: 12px 13px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.money-stat b { font-size: 20px; line-height: 1.2; color: var(--accent); font-family: var(--mono); }
+.money-ref { font-size: 11.5px; color: var(--ink-2); text-decoration: underline; }
+.money-proof { background: var(--accent-soft); border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.money-num { color: var(--accent); font-weight: 700; }
+.money-lbl { font-size: 12px; font-weight: 600; color: var(--ink-3); letter-spacing: .04em; }
+.money-sec { display: flex; flex-direction: column; gap: 4px; }
+
+.pd-day { display: flex; flex-direction: column; gap: 4px; }
+.pd-day-h { font-size: 13px; color: var(--ink-3); font-weight: 700; }
+.pd-older { display: flex; flex-direction: column; gap: 12px; }
+.pd-older > summary { cursor: pointer; font-size: 13px; color: var(--ink-3); }
+.pd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.pd-list li { display: flex; align-items: flex-start; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line-soft); font-size: 14px; }
+.pd-list li:first-child { border-top: 0; }
+.pd-list li > .min0 { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
 .feed-card {
   display: grid; grid-template-columns: 74px minmax(0, 1fr) auto;
   gap: 16px; align-items: start; padding: 16px 18px;

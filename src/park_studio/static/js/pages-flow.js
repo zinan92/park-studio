@@ -3,9 +3,10 @@
   'use strict';
   const PS = window.PS;
 
-  // ==================== 选题 · 找：日报 · 对标（#source，对齐 xuanti 工作台两栏阅读体验） ====================
-  let srcTab = 'newsletter', srcIdx = 0, srcDay = '', srcItemId = '';
+  // ==================== 选题 · 找：日报 · 对标（#source，完整对齐管理员版 topic-studio） ====================
+  let srcTab = 'newsletter', srcIdx = 0, srcDay = '', savedDay = '', srcItemId = '', savedSelKey = '';
   const issueCache = new Map();
+  const savedCache = new Map();
   const itemDetailCache = new Map();
 
   const origLink = url => /^https?:\/\//.test(url || '')
@@ -15,6 +16,8 @@
     const m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${Number(m[2])} 月 ${Number(m[3])} 日` : String(iso || '');
   };
+  const NUM_RE = /(<a\b[^>]*>[\s\S]*?<\/a>|https?:\/\/[^\s<]+)|([$¥￥]\d[\d,.]*\+?|\d[\d,.]*\s*(?:万|亿)\+?|\d{1,3}(?:,\d{3})+\+?)/g;
+  const bigNums = html => html.replace(NUM_RE, (m, keep, n) => keep ? m : `<b class="money-num">${n}</b>`);
 
   function renderNewsletterReader(it, loading = false) {
     if (!it) return '<p class="sub" style="padding:36px 0;text-align:center">点左边任意一条，在这里读全文。</p>';
@@ -47,9 +50,40 @@
     `;
   }
 
+  function renderMoneyCardReader(c) {
+    const [hero, ...more] = c.images || [];
+    const res = c.results || [];
+    const secs = c.sections || [];
+    const fig = (im, cls) => `<figure class="${cls}"><a href="${PS.esc(im.src)}" target="_blank" rel="noopener"><img src="${PS.esc(im.src)}" alt="${PS.esc(im.caption || '')}"></a>${im.caption ? `<figcaption>${PS.esc(im.caption)}</figcaption>` : ''}</figure>`;
+    const revHtml = c.state === 'ok'
+      ? `<span class="pill good">已通过</span><button class="btn s" type="button" data-mcstate="wait">撤下</button>`
+      : c.state === 'out'
+        ? `<span class="pill">不要了</span><button class="btn s" type="button" data-mcstate="wait">改回等审</button>`
+        : `<button class="btn s" type="button" data-mcstate="out">不要</button><button class="btn primary s" type="button" data-mcstate="ok">通过</button>`;
+    return `
+      <div class="src-read-h">
+        <h2>${PS.esc(c.title)}${origLink(c.url)}</h2>
+        <div class="row wrap">
+          <span class="pill ${c.verdict === '值得试' ? 'accent' : c.verdict === '流量卡' ? 'info' : ''}">${PS.esc(c.verdict || '机会卡')}</span>
+          <span class="sub grow">${PS.esc(cnMonthDay(c.day))} · Pete 出卡</span>
+          ${revHtml}
+          <button class="btn primary s" type="button" id="addTopicBtn">+ 加入选题</button>
+        </div>
+      </div>
+      <div class="money-detail">
+        ${c.headline ? `<p class="m0 money-what">${PS.esc(c.headline)}</p>` : ''}
+        ${res.length ? `<div class="money-stats">${res.map(r => `<div class="money-stat"><b>${PS.esc(r.value)}</b>${r.label ? `<span class="sub">${PS.esc(r.label)}</span>` : ''}${r.url ? `<a class="money-ref" href="${PS.esc(r.url)}" target="_blank" rel="noopener noreferrer">成就 reference ↗</a>` : ''}</div>`).join('')}</div>` : ''}
+        ${c.proof ? `<div class="money-proof"><span class="money-lbl">${PS.esc(c.proof.label)}</span><div class="src-md">${bigNums(PS.md(c.proof.text))}</div></div>` : ''}
+        ${secs.map(x => `<div class="money-sec">${x.label ? `<b>${PS.esc(x.label)}</b>` : ''}<div class="src-md">${bigNums(PS.md(x.text))}</div></div>`).join('')}
+        ${hero ? `<div class="money-media">${fig(hero, 'money-hero')}${more.length ? `<div class="money-thumbs">${more.map(im => fig(im, 'money-thumb')).join('')}</div>` : ''}</div>` : ''}
+        ${c.url ? `<div class="row"><a class="btn s" href="${PS.esc(c.url)}" target="_blank" rel="noopener noreferrer">看原帖 ↗</a></div>` : ''}
+      </div>
+    `;
+  }
+
   function renderNoteReader(cur) {
     if (!cur) return '<p class="sub" style="padding:36px 0;text-align:center">暂无内容</p>';
-    const meta = [cur.author, cur.site, cur.date].filter(Boolean).join(' · ');
+    const meta = [cur.author, cur.site, cur.day ? cnMonthDay(cur.day) : cur.date].filter(Boolean).join(' · ');
     return `
       <div class="src-read-h">
         <h2>${PS.esc(cur.title)}${origLink(cur.url)}</h2>
@@ -63,12 +97,35 @@
     `;
   }
 
+  function renderDevDailyHTML(d) {
+    const sections = d?.sections || [];
+    const row = x => `<li>
+      <span class="pill ${x.kind === 'fix' ? 'info' : 'good'}">${x.kind === 'fix' ? '修好了' : '新功能'}</span>
+      <span class="min0"><b>${PS.esc(x.title)}</b>${x.why ? `<span class="sub">${PS.esc(x.why)}</span>` : ''}</span>
+      ${x.at ? `<span class="sub mono" style="font-size:12px">${PS.esc(x.at)}</span>` : ''}
+    </li>`;
+    const renderDays = list => list.map(g => `<div class="pd-day"><b class="pd-day-h">${PS.esc(cnMonthDay(g.day))}</b><ul class="pd-list">${g.items.map(row).join('')}</ul></div>`).join('');
+    const renderOlder = list => list.length
+      ? `<details class="pd-older"><summary>更早的 · ${list.reduce((a, g) => a + g.items.length, 0)} 条</summary>${renderDays(list)}</details>`
+      : '';
+    return `<div class="stack">
+      <p class="sub m0">这几天做了什么：本机 Git 仓库近 ${d?.days_range || 14} 天的新功能与修复（默认展开最新一天，更早的收起来）。</p>
+      ${sections.map(sec => `<section class="card stack">
+        <div class="card-h" style="margin-bottom:2px"><h3>${PS.esc(sec.name)}</h3><span class="sub mono" style="font-size:11.5px">${PS.esc(sec.path || '')}</span></div>
+        ${sec.days?.length ? renderDays(sec.days.slice(0, 1)) + renderOlder(sec.days.slice(1)) : '<p class="sub m0">这几天没有新提交。</p>'}
+      </section>`).join('') || '<section class="card"><p class="sub m0">暂未配置本地 Git 仓库。</p></section>'}
+    </div>`;
+  }
+
   PS.pages.source = async function (sub, arg) {
     if (['newsletter', 'saved', 'dev', 'bench', 'obsidian', 'materials', 'kline'].includes(sub)) {
-      if (srcTab !== sub) { srcTab = sub; srcIdx = 0; srcItemId = ''; }
+      if (srcTab !== sub) { srcTab = sub; srcIdx = 0; srcItemId = ''; savedSelKey = ''; }
     }
     if (srcTab === 'newsletter' && arg) {
       if (srcDay !== arg) { srcDay = arg; srcItemId = ''; }
+    }
+    if (srcTab === 'saved' && arg) {
+      if (savedDay !== arg) { savedDay = arg; savedSelKey = ''; }
     }
     if (srcTab === 'bench') return PS.pages.feed();
 
@@ -91,7 +148,32 @@
       }
     }
 
+    let savedD = PS._savedDaily || null;
+    if (srcTab === 'saved') {
+      const wantDay = savedDay || (savedD ? savedD.day : '');
+      if (wantDay && savedCache.has(wantDay)) {
+        savedD = savedCache.get(wantDay);
+      } else if (!savedD || (savedDay && savedD.day !== savedDay)) {
+        try {
+          const r = await PS.api('GET', `/api/source/saved${savedDay ? `?day=${encodeURIComponent(savedDay)}` : ''}`);
+          if (r) {
+            savedD = r;
+            if (r.day) savedCache.set(r.day, r);
+            if (!savedDay) PS._savedDaily = r;
+          }
+        } catch (e) {}
+      } else if (savedD && savedD.day) {
+        savedCache.set(savedD.day, savedD);
+      }
+    }
+
+    let devD = PS._devDaily || null;
+    if (srcTab === 'dev' && !devD) {
+      try { devD = await PS.api('GET', '/api/source/dev'); PS._devDaily = devD; } catch (e) {}
+    }
+
     const newsCount = (PS._newsletterIssue?.total) || (iss?.total) || PS.S.sources.newsletter.length;
+    const savedCount = (PS._savedDaily?.total) ?? (savedD?.total) ?? PS.S.sources.saved.length;
     let body = '';
     let flatItems = [];
 
@@ -134,10 +216,71 @@
         <div class="card flush src-list" id="srcList">${listHtml}</div>
         <div class="card src-read" id="srcRead">${renderNewsletterReader(cached || activeBasic, !cached && !!activeBasic)}</div>
       </div>`;
-    } else if (['newsletter', 'saved', 'dev', 'obsidian'].includes(srcTab)) {
+    } else if (srcTab === 'saved' && savedD && (savedD.cards?.length || savedD.items?.length)) {
+      const cards = savedD.cards || [];
+      const items = savedD.items || [];
+      const allKeys = [...cards.map(c => `c:${c.id}`), ...items.map((it, i) => `i:${i}`)];
+      if (!savedSelKey || !allKeys.includes(savedSelKey)) savedSelKey = allKeys[0] || '';
+
+      const cardRows = cards.map(c => {
+        const key = `c:${c.id}`;
+        const top = (c.results || [])[0];
+        return `<div class="src-row ${savedSelKey === key ? 'on' : ''}" data-skey="${PS.esc(key)}">
+          <div class="src-meta">
+            <span class="pill ${c.verdict === '值得试' ? 'accent' : c.verdict === '流量卡' ? 'info' : ''}" style="padding:1px 7px;font-size:11px">${PS.esc(c.verdict || '机会卡')}</span>
+            <span class="sub">Pete 商业机会卡</span>
+          </div>
+          <div><button class="src-t" type="button" data-skey="${PS.esc(key)}">${PS.esc(c.title)}</button>${origLink(c.url)}</div>
+          ${top ? `<p class="src-x"><b class="money-num">${PS.esc(top.value)}</b> ${PS.esc(top.label)}</p>` : (c.headline ? `<p class="src-x">${PS.esc(c.headline)}</p>` : '')}
+        </div>`;
+      }).join('');
+
+      const itemRows = items.map((it, i) => {
+        const key = `i:${i}`;
+        return `<div class="src-row ${savedSelKey === key ? 'on' : ''}" data-skey="${key}">
+          <div class="src-meta">
+            <span class="pill" style="padding:1px 7px;font-size:11px">${PS.esc(it.tag || '收藏')}</span>
+            <span class="sub">${PS.esc([it.author, it.site].filter(Boolean).join(' · '))}</span>
+          </div>
+          <div><button class="src-t" type="button" data-skey="${key}">${PS.esc(it.title)}</button>${origLink(it.url)}</div>
+          ${it.excerpt ? `<p class="src-x">${PS.esc(it.excerpt)}</p>` : ''}
+        </div>`;
+      }).join('');
+
+      const renderSavedCurrent = () => {
+        if (savedSelKey.startsWith('c:')) {
+          const cid = savedSelKey.slice(2);
+          const card = cards.find(c => c.id === cid);
+          return card ? renderMoneyCardReader(card) : '<p class="sub">暂无内容</p>';
+        }
+        const idx = Number(savedSelKey.slice(2) || 0);
+        return renderNoteReader(items[idx] || items[0]);
+      };
+
+      body = `
+        <p class="sub m0" style="margin-top:-8px">Park 亲手收藏、剪下、star 的，和 Pete 从里面挑出来的赚钱机会，一天一期。</p>
+        <div class="src-split" id="srcSplit">
+          <div class="card flush src-list" id="srcList">
+            <div class="src-issue-h">
+              <div class="min0">
+                <div class="sub" style="font-size:12px">${savedD.latest ? '最新一天' : '往期'}</div>
+                <b class="clip1" style="font-size:15px">${PS.esc(cnMonthDay(savedD.day))} · ${savedD.total} 条</b>
+              </div>
+              <select id="srcDay" aria-label="看哪一天">
+                ${(savedD.days || [savedD.day]).map(d => `<option value="${PS.esc(d)}" ${d === savedD.day ? 'selected' : ''}>${PS.esc(d)}</option>`).join('')}
+              </select>
+            </div>
+            ${cards.length ? `<div class="src-group">Pete 商业机会卡 · ${cards.length} 张</div>${cardRows}` : ''}
+            ${items.length ? `<div class="src-day">亲手收藏与剪藏 ${items.length} 条</div>${itemRows}` : ''}
+          </div>
+          <div class="card src-read" id="srcRead">${renderSavedCurrent()}</div>
+        </div>`;
+    } else if (srcTab === 'dev') {
+      body = renderDevDailyHTML(devD);
+    } else if (srcTab === 'obsidian' || srcTab === 'newsletter' || srcTab === 'saved') {
       const list = srcTab === 'obsidian' ? (PS.S.obsidianNotes || []) : (PS.S.sources[srcTab] || []);
       const cur = list[srcIdx] || list[0];
-      const headTitle = srcTab === 'saved' ? '搞钱 · 个人收藏与剪藏' : srcTab === 'obsidian' ? 'Obsidian 原始输出' : srcTab === 'dev' ? '开发日报' : 'AI 日报';
+      const headTitle = srcTab === 'saved' ? '搞钱日报' : srcTab === 'obsidian' ? 'Obsidian 原始输出' : 'AI 日报';
       body = `<div class="src-split" id="srcSplit">
         <div class="card flush src-list" id="srcList">
           <div class="src-issue-h">
@@ -170,18 +313,18 @@
       </div>`).join('')}</div>`;
     }
 
-    const main = PS.shell('source', [['选题工作台', '#source'], ['找 · 日报与对标', '#source']], `
+    const main = PS.shell('source', [['选题工作台', '#source'], ['Park 信源', '#source']], `
       <div class="ph">
         <div>
           <h1>找 · 日报与对标</h1>
-          <p>每天打开先看一眼今天发生了什么、对标哪条火了，点开一条读全文，想做就直接「加入选题」。</p>
+          <p>AI 日报、搞钱日报（Pete 机会卡 + 收藏）、开发日报与 Park 的对标，默认看最新一天，往期右上角切换。</p>
         </div>
         <div class="acts">
           <div class="seg">
             <button class="${srcTab === 'newsletter' ? 'on' : ''}" onclick="location.hash='#source/newsletter'">AI 日报 ${newsCount}</button>
-            <button class="${srcTab === 'saved' ? 'on' : ''}" onclick="location.hash='#source/saved'">搞钱 ${PS.S.sources.saved.length}</button>
+            <button class="${srcTab === 'saved' ? 'on' : ''}" onclick="location.hash='#source/saved'">搞钱日报 ${savedCount}</button>
             <button class="${srcTab === 'dev' ? 'on' : ''}" onclick="location.hash='#source/dev'">开发日报</button>
-            <button onclick="location.hash='#feed'">对标发了什么</button>
+            <button onclick="location.hash='#feed'">Park 的对标</button>
             <button class="${srcTab === 'obsidian' ? 'on' : ''}" onclick="location.hash='#source/obsidian'">Obsidian</button>
           </div>
         </div>
@@ -195,11 +338,12 @@
         if (!it) return;
         const parts = [];
         if (it.summary) parts.push(`## 日报摘要\n\n${it.summary}`);
+        if (it.headline) parts.push(`## 一句话\n\n${it.headline}`);
         if (it.deep) parts.push(`## 深读\n\n${it.deep}`);
         if (it.original) parts.push(`## 原文\n\n${it.original}`);
         else if (it.body) parts.push(it.body);
         const fullBody = parts.join('\n\n').slice(0, 12000);
-        const ref = it.group ? `AI 日报 · ${it.group}` : (it.tag || '信源');
+        const ref = it.group ? `AI 日报 · ${it.group}` : it.verdict ? `搞钱日报 · ${it.verdict}` : (it.tag || '信源');
         try {
           const created = await PS.api('POST', '/api/topics', { title: it.title, source_ref: ref, body: fullBody });
           PS.S.topics.unshift(created);
@@ -260,13 +404,53 @@
         location.hash = `#source/newsletter/${encodeURIComponent(srcDay)}`;
       });
 
-      // 首条自动加载原文与深读
       if (!itemDetailCache.has(`${iss.day}:${srcItemId}`)) {
         openNewsletterItem(srcItemId);
       } else {
         bindAddTopic(() => currentDetail);
       }
-    } else {
+    } else if (srcTab === 'saved' && savedD && (savedD.cards?.length || savedD.items?.length)) {
+      const readBox = main.querySelector('#srcRead');
+      const listBox = main.querySelector('#srcList');
+      const cards = savedD.cards || [];
+      const items = savedD.items || [];
+      const curObj = () => savedSelKey.startsWith('c:')
+        ? cards.find(c => c.id === savedSelKey.slice(2))
+        : items[Number(savedSelKey.slice(2) || 0)];
+
+      const bindReaderActs = () => {
+        bindAddTopic(curObj);
+        readBox.querySelectorAll('[data-mcstate]').forEach(b => b.onclick = async () => {
+          const c = curObj();
+          if (!c) return;
+          const st = b.dataset.mcstate;
+          await PS.api('POST', '/api/source/moneycard-state', { id: c.id, state: st }).catch(() => {});
+          c.state = st;
+          readBox.innerHTML = renderMoneyCardReader(c);
+          bindReaderActs();
+          PS.toast(st === 'ok' ? '已标记「通过」' : st === 'out' ? '已标记「不要」' : '已改回等审', 'good');
+        });
+      };
+
+      listBox.addEventListener('click', e => {
+        if (e.target.closest('[data-ext]')) return;
+        const row = e.target.closest('[data-skey]');
+        if (!row) return;
+        savedSelKey = row.dataset.skey;
+        listBox.querySelectorAll('.src-row.on').forEach(el => el.classList.remove('on'));
+        row.classList.add('on');
+        const obj = curObj();
+        readBox.innerHTML = savedSelKey.startsWith('c:') ? renderMoneyCardReader(obj) : renderNoteReader(obj);
+        readBox.scrollTop = 0;
+        bindReaderActs();
+      });
+      main.querySelector('#srcDay')?.addEventListener('change', e => {
+        savedDay = e.target.value;
+        savedSelKey = '';
+        location.hash = `#source/saved/${encodeURIComponent(savedDay)}`;
+      });
+      bindReaderActs();
+    } else if (srcTab !== 'dev') {
       const list = srcTab === 'obsidian' ? (PS.S.obsidianNotes || []) : (PS.S.sources[srcTab] || []);
       main.querySelector('#srcList')?.addEventListener('click', e => {
         if (e.target.closest('[data-ext]')) return;

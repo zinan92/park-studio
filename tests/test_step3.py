@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from park_studio import app as app_mod, config, daemon, projects, publisher
+from park_studio import app as app_mod, config, daemon, dailies, projects, publisher
 
 
 def test_mp4_faststart_validator(tmp_path: Path) -> None:
@@ -112,4 +112,53 @@ def test_universal_project_folder_scaffold_and_import(tmp_path: Path, monkeypatc
     assert imp["ok"] is True
     assert imp["episode"]["preflight"]["video"]["faststart"] is True
     assert (up / "publish.json").is_file()
+
+
+def test_saved_daily_pete_cards_and_dev_daily(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    vroot = tmp_path / "vault"
+    pete_dir = vroot / "011_pete"
+    saved_dir = vroot / "002_个人收藏"
+    pete_dir.mkdir(parents=True)
+    saved_dir.mkdir(parents=True)
+
+    (pete_dir / "261118.md").write_text(
+        """# Pete 出卡 · 261118
+
+## 一、商业机会卡
+
+### 1.【值得试 · 总分 32】海外独立工具小站
+
+**这条能带来什么：用 AI 做一个轻量垂直 SaaS，30 天验证付费。**
+
+原链接：https://x.com/demo/status/123456789
+
+**结果：** $12,400 月收入 ｜ 3.2 万 浏览
+
+**目标客户：** 独立开发者
+
+**7 天试法：** 先做落地页收预售。
+""",
+        encoding="utf-8",
+    )
+    (saved_dir / "261118_X_测试收藏__abc123.md").write_text(
+        "---\ntitle: 一篇收藏文章\nurl: https://x.com/other/status/999\n---\n正文内容测试。",
+        encoding="utf-8",
+    )
+
+    config.save_config({"obsidianPath": str(vroot), "projectRoot": str(tmp_path / "exports")})
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+
+    sv = client.get("/api/source/saved").json()
+    assert sv["day"] == "2026-11-18"
+    assert len(sv["cards"]) == 1
+    assert sv["cards"][0]["results"][0]["value"] == "$12,400"
+    assert len(sv["items"]) == 1
+
+    st = client.post("/api/source/moneycard-state", json={"id": sv["cards"][0]["id"], "state": "wait"}).json()
+    assert st["ok"] is True
+
+    dv = client.get("/api/source/dev").json()
+    assert len(dv["sections"]) >= 1
+
 

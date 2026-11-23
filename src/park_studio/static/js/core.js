@@ -127,7 +127,7 @@
 
   function wsOf(active) {
     if (['dashboard', 'home'].includes(active)) return 'hub';
-    if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done'].includes(active)) return 'topic';
+    if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done', 'position'].includes(active)) return 'topic';
     if (['cut-todo', 'cut', 'cut-done'].includes(active)) return 'cut';
     if (['pub-todo', 'pub-pack', 'pub-confirm', 'pub-sent'].includes(active)) return 'publish';
     if (['review', 'conversion'].includes(active)) return 'review';
@@ -143,9 +143,10 @@
     if (ws === 'hub') return [];
     if (ws === 'topic') {
       return [
-        { id: 'source',  label: '日报 · 对标', href: '#source',  on: ['source', 'feed', 'chai'].includes(active) },
-        { id: 'pool',    label: '选题池',      href: '#pool',    on: ['pool', 'write', 'audit'].includes(active), count: poolN },
-        { id: 'scripts', label: '定稿',        href: '#scripts', on: ['scripts', 'done'].includes(active), count: doneN },
+        { id: 'source',   label: '日报 · 对标', href: '#source',   on: ['source', 'feed', 'chai'].includes(active) },
+        { id: 'pool',     label: '选题池',      href: '#pool',     on: ['pool', 'write', 'audit'].includes(active), count: poolN },
+        { id: 'scripts',  label: '定稿',        href: '#scripts',  on: ['scripts', 'done'].includes(active), count: doneN },
+        { id: 'position', label: '我的定位',    href: '#position', on: active === 'position' },
       ];
     }
     if (ws === 'cut') {
@@ -495,6 +496,8 @@
       PS.S.chromeStatus = b.chromeStatus;
       PS.S.agents = b.agents;
       if (b.newsletterIssue) PS._newsletterIssue = b.newsletterIssue;
+      if (b.savedDaily) PS._savedDaily = b.savedDaily;
+      if (b.devDaily) PS._devDaily = b.devDaily;
       if (b.chromeStatus) {
         PS.S.daemon.chromeOnline = !!b.chromeStatus.online;
         PS.S.daemon.chromePort = b.chromeStatus.port || PS.S.daemon.chromePort;
