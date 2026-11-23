@@ -71,7 +71,7 @@ def chrome_status(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     binary = find_chrome_binary()
     base = f"http://127.0.0.1:{port}"
     try:
-        with httpx.Client(timeout=1.5) as client:
+        with httpx.Client(timeout=1.5, trust_env=False) as client:
             ver = client.get(f"{base}/json/version").json()
             tabs = client.get(f"{base}/json/list").json()
             page_tabs = [t for t in tabs if isinstance(t, dict) and t.get("type") == "page"]
@@ -180,7 +180,7 @@ class CDPClient:
         self._reader_task: asyncio.Task[Any] | None = None
 
     async def __aenter__(self) -> "CDPClient":
-        self._ws = await websockets.connect(self.ws_url, max_size=16 * 1024 * 1024)
+        self._ws = await websockets.connect(self.ws_url, max_size=16 * 1024 * 1024, proxy=None)
         self._reader_task = asyncio.create_task(self._read_loop())
         await self.send("Target.setDiscoverTargets", {"discover": True})
         return self

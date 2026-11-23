@@ -373,9 +373,14 @@ async def open_login_pages(
     target_ids = [p for p in (platform_ids or list(PLAT_ORDER)) if p in PLATFORM_SPECS]
     opened: list[str] = []
     async with cdp.CDPClient(st["ws_url"]) as client:
+        first_tid: str | None = None
         for i, pid in enumerate(target_ids):
-            await client.create_tab(PLATFORM_SPECS[pid]["login_url"], active=(i == 0))
+            tid = await client.create_tab(PLATFORM_SPECS[pid]["login_url"], active=(i == 0))
+            if i == 0:
+                first_tid = tid
             opened.append(pid)
+        if first_tid:
+            await client.send("Target.activateTarget", {"targetId": first_tid})
     names = "、".join(PLATFORM_SPECS[p]["name"] for p in opened)
     db.log_event(conn, "系统", "Chrome", "打开登录页", f"已在专用 Chrome 打开 {names}")
     return {"ok": True, "opened": opened, "chrome": st}
