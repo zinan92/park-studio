@@ -151,10 +151,11 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "config": cfg,
             "vaultStatus": vault.vault_status(cfg),
             "agents": ai.detect_agents(),
+            "newsletterIssue": vault.parse_newsletter_issue(None, cfg=cfg),
             "vault": {
                 "newsletter": vault.scan_bucket("newsletter", limit=15, cfg=cfg),
-                "saved": vault.scan_bucket("saved", limit=15, cfg=cfg),
-                "writing": vault.scan_bucket("writing", limit=20, cfg=cfg),
+                "saved": vault.scan_bucket("saved", limit=25, cfg=cfg),
+                "writing": vault.scan_bucket("writing", limit=25, cfg=cfg),
                 "kline": vault.scan_bucket("kline", limit=10, cfg=cfg),
             },
             "topics": topics,
@@ -165,6 +166,23 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "daemonLogs": logs,
             "positioning": positioning,
         }
+
+    # ---------- AI 日报按期/按条解析（对齐 xuanti 工作台） ----------
+    @app.get("/api/source/newsletter")
+    def get_newsletter_issue(day: str | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        issue = vault.parse_newsletter_issue(day, cfg=cfg)
+        if issue is None:
+            return {"issue": None}
+        return {"issue": issue}
+
+    @app.get("/api/source/newsletter/item")
+    def get_newsletter_item(id: str, day: str | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        item = vault.read_newsletter_item(day, id, cfg=cfg)
+        if item is None:
+            raise HTTPException(404, "找不到这一条日报快讯")
+        return item
 
     # ---------- Obsidian 只读 ----------
     @app.get("/api/vault/{bucket}")

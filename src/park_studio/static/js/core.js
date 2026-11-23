@@ -5,6 +5,40 @@
   const STORE_KEY = 'park-studio:state:v2';
 
   PS.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  PS.md = function (src) {
+    const inline = s => {
+      // 先转义 HTML，再解析安全 Markdown 内联语法（链接、粗体、行内代码、裸网址）
+      const links = [];
+      let t = String(s || '').replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, label, url) => {
+        const idx = links.length;
+        links.push(`<a href="${PS.esc(url)}" target="_blank" rel="noopener noreferrer">${PS.esc(label)}</a>`);
+        return `\u0000L${idx}\u0000`;
+      });
+      t = PS.esc(t)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/(https?:\/\/[^\s<]+)/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+      return t.replace(/\u0000L(\d+)\u0000/g, (_, i) => links[+i] || '');
+    };
+    const out = [];
+    let list = null;
+    const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+    for (const raw of String(src || '').split('\n')) {
+      const line = raw.trimEnd();
+      let m;
+      if (!line.trim()) { close(); continue; }
+      if ((m = line.match(/^(#{1,4})\s+(.*)/))) { close(); out.push(m[1].length <= 2 ? `<h3>${inline(m[2])}</h3>` : `<h4>${inline(m[2])}</h4>`); continue; }
+      if (/^-{3,}$/.test(line.trim())) { close(); out.push('<hr>'); continue; }
+      if ((m = line.match(/^>\s?(.*)/))) { close(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
+      if ((m = line.match(/^\s*[-*•]\s+(.*)/))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+      if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+      if (list && /^\s{2,}\S/.test(raw) && out.length) { out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, `<br><span class="sub">${inline(line.trim())}</span></li>`); continue; }
+      close();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+    close();
+    return out.join('');
+  };
   PS.fmt = n => (n == null || isNaN(n)) ? '–' : Math.round(n).toLocaleString('en-US');
   PS.kfmt = n => (n == null || isNaN(n)) ? '–' : n >= 10000 ? `${(n / 10000).toFixed(n >= 100000 ? 0 : 1)}万` : PS.fmt(n);
   PS.sgn = n => (n == null ? '–' : (n > 0 ? '+' : '') + PS.fmt(n));
@@ -399,9 +433,9 @@
   PS.pages = {};
   PS.route = function () {
     const raw = (location.hash || '#home').replace(/^#/, '');
-    const [head, sub] = raw.split('/');
+    const [head, sub, arg] = raw.split('/');
     const fn = PS.pages[head] || PS.pages.home;
-    fn(sub);
+    fn(sub, arg);
     window.scrollTo(0, 0);
   };
   PS.api = async function (method, url, body) {
@@ -419,6 +453,7 @@
       PS.backendOnline = true;
       PS.S.vaultStatus = b.vaultStatus;
       PS.S.agents = b.agents;
+      if (b.newsletterIssue) PS._newsletterIssue = b.newsletterIssue;
       if (b.config) {
         PS.S.settings = { ...PS.S.settings, ...b.config, modules: { ...PS.S.settings.modules, ...(b.config.modules || {}) } };
         PS.S.daemon.chromePort = b.config.chromePort || 9333;

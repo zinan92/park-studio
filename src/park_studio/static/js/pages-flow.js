@@ -3,40 +3,158 @@
   'use strict';
   const PS = window.PS;
 
-  // ==================== 选题 · 找：日报 · 对标（#source） ====================
-  let srcTab = 'newsletter', srcIdx = 0;
+  // ==================== 选题 · 找：日报 · 对标（#source，对齐 xuanti 工作台两栏阅读体验） ====================
+  let srcTab = 'newsletter', srcIdx = 0, srcDay = '', srcItemId = '';
+  const issueCache = new Map();
+  const itemDetailCache = new Map();
 
-  PS.pages.source = function (sub) {
-    if (['newsletter', 'saved', 'dev', 'bench', 'obsidian', 'materials', 'kline'].includes(sub)) { srcTab = sub; srcIdx = 0; }
+  const origLink = url => /^https?:\/\//.test(url || '')
+    ? `<a class="src-orig" href="${PS.esc(url)}" target="_blank" rel="noopener noreferrer" data-ext="1">原文 ↗</a>`
+    : '';
+  const cnMonthDay = iso => {
+    const m = String(iso || '').match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${Number(m[2])} 月 ${Number(m[3])} 日` : String(iso || '');
+  };
+
+  function renderNewsletterReader(it, loading = false) {
+    if (!it) return '<p class="sub" style="padding:36px 0;text-align:center">点左边任意一条，在这里读全文。</p>';
+    const meta = [it.author, it.site, cnMonthDay(it.day)].filter(Boolean).join(' · ');
+    const deepHtml = it.deep
+      ? `<div class="src-deep"><div class="src-full-h">深读</div><div class="src-md">${PS.md(it.deep)}</div></div>`
+      : '';
+    let origHtml = '';
+    if (loading) {
+      origHtml = '<div class="src-notice">正在读取本地原文…</div>';
+    } else if (it.original) {
+      origHtml = `<div class="src-full-h">原文</div><div class="src-md">${PS.md(it.original)}</div>`;
+    } else {
+      origHtml = `<div class="src-notice">这一条的原文未落盘在本地日报管道目录，${it.url ? '可点标题旁的「原文 ↗」去原帖看。' : '当前仅有上面的摘要。'}</div>`;
+    }
+    return `
+      <div class="src-read-h">
+        <h2>${PS.esc(it.title)}${origLink(it.url)}</h2>
+        <div class="row wrap">
+          <span class="sub grow">${PS.esc(meta)}</span>
+          <button class="btn primary s" type="button" id="addTopicBtn">+ 加入选题</button>
+        </div>
+      </div>
+      <div class="src-daily">
+        ${it.group ? `<span class="src-cat-pill">${PS.esc(it.group)}</span>` : ''}
+        ${it.summary ? `<p>${PS.esc(it.summary)}</p>` : ''}
+      </div>
+      ${deepHtml}
+      ${origHtml}
+    `;
+  }
+
+  function renderNoteReader(cur) {
+    if (!cur) return '<p class="sub" style="padding:36px 0;text-align:center">暂无内容</p>';
+    const meta = [cur.author, cur.site, cur.date].filter(Boolean).join(' · ');
+    return `
+      <div class="src-read-h">
+        <h2>${PS.esc(cur.title)}${origLink(cur.url)}</h2>
+        <div class="row wrap">
+          <span class="sub grow">${PS.esc(meta)}</span>
+          <button class="btn primary s" type="button" id="addTopicBtn">+ 加入选题</button>
+        </div>
+      </div>
+      ${cur.tag ? `<span class="src-cat-pill">${PS.esc(cur.tag)}</span>` : ''}
+      <div class="src-md">${PS.md(cur.body || cur.excerpt || '')}</div>
+    `;
+  }
+
+  PS.pages.source = async function (sub, arg) {
+    if (['newsletter', 'saved', 'dev', 'bench', 'obsidian', 'materials', 'kline'].includes(sub)) {
+      if (srcTab !== sub) { srcTab = sub; srcIdx = 0; srcItemId = ''; }
+    }
+    if (srcTab === 'newsletter' && arg) {
+      if (srcDay !== arg) { srcDay = arg; srcItemId = ''; }
+    }
+    if (srcTab === 'bench') return PS.pages.feed();
+
+    let iss = PS._newsletterIssue || null;
+    if (srcTab === 'newsletter') {
+      const wantDay = srcDay || (iss ? iss.day : '');
+      if (wantDay && issueCache.has(wantDay)) {
+        iss = issueCache.get(wantDay);
+      } else if (!iss || (srcDay && iss.day !== srcDay)) {
+        try {
+          const r = await PS.api('GET', `/api/source/newsletter${srcDay ? `?day=${encodeURIComponent(srcDay)}` : ''}`);
+          if (r.issue) {
+            iss = r.issue;
+            issueCache.set(iss.day, iss);
+            if (!srcDay) PS._newsletterIssue = iss;
+          }
+        } catch (e) {}
+      } else if (iss) {
+        issueCache.set(iss.day, iss);
+      }
+    }
+
+    const newsCount = (PS._newsletterIssue?.total) || (iss?.total) || PS.S.sources.newsletter.length;
     let body = '';
+    let flatItems = [];
 
-    if (['newsletter', 'saved', 'dev'].includes(srcTab)) {
-      const list = PS.S.sources[srcTab] || [];
-      const cur = list[srcIdx] || list[0];
-      body = `<div class="two-col">
-        <div class="list-col">
-          ${list.map((it, i) => `<button class="list-item ${i === srcIdx ? 'on' : ''}" data-si="${i}">
-            <div class="row" style="gap:6px"><span class="sub" style="font-size:11.5px">${PS.esc(it.date)}</span></div>
-            <b style="font-size:13.5px">${PS.esc(it.title)}</b>
-          </button>`).join('')}
+    if (srcTab === 'newsletter' && iss && iss.parts?.length) {
+      iss.parts.forEach(p => p.groups.forEach(g => g.items.forEach(it => flatItems.push(it))));
+      if (!srcItemId || !flatItems.some(x => x.id === srcItemId)) {
+        srcItemId = flatItems[0]?.id || '';
+      }
+      const listHtml = `
+        <div class="src-issue-h">
+          <div class="min0">
+            <div class="sub" style="font-size:12px">${iss.latest ? '最新一期' : '往期'}</div>
+            <b class="clip1" style="font-size:15px">${PS.esc(iss.title)}</b>
+          </div>
+          <select id="srcDay" aria-label="选择期数">
+            ${(iss.days || [iss.day]).map(d => `<option value="${PS.esc(d)}" ${d === iss.day ? 'selected' : ''}>${PS.esc(d)}</option>`).join('')}
+          </select>
         </div>
-        <div class="card stack">
-          ${cur ? `
-            <div class="row"><span class="pill accent">${PS.esc(cur.tag)}</span><span class="sub">${PS.esc(cur.date)}</span><span class="grow"></span><button class="btn primary s" id="addTopicBtn">+ 加入选题</button></div>
-            <h2 class="m0" style="font-size:19px">${PS.esc(cur.title)}</h2>
-            <div style="font-size:14px;line-height:1.85;color:var(--ink-2);white-space:pre-wrap;max-height:520px;overflow-y:auto">${PS.esc(cur.body || cur.excerpt || '')}</div>
-          ` : '<p class="sub">暂无内容</p>'}
-        </div>
+        ${iss.parts.map(p => `
+          <div class="src-day">${PS.esc(p.name)} ${p.count} 条</div>
+          ${p.groups.map(g => `
+            ${g.name ? `<div class="src-group">${PS.esc(g.name)}</div>` : ''}
+            ${g.items.map(it => `
+              <div class="src-row ${it.id === srcItemId ? 'on' : ''}" data-open="${PS.esc(it.id)}">
+                <div class="src-meta">
+                  <span class="sub">${PS.esc([it.author, it.site].filter(Boolean).join(' · '))}</span>
+                  ${it.hasDeep ? '<span class="pill info" style="padding:1px 6px;font-size:10.5px">深读</span>' : ''}
+                </div>
+                <div><button class="src-t" type="button" data-open="${PS.esc(it.id)}">${PS.esc(it.title)}</button>${origLink(it.url)}</div>
+                ${it.summary ? `<p class="src-x">${PS.esc(it.summary)}</p>` : ''}
+              </div>
+            `).join('')}
+          `).join('')}
+        `).join('')}
+      `;
+      const activeBasic = flatItems.find(x => x.id === srcItemId) || flatItems[0];
+      const cacheKey = activeBasic ? `${iss.day}:${activeBasic.id}` : '';
+      const cached = cacheKey ? itemDetailCache.get(cacheKey) : null;
+      body = `<div class="src-split" id="srcSplit">
+        <div class="card flush src-list" id="srcList">${listHtml}</div>
+        <div class="card src-read" id="srcRead">${renderNewsletterReader(cached || activeBasic, !cached && !!activeBasic)}</div>
       </div>`;
-    } else if (srcTab === 'bench') {
-      return PS.pages.feed();
-    } else if (srcTab === 'obsidian') {
-      body = `<div class="card stack">
-        <div class="row"><span class="pill good">Obsidian 只读同步</span><span class="mono sub">${PS.esc(PS.S.settings.obsidianPath)}</span><span class="sub">· ${PS.S.obsidianNotes.length} 篇最近输出</span></div>
-        ${PS.S.obsidianNotes.map(n => `<div class="row" style="padding:12px 14px;border-radius:10px;background:var(--sunk)">
-          <div class="min0 grow"><b class="mono" style="font-size:13px">${PS.esc(n.title || n.file)}</b><div class="sub mono" style="font-size:11px">${PS.esc(n.file)} · ${n.words || 0} 字</div><div class="sub" style="margin-top:3px">${PS.esc(n.excerpt)}</div></div>
-          <button class="btn primary s" data-ob="${PS.esc(n.id)}">+ 加入选题</button>
-        </div>`).join('')}
+    } else if (['newsletter', 'saved', 'dev', 'obsidian'].includes(srcTab)) {
+      const list = srcTab === 'obsidian' ? (PS.S.obsidianNotes || []) : (PS.S.sources[srcTab] || []);
+      const cur = list[srcIdx] || list[0];
+      const headTitle = srcTab === 'saved' ? '搞钱 · 个人收藏与剪藏' : srcTab === 'obsidian' ? 'Obsidian 原始输出' : srcTab === 'dev' ? '开发日报' : 'AI 日报';
+      body = `<div class="src-split" id="srcSplit">
+        <div class="card flush src-list" id="srcList">
+          <div class="src-issue-h">
+            <div class="min0">
+              <div class="sub" style="font-size:12px">${srcTab === 'obsidian' ? PS.esc(PS.S.settings.obsidianPath) : '本地 Obsidian 只读'}</div>
+              <b class="clip1" style="font-size:15px">${headTitle} · ${list.length} 篇</b>
+            </div>
+          </div>
+          ${list.map((it, i) => `<div class="src-row ${i === srcIdx ? 'on' : ''}" data-si="${i}">
+            <div class="src-meta">
+              <span class="sub">${PS.esc([it.author || it.tag, it.site, it.date].filter(Boolean).join(' · '))}</span>
+            </div>
+            <div><button class="src-t" type="button" data-si="${i}">${PS.esc(it.title)}</button>${origLink(it.url)}</div>
+            ${it.excerpt ? `<p class="src-x">${PS.esc(it.excerpt)}</p>` : ''}
+          </div>`).join('') || '<div style="padding:24px" class="sub">暂无内容</div>'}
+        </div>
+        <div class="card src-read" id="srcRead">${renderNoteReader(cur)}</div>
       </div>`;
     } else if (srcTab === 'materials') {
       body = `<div class="grid-3">${PS.S.sources.materials.map(m => `<div class="card stack tight">
@@ -56,11 +174,11 @@
       <div class="ph">
         <div>
           <h1>找 · 日报与对标</h1>
-          <p>每天打开先看一眼今天发生了什么、对标哪条火了，或直接从 Obsidian 笔记库挑一条加入选题池。</p>
+          <p>每天打开先看一眼今天发生了什么、对标哪条火了，点开一条读全文，想做就直接「加入选题」。</p>
         </div>
         <div class="acts">
           <div class="seg">
-            <button class="${srcTab === 'newsletter' ? 'on' : ''}" onclick="location.hash='#source/newsletter'">AI 日报 ${PS.S.sources.newsletter.length}</button>
+            <button class="${srcTab === 'newsletter' ? 'on' : ''}" onclick="location.hash='#source/newsletter'">AI 日报 ${newsCount}</button>
             <button class="${srcTab === 'saved' ? 'on' : ''}" onclick="location.hash='#source/saved'">搞钱 ${PS.S.sources.saved.length}</button>
             <button class="${srcTab === 'dev' ? 'on' : ''}" onclick="location.hash='#source/dev'">开发日报</button>
             <button onclick="location.hash='#feed'">对标发了什么</button>
@@ -71,31 +189,92 @@
       ${body}
     `);
 
-    main.querySelectorAll('[data-si]').forEach(b => b.onclick = () => { srcIdx = +b.dataset.si; PS.pages.source(); });
-    main.querySelector('#addTopicBtn')?.addEventListener('click', async () => {
-      const it = PS.S.sources[srcTab][srcIdx];
-      try {
-        const created = await PS.api('POST', '/api/topics', { title: it.title, source_ref: it.tag || '信源', body: (it.body || '').slice(0, 3000) });
-        PS.S.topics.unshift(created);
-      } catch {
-        PS.S.topics.unshift({ id: Date.now(), title: it.title, stage: '写', score: 14, updated: '刚刚', trash: false });
+    const bindAddTopic = getItem => {
+      main.querySelector('#addTopicBtn')?.addEventListener('click', async () => {
+        const it = getItem();
+        if (!it) return;
+        const parts = [];
+        if (it.summary) parts.push(`## 日报摘要\n\n${it.summary}`);
+        if (it.deep) parts.push(`## 深读\n\n${it.deep}`);
+        if (it.original) parts.push(`## 原文\n\n${it.original}`);
+        else if (it.body) parts.push(it.body);
+        const fullBody = parts.join('\n\n').slice(0, 12000);
+        const ref = it.group ? `AI 日报 · ${it.group}` : (it.tag || '信源');
+        try {
+          const created = await PS.api('POST', '/api/topics', { title: it.title, source_ref: ref, body: fullBody });
+          PS.S.topics.unshift(created);
+        } catch {
+          PS.S.topics.unshift({ id: Date.now(), title: it.title, stage: '写', score: 14, updated: '刚刚', trash: false });
+        }
+        PS.save();
+        PS.toast('已加入「选题池」（已写入本地 SQLite）', 'good');
+      });
+    };
+
+    if (srcTab === 'newsletter' && iss && flatItems.length) {
+      let currentDetail = itemDetailCache.get(`${iss.day}:${srcItemId}`) || flatItems.find(x => x.id === srcItemId);
+      let reqSeq = 0;
+      const readBox = main.querySelector('#srcRead');
+      const listBox = main.querySelector('#srcList');
+
+      const openNewsletterItem = async id => {
+        srcItemId = id;
+        const basic = flatItems.find(x => x.id === id);
+        if (!basic) return;
+        listBox.querySelectorAll('.src-row.on').forEach(el => el.classList.remove('on'));
+        listBox.querySelector(`.src-row[data-open="${id}"]`)?.classList.add('on');
+        const ck = `${iss.day}:${id}`;
+        if (itemDetailCache.has(ck)) {
+          currentDetail = itemDetailCache.get(ck);
+          readBox.innerHTML = renderNewsletterReader(currentDetail, false);
+          readBox.scrollTop = 0;
+          bindAddTopic(() => currentDetail);
+          return;
+        }
+        const mine = ++reqSeq;
+        currentDetail = basic;
+        readBox.innerHTML = renderNewsletterReader(basic, true);
+        readBox.scrollTop = 0;
+        try {
+          const detail = await PS.api('GET', `/api/source/newsletter/item?day=${encodeURIComponent(iss.day)}&id=${encodeURIComponent(id)}`);
+          if (mine !== reqSeq) return;
+          itemDetailCache.set(ck, detail);
+          currentDetail = detail;
+          readBox.innerHTML = renderNewsletterReader(detail, false);
+          bindAddTopic(() => currentDetail);
+        } catch (e) {
+          if (mine !== reqSeq) return;
+          readBox.innerHTML = renderNewsletterReader(basic, false);
+          bindAddTopic(() => currentDetail);
+        }
+      };
+
+      listBox.addEventListener('click', e => {
+        if (e.target.closest('[data-ext]')) return;
+        const row = e.target.closest('[data-open]');
+        if (row) openNewsletterItem(row.dataset.open);
+      });
+      main.querySelector('#srcDay')?.addEventListener('change', e => {
+        srcDay = e.target.value;
+        srcItemId = '';
+        location.hash = `#source/newsletter/${encodeURIComponent(srcDay)}`;
+      });
+
+      // 首条自动加载原文与深读
+      if (!itemDetailCache.has(`${iss.day}:${srcItemId}`)) {
+        openNewsletterItem(srcItemId);
+      } else {
+        bindAddTopic(() => currentDetail);
       }
-      PS.save();
-      PS.toast('已加入「选题池」（已写入本地 SQLite）', 'good');
-    });
-    main.querySelectorAll('[data-ob]').forEach(b => b.onclick = async () => {
-      const n = PS.S.obsidianNotes.find(x => String(x.id) === String(b.dataset.ob));
-      if (!n) return;
-      const title = n.title || n.file.split('/').pop().replace(/\.md$/, '');
-      try {
-        const created = await PS.api('POST', '/api/topics', { title, source_ref: 'Obsidian', body: n.body || n.excerpt || '' });
-        PS.S.topics.unshift(created);
-      } catch {
-        PS.S.topics.unshift({ id: Date.now(), title, stage: '写', score: 14, updated: '刚刚', trash: false });
-      }
-      PS.save();
-      PS.toast('Obsidian 笔记已加入「选题池」', 'good');
-    });
+    } else {
+      const list = srcTab === 'obsidian' ? (PS.S.obsidianNotes || []) : (PS.S.sources[srcTab] || []);
+      main.querySelector('#srcList')?.addEventListener('click', e => {
+        if (e.target.closest('[data-ext]')) return;
+        const row = e.target.closest('[data-si]');
+        if (row) { srcIdx = +row.dataset.si; PS.pages.source(); }
+      });
+      bindAddTopic(() => list[srcIdx] || list[0]);
+    }
   };
 
   // ==================== 选题 · 爆款榜（#feed） & 拆解报告（#chai） ====================

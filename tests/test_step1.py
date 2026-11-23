@@ -88,3 +88,78 @@ def test_fastapi_step1_crud_and_worktable_export(tmp_path: Path, monkeypatch) ->
     saved = json.loads(wt_file.read_text(encoding="utf-8"))
     assert saved["schema"] == "park-studio/worktable/v1"
     assert len(saved["shots"]) >= 1
+
+
+def test_newsletter_issue_parser_and_original_matching(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    vroot = tmp_path / "vault"
+    news_dir = vroot / "006_ai daily newsletter"
+    news_dir.mkdir(parents=True)
+    (news_dir / "26-11-22.md").write_text(
+        """# AI Daily Newsletter — 2026-11-22
+
+## 快讯
+
+### 底层工具
+
+- **OpenAI Devs X / Michael Luo** | [OpenAI Agents API 宣布支持 Daybreak 访问](https://x.com/OpenAIDevs/status/2123924430120419589)
+  OpenAI 宣布 Agents API 可接入 Daybreak，覆盖持续安全监测与人工审查分流。
+
+### 工作流
+
+- **claude-code-releases** | [Claude Code v2.1.330](https://github.com/anthropics/claude-code/releases/tag/v2.1.330)
+  新版增加企业组织登录和内置图表。
+
+## 深读
+
+### [Claude Code v2.1.330](https://github.com/anthropics/claude-code/releases/tag/v2.1.330)
+
+这是一段更详细的深读分析。
+
+## 视频更新
+
+### YouTube
+
+- **Park Channel** | [视频演示](https://www.youtube.com/watch?v=abc12345)
+  演示完整工作流。
+""",
+        encoding="utf-8",
+    )
+    items_root = tmp_path / "processed"
+    item_file = items_root / "26-11-22" / "openai" / "daybreak.md"
+    item_file.parent.mkdir(parents=True)
+    item_file.write_text(
+        """---
+url: https://x.com/OpenAIDevs/status/2123924430120419589
+---
+
+# Big news: OpenAI's Agents API now supports Daybreak access!
+
+Some use cases:
+- Investigate suspicious activity
+- Verify security fixes
+""",
+        encoding="utf-8",
+    )
+    config.save_config({"obsidianPath": str(vroot), "newsletterItemsPath": str(items_root)})
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+
+    res = client.get("/api/source/newsletter").json()
+    iss = res["issue"]
+    assert iss["day"] == "2026-11-22"
+    assert iss["total"] == 3
+    assert iss["parts"][0]["name"] == "快讯"
+    assert iss["parts"][0]["count"] == 2
+    assert iss["parts"][0]["groups"][0]["name"] == "底层工具"
+    first = iss["parts"][0]["groups"][0]["items"][0]
+    assert first["site"] == "X"
+    assert first["hasOriginal"] is True
+
+    detail = client.get(f"/api/source/newsletter/item?day=2026-11-22&id={first['id']}").json()
+    assert "Investigate suspicious activity" in detail["original"]
+
+    second = iss["parts"][0]["groups"][1]["items"][0]
+    assert second["hasDeep"] is True
+    detail2 = client.get(f"/api/source/newsletter/item?day=2026-11-22&id={second['id']}").json()
+    assert "深读分析" in detail2["deep"]
+

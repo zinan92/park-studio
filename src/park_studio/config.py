@@ -15,6 +15,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "apiKey": "",
     "apiModel": "deepseek-chat",
     "obsidianPath": "/Users/wendy/park-hands",
+    "newsletterItemsPath": "~/park-io/_inbox/processed",
     "obsidianFolders": {
         "newsletter": "006_ai daily newsletter",
         "saved": "002_个人收藏",

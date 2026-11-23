@@ -24,6 +24,11 @@
     const dStr = `${today.getMonth() + 1} 月 ${today.getDate()} 日`;
     const cut = PS.S.cutProject;
     const active = PS.activePlats();
+    const iss = PS._newsletterIssue;
+    const topNews = iss?.parts?.length
+      ? iss.parts.flatMap(p => p.groups.flatMap(g => g.items)).slice(0, 3)
+      : PS.S.sources.newsletter.slice(0, 3);
+    const newsCount = iss?.total || PS.S.sources.newsletter.length;
 
     const main = PS.shell('home', [['首页', '#home']], `
       <div style="margin-top:8px">
@@ -47,9 +52,9 @@
             <b>今天的信源</b>
             <span class="hm-more">看全部 ›</span>
           </span>
-          <span class="sub">AI 日报 ${PS.S.sources.newsletter.length} 条 · 搞钱 ${PS.S.sources.saved.length} 条 · 开发日报</span>
+          <span class="sub">AI 日报 ${newsCount} 条 · 搞钱 ${PS.S.sources.saved.length} 条 · 开发日报</span>
           <div class="hm-lines">
-            ${PS.S.sources.newsletter.slice(0, 3).map((n, i) => `<div class="hm-line"><i class="hm-i">${i + 1}</i><span class="clip1 grow">${PS.esc(n.title)}</span></div>`).join('')}
+            ${topNews.map((n, i) => `<div class="hm-line"><i class="hm-i">${i + 1}</i><span class="clip1 grow">${PS.esc(n.title)}</span></div>`).join('')}
           </div>
         </button>
 
@@ -133,6 +138,11 @@
 
   PS.pages.dashboard = function () {
     const active = PS.activePlats();
+    const iss = PS._newsletterIssue;
+    const topNews = iss?.parts?.length
+      ? iss.parts.flatMap(p => p.groups.flatMap(g => g.items)).slice(0, 3)
+      : PS.S.sources.newsletter.slice(0, 3);
+    const newsCount = iss?.total || PS.S.sources.newsletter.length;
     const eps = PS.S.episodes;
     const slides = [eps[0], eps[1], eps[3]].filter(Boolean);
     if (heroIdx >= slides.length) heroIdx = 0;
