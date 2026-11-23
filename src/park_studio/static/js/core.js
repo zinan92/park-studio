@@ -570,6 +570,7 @@
       if (b.clients) PS.S.clients = b.clients;
       if (b.daemonLogs?.length) PS.S.daemonLogs = b.daemonLogs;
       if (b.positioning && Object.keys(b.positioning).length) PS.S.positioning = b.positioning;
+      PS.S.studioPositioning = b.studioPositioning || null;
       PS.save();
     } catch (e) {
       PS.backendOnline = false;

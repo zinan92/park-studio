@@ -558,22 +558,302 @@
     `, 'mid');
   };
 
-  PS.pages.position = function () {
-    const pos = PS.S.positioning;
-    const rows = [['你是谁（定位卡）', 'who'], ['你怎么赚钱', 'money'], ['你和别人哪里不一样', 'diff'], ['你守的规矩', 'rules'], ['对外简介', 'bio']];
-    const main = PS.shell('position', [['系统', '#settings'], ['我的定位', '#position']], `
-      <div class="ph"><div><h1>我的定位</h1><p>每次写稿、生成钩子和三路审稿都会自动带上这份定位（持久化到本地 SQLite）。</p></div><div class="acts"><button class="btn primary" id="savePos">保存定位</button></div></div>
-      <div class="card stack">${rows.map(([l, k]) => `<div><label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px">${l}</label><textarea data-pk="${k}" rows="2">${PS.esc(pos[k])}</textarea></div>`).join('')}</div>
-    `, 'narrow');
-    main.querySelector('#savePos').onclick = async () => {
-      main.querySelectorAll('[data-pk]').forEach(t => { pos[t.dataset.pk] = t.value.trim(); });
-      try {
-        await PS.api('PUT', '/api/positioning', pos);
-        PS.toast('定位已写入本地 SQLite ✓', 'good');
-      } catch {
-        PS.toast('定位已保存', 'good');
-      }
-      PS.save();
+  // ==================== 我的定位（有本机定位正本 positioning.json 时原样呈现 7 页签完整定位系统；否则走简洁 5 格编辑卡） ====================
+  const SP_TABS = [
+    ['overview', '定位三问'],
+    ['growth', '增长飞轮'],
+    ['difference', '差异化'],
+    ['offers', '服务与定价'],
+    ['profile', '对外简介'],
+    ['principles', '原则与自测'],
+    ['persona', '我的形象'],
+  ];
+  const SP_ICON = {
+    video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>',
+    eye: '<path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    funnel: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+    hand: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.2-4 4.3-6 8-6s6.8 2 8 6"/>',
+    files: '<path d="M8 3h8l4 4v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M15 3v5h5M9 13h6M9 17h4"/>',
+    check: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    cycle: '<path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>',
+    arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  };
+  const spState = { tab: 'overview', pf: 'cn', editing: {} };
+  const spWeekKey = () => { const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.toLocaleDateString('sv-SE'); };
+  const loadSpChecks = () => { try { const x = JSON.parse(localStorage.getItem('ps-sp-checks') || '{}'); return x.week === spWeekKey() ? x.done || [] : []; } catch (_) { return []; } };
+  let spChecks = loadSpChecks();
+
+  PS.pages.position = function (sub) {
+    const studio = PS.S.studioPositioning;
+    if (!studio || !studio.positioning) {
+      const pos = PS.S.positioning;
+      const rows = [['你是谁（定位卡）', 'who'], ['你怎么赚钱', 'money'], ['你和别人哪里不一样', 'diff'], ['你守的规矩', 'rules'], ['对外简介', 'bio']];
+      const main = PS.shell('position', [['系统', '#settings'], ['我的定位', '#position']], `
+        <div class="ph"><div><h1>我的定位</h1><p>每次写稿、生成钩子和三路审稿都会自动带上这份定位（持久化到本地 SQLite）。</p></div><div class="acts"><button class="btn primary" id="savePos">保存定位</button></div></div>
+        <div class="card stack">${rows.map(([l, k]) => `<div><label style="font-weight:600;font-size:13px;display:block;margin-bottom:4px">${l}</label><textarea data-pk="${k}" rows="2">${PS.esc(pos[k])}</textarea></div>`).join('')}</div>
+      `, 'narrow');
+      main.querySelector('#savePos').onclick = async () => {
+        main.querySelectorAll('[data-pk]').forEach(t => { pos[t.dataset.pk] = t.value.trim(); });
+        try {
+          await PS.api('PUT', '/api/positioning', pos);
+          PS.toast('定位已写入本地 SQLite ✓', 'good');
+        } catch {
+          PS.toast('定位已保存', 'good');
+        }
+        PS.save();
+      };
+      return;
+    }
+
+    if (SP_TABS.some(([k]) => k === sub)) spState.tab = sub;
+    const tab = spState.tab;
+    const p = studio.positioning;
+    const pg = p.page || {};
+    const ic = (name, cls = '') => `<svg class="sp-i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${SP_ICON[name] || SP_ICON.files}</svg>`;
+    const ed = (path, text, cls = '') => `<span class="sp-ed ${cls}" contenteditable="plaintext-only" spellcheck="false" data-sp="${PS.esc(JSON.stringify(path))}">${PS.esc(text || '')}</span>`;
+    const pill = text => (text ? `<span class="sp-pill">${ic('check')}${PS.esc(text)}</span>` : '');
+    const secHead = (title, s, meta = '') => `<div class="sp-sh"><div><h3>${title}</h3>${s ? `<p>${s}</p>` : ''}</div>${meta}</div>`;
+    const tabText = (key, field, fallback) => {
+      const v = ((p.tabs || {})[key] || {})[field];
+      return v ? ed(['positioning', 'tabs', key, field], v) : PS.esc(fallback);
     };
+    const lead = (x, key, fallback) => {
+      x = x || {};
+      const base = ['positioning', 'tabs', key];
+      return `<div class="sp-lead">${x.eyeline ? `<div class="sp-eyeline">${ed([...base, 'eyeline'], x.eyeline)}</div>` : ''}<h2>${x.h1 ? ed([...base, 'h1'], x.h1, 'pre') : PS.esc(fallback)}</h2>${x.lead ? `<p>${ed([...base, 'lead'], x.lead)}</p>` : ''}</div>`;
+    };
+    const flowHtml = compact => {
+      const f = p.flow || { nodes: (p.flywheel ? p.flywheel.nodes : []).map(n => ({ t: n.t, s: n.s })) };
+      const at = p.flow ? ['positioning', 'flow', 'nodes'] : ['positioning', 'flywheel', 'nodes'];
+      const icons = ['video', 'eye', 'funnel', 'hand', 'files'];
+      const steps = (f.nodes || []).map((n, i) => `${i ? `<span class="sp-flow-arrow">${ic('arrow')}</span>` : ''}
+        <div class="sp-flow-step ${n.hot ? 'hot' : ''}"><span class="sp-tile tone-${i + 1}">${ic(n.icon || icons[i])}</span><b>${ed([...at, i, 't'], n.t)}</b><small>${ed([...at, i, 's'], n.s)}</small></div>`).join('');
+      const br = f.branch;
+      return `<div class="sp-flow ${compact ? 'compact' : ''}">
+        <div class="sp-flow-track">${steps}</div>
+        ${f.return ? `<div class="sp-flow-return">${ic('cycle')}<span>${ed(['positioning', 'flow', 'return'], f.return)}</span></div>` : ''}
+        ${br ? `<div class="sp-flow-branch"><span>${ed(['positioning', 'flow', 'branch', 'label'], br.label)}</span><span class="sp-branch-steps">${(br.steps || []).map((x, i) => `${i ? ic('arrow') : ''}<b>${ed(['positioning', 'flow', 'branch', 'steps', i], x)}</b>`).join('')}</span></div>` : ''}
+      </div>`;
+    };
+
+    let body = '';
+    if (tab === 'overview') {
+      const c = p.company || {}, tb = (p.tabs || {}).overview || {};
+      const status = tb.status || ((p.questions || [])[(p.questions || []).length - 1] || {}).status;
+      const coreKey = c.core_title ? 'core_title' : c.tagline_lead ? 'tagline_lead' : 'name';
+      const lineKey = c.core_line ? 'core_line' : 'tagline';
+      body = `
+        <div class="sp-card-head"><h2>${tabText('overview', 'title', '核心定位')}</h2>${pill(status)}</div>
+        <div class="sp-identity"><h2>${ed(['positioning', 'company', coreKey], c[coreKey])}</h2><p>${ed(['positioning', 'company', lineKey], c[lineKey] || '')}</p></div>
+        <div class="sp-questions">${(p.questions || []).map((q, i) => `<article class="sp-question">
+          <span class="sp-num">0${i + 1}</span>
+          <div><div class="sp-q-label">${q.label ? ed(['positioning', 'questions', i, 'label'], q.label) : PS.esc(String(q.k || '').replace(/^.+?·\s*/, ''))}</div>
+            <h3>${ed(['positioning', 'questions', i, 'title'], q.title)}</h3>
+            <p>${ed(['positioning', 'questions', i, 'body'], q.body)}</p>
+            ${q.bold ? `<span class="sp-note-line">${ed(['positioning', 'questions', i, 'bold'], q.bold)}</span>` : ''}</div>
+        </article>`).join('')}</div>
+        <div class="sp-entry"><span>对外的统一入口</span><b>私信「${ed(['positioning', 'company', 'keyword'], c.keyword)}」</b><button class="sp-text-btn" type="button" id="spCopyKw">${ic('copy')}复制</button></div>
+        <div class="sp-divider"></div>
+        ${secHead(tabText('overview', 'flow_title', '增长飞轮'), tb.flow_sub ? tabText('overview', 'flow_sub', '') : '', `<button class="sp-text-btn" type="button" data-sp-tab="growth">展开查看 ${ic('arrow')}</button>`)}
+        ${flowHtml(true)}`;
+    } else if (tab === 'growth') {
+      const tb = (p.tabs || {}).growth || {};
+      body = `${lead(tb, 'growth', '增长飞轮')}
+        ${flowHtml(false)}
+        <div class="sp-values">${(p.creed || []).map((x, i) => `<article><h3>${ed(['positioning', 'creed', i, 'h'], x.h)}${ed(['positioning', 'creed', i, 'hi'], x.hi)}</h3><p>${ed(['positioning', 'creed', i, 'p'], x.p)}</p></article>`).join('')}</div>
+        <div class="sp-divider"></div>
+        ${secHead(tabText('growth', 'steps_title', '从第一单走起来'), tb.steps_sub ? tabText('growth', 'steps_sub', '') : '')}
+        <ol class="sp-seq">${(p.bootstrap || []).map((x, i) => `<li><span class="sp-num">${i + 1}</span><div><b>${ed(['positioning', 'bootstrap', i, 'b'], x.b)}</b><p>${ed(['positioning', 'bootstrap', i, 's'], x.s)}</p></div></li>`).join('')}</ol>`;
+    } else if (tab === 'difference') {
+      const tb = (p.tabs || {}).difference || {};
+      body = `${lead(tb, 'difference', '差异化')}
+        <div class="sp-questions">${(p.diff || []).map((x, i) => `<article class="sp-question"><span class="sp-num">0${i + 1}</span>
+          <div><div class="sp-q-label">${ed(['positioning', 'diff', i, 'vs'], x.vs)}</div><h3>${ed(['positioning', 'diff', i, 'h'], x.h)}</h3><p>${ed(['positioning', 'diff', i, 'p'], x.p)}</p></div></article>`).join('')}</div>`;
+    } else if (tab === 'offers') {
+      const tb = (p.tabs || {}).offers || {};
+      const rows = ((p.pricing || {}).rows || []).map((r, i) => `<tr>
+        <td class="svc"><i class="sp-dot tone-${PS.esc(r.tone || 'base')}"></i>${ed(['positioning', 'pricing', 'rows', i, 'role'], r.role)}</td>
+        <td><span class="sp-price tone-${PS.esc(r.tone || 'base')}">${ed(['positioning', 'pricing', 'rows', i, 'price'], r.price)}</span></td>
+        <td class="unit">${ed(['positioning', 'pricing', 'rows', i, 'unit'], r.unit || '')}</td>
+        <td>${ed(['positioning', 'pricing', 'rows', i, 'what'], r.what)}</td>
+      </tr>`).join('');
+      body = `<div class="sp-lead">${tb.eyeline ? `<div class="sp-eyeline">${ed(['positioning', 'tabs', 'offers', 'eyeline'], tb.eyeline)}</div>` : ''}<h2>${tabText('offers', 'h1', '服务与定价')}</h2>
+          <p>${tb.lead ? ed(['positioning', 'tabs', 'offers', 'lead'], tb.lead) : ed(['positioning', 'pricing', 'sub'], (p.pricing || {}).sub)}</p></div>
+        ${tb.note ? `<div class="sp-offer-note"><span class="sp-tile tone-4">${ic('hand')}</span><span>${ed(['positioning', 'tabs', 'offers', 'note'], tb.note)}</span></div>` : ''}
+        <div class="sp-table"><table><thead><tr><th>服务</th><th>价格</th><th>规格</th><th>交付内容</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="sp-foot">${ed(['positioning', 'pricing', 'note'], (p.pricing || {}).note)}</p>
+        <div class="sp-divider"></div>
+        ${secHead(tabText('offers', 'products_title', '产品线'), tb.products_sub ? tabText('offers', 'products_sub', '') : '')}
+        <div class="sp-products">${(p.products || []).map((x, i) => `<div><b>${ed(['positioning', 'products', i, 'b'], x.b)}</b><span>${ed(['positioning', 'products', i, 's'], x.s)}</span><small class="sp-tag ${x.first ? 'hot' : ''}">${PS.esc(x.first ? (x.em || '先卖这一条') : (x.tag || '作品集'))}</small></div>`).join('')}</div>`;
+    } else if (tab === 'principles') {
+      const tb = (p.tabs || {}).principles || {};
+      const items = (p.selftest || {}).items || [];
+      const done = items.filter((_, i) => spChecks.includes(i)).length;
+      body = `${lead(tb, 'principles', '原则与自测')}
+        <div class="sp-check">
+          <div class="sp-check-head"><h3>${tabText('principles', 'check_title', '这周的四个问题')}</h3><span>${done} / ${items.length} 已检查</span></div>
+          <div class="sp-progress"><i style="--w:${Math.round((done / Math.max(1, items.length)) * 100)}%"></i></div>
+          ${items.map((q, i) => `<label class="${spChecks.includes(i) ? 'on' : ''}"><input type="checkbox" data-sp-check="${i}" ${spChecks.includes(i) ? 'checked' : ''}><span>${PS.esc(q)}</span></label>`).join('')}
+        </div>
+        ${secHead(tabText('principles', 'principles_title', '通用原则'), tb.principles_sub ? tabText('principles', 'principles_sub', '') : '')}
+        <ol class="sp-principles">${(p.principles || []).map((x, i) => `<li><span class="sp-num small">0${i + 1}</span><p><b>${ed(['positioning', 'principles', i, 'b'], x.b)}</b>${x.s ? ' ' + ed(['positioning', 'principles', i, 's'], x.s) : ''}</p></li>`).join('')}</ol>`;
+    } else if (tab === 'profile') {
+      const PF = [['cn', '国内版', {}], ['x', 'X 版', { name: 50, bio: 160 }]];
+      const [key, , limits] = PF.find(([k]) => k === spState.pf) || PF[0];
+      const cur = (studio.profile || {})[key] || { name: '', bio: '' };
+      const avatar = PS.esc(((cur.name || '').match(/[A-Za-z]+/) || [(cur.name || '我').slice(0, 1)])[0]);
+      const cnt = f => `<i class="${limits[f] && (cur[f] || '').length > limits[f] ? 'over' : ''}"><b data-pf-count="${f}">${(cur[f] || '').length}</b>${limits[f] ? ' / ' + limits[f] : ''}</i>`;
+      const card = (cur.name || cur.bio) && !spState.editing[key]
+        ? `<div class="sp-pf-sheet">
+            <div class="sp-pf-head"><span class="sp-pf-avatar">${avatar}</span><div><h3>${PS.esc(cur.name)}</h3><span class="sp-pill">${ic('check')}已定稿</span></div><button class="btn s" type="button" data-pf-copy="name">复制名字</button></div>
+            <p class="sp-pf-bio">${PS.esc(cur.bio)}</p>
+            <div class="sp-pf-acts"><button class="btn s primary" type="button" data-pf-copy="bio">复制简介</button><button class="btn s" type="button" id="pfUnlock">改这一版</button></div>
+          </div>`
+        : `<div class="sp-pf-sheet sp-pf-edit">
+            <label><span class="sp-pf-lab">名字 ${cnt('name')}</span><input data-pf-f="name" value="${PS.esc(cur.name)}" placeholder="主页上显示的名字"></label>
+            <label><span class="sp-pf-lab">简介 ${cnt('bio')}</span><textarea data-pf-f="bio" rows="${key === 'x' ? 5 : 7}">${PS.esc(cur.bio)}</textarea></label>
+            <div class="sp-pf-acts"><button class="btn s primary" type="button" id="pfSave">存好</button><button class="btn s" type="button" data-pf-copy="bio">复制简介</button>${cur.name || cur.bio ? '<button class="btn s ghost" type="button" id="pfCancel">不改了</button>' : ''}</div>
+          </div>`;
+      const plats = (studio.platforms || []).filter(x => x.variant === key);
+      const syncRows = plats.map(x => `<div class="sp-pf-row">
+        <b>${PS.esc(x.label)}</b>
+        <span class="sp-pf-state ${x.state === 'synced' ? 'hot' : ''}">${x.state === 'synced' ? `已同步 · ${PS.esc(x.applied_at)}` : '待确认同步'}</span>
+        <small>${PS.esc(x.where)}</small>
+        <span class="acts">${x.edit_url ? `<a class="sp-text-btn" href="${PS.esc(x.edit_url)}" target="_blank" rel="noopener">打开 ↗</a>` : ''}${x.state === 'synced' ? '' : `<button class="btn s" type="button" data-pf-applied="${PS.esc(x.key)}">我贴好了</button>`}</span>
+      </div>`).join('');
+      body = `${lead((p.tabs || {}).profile, 'profile', '对外简介')}
+        <section class="sp-pf">
+          <div class="sp-seg" role="tablist">${PF.map(([k, label]) => `<button type="button" role="tab" class="${k === spState.pf ? 'on' : ''}" data-pf-tab="${k}">${label}</button>`).join('')}</div>
+          ${card}
+          ${secHead('平台同步', plats.map(x => x.label).join('、'))}
+          <div class="sp-pf-sync">${syncRows}</div>
+          <p class="sp-foot">内容来源：本机 Obsidian <code>${PS.esc(studio.profilePath || '000_park-os/park profile.md')}</code>（在线修改持久化到 SQLite）。</p>
+        </section>`;
+    } else if (tab === 'persona') {
+      const pe = studio.persona || { base: [], gallery: [] };
+      const imgTag = (file, label) => {
+        const u = `/api/studio-positioning/file?path=${encodeURIComponent(file)}`;
+        return `<a class="sp-pe-img" href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="${PS.esc(label)}" loading="lazy" decoding="async"></a>`;
+      };
+      const baseHtml = pe.base?.length
+        ? `<div class="sp-pe-base">${pe.base.map(b => `<figure>${imgTag(b.file, b.label)}<figcaption>${PS.esc(b.label)}</figcaption></figure>`).join('')}</div>`
+        : '<div style="padding:16px" class="sub">还没有定稿形象</div>';
+      const groups = [];
+      for (const g of pe.gallery || []) {
+        const dir = g.file.split('/').slice(0, -1).join('/');
+        let last = groups[groups.length - 1];
+        if (!last || last.dir !== dir) { last = { dir, title: g.title || dir, at: g.at || '', items: [] }; groups.push(last); }
+        last.items.unshift(g);
+      }
+      const galleryHtml = groups.length
+        ? groups.map(g => `<details class="sp-pe-group"><summary class="sp-pe-gh"><b>${PS.esc(g.title)}</b><small>${PS.esc((g.at || '').slice(0, 10))} · ${g.items.length} 张 · 点开查看</small></summary>
+            <div class="sp-pe-grid">${g.items.map(i => `<figure>${imgTag(i.file, i.caption)}<figcaption>${PS.esc(i.caption)}</figcaption></figure>`).join('')}</div></details>`).join('')
+        : '<div style="padding:16px" class="sub">还没有文章配图记录</div>';
+      body = `<div class="sp-persona">
+        <div class="sp-panel"><div class="sp-panel-h"><h2>定稿形象（${pe.base?.length || 0} 张）</h2><small>${PS.esc(pe.skill ? `配图 Skill：${pe.skill} · 主角 ${pe.name}` : (pe.name || '本地只读读取'))}</small></div>${baseHtml}</div>
+        <details class="sp-panel"><summary class="sp-panel-h"><h2>配图里的形象（${pe.gallery?.length || 0} 张）</h2><small>按文章分组 · 点开查看</small></summary>${galleryHtml}</details>
+      </div>`;
+    }
+
+    const main = PS.shell('position', [['系统', '#settings'], ['我的定位', '#position']], `
+      <div class="sp">
+        <header class="sp-page-head">
+          <div>
+            <div class="sp-eyeline">${pg.eyeline ? ed(['positioning', 'page', 'eyeline'], pg.eyeline) : '定位'} · ${PS.esc(p.company?.name || '')}</div>
+            <h1>${pg.h1 ? ed(['positioning', 'page', 'h1'], pg.h1) : PS.esc(p.company?.name || '我的定位')}</h1>
+            <p>${pg.lead ? ed(['positioning', 'page', 'lead'], pg.lead) : PS.esc(`${p.company?.tagline_lead || ''}${p.company?.tagline || ''}`)}</p>
+          </div>
+          <div class="sp-actions">
+            <button class="btn" type="button" id="spCopyBio">复制对外简介</button>
+            <button class="sp-text-btn faint" type="button" id="spReload">从本机重读</button>
+          </div>
+        </header>
+        <div class="utabs">
+          ${SP_TABS.map(([k, l]) => `<button type="button" class="utab ${tab === k ? 'on' : ''}" data-sp-tab="${k}">${l}</button>`).join('')}
+        </div>
+        <div class="sp-doc-card">${body}</div>
+      </div>
+    `);
+
+    const copyText = txt => {
+      if (!txt) return PS.toast('内容为空', 'warn');
+      navigator.clipboard?.writeText(txt);
+      PS.toast('已复制到剪贴板 ✓', 'good');
+    };
+    main.querySelectorAll('[data-sp-tab]').forEach(b => b.onclick = () => {
+      spState.tab = b.dataset.spTab;
+      PS.pages.position(spState.tab);
+    });
+    main.querySelector('#spCopyKw')?.addEventListener('click', () => copyText(p.company?.keyword || ''));
+    main.querySelector('#spCopyBio').onclick = () => copyText((studio.profile?.cn || {}).bio || '');
+    main.querySelector('#spReload').onclick = async () => {
+      try {
+        const res = await PS.api('POST', '/api/studio-positioning/reload', {});
+        PS.S.studioPositioning = res.studio;
+        PS.save();
+        PS.toast('已从本机定位正本重新加载 ✓', 'good');
+        PS.pages.position(tab);
+      } catch (err) { PS.toast(err.message || '重载失败', 'warn'); }
+    };
+    main.querySelectorAll('.sp-ed').forEach(el => {
+      let before = el.textContent;
+      el.onkeydown = e => {
+        if (e.key === 'Enter' && !el.classList.contains('pre')) { e.preventDefault(); el.blur(); }
+        if (e.key === 'Escape') { el.textContent = before; el.blur(); }
+      };
+      el.onblur = async () => {
+        const value = el.innerText.replace(/\n$/, '');
+        if (value === before) return;
+        try {
+          const res = await PS.api('PUT', '/api/studio-positioning', { path: JSON.parse(el.dataset.sp), value });
+          PS.S.studioPositioning = res.studio;
+          PS.save();
+          before = value;
+          PS.toast('定位已保存 ✓', 'good');
+        } catch (err) {
+          el.textContent = before;
+          PS.toast(err.message || '保存失败', 'warn');
+        }
+      };
+    });
+    main.querySelectorAll('[data-sp-check]').forEach(box => box.onchange = () => {
+      const i = Number(box.dataset.spCheck);
+      spChecks = box.checked ? [...new Set([...spChecks, i])] : spChecks.filter(x => x !== i);
+      try { localStorage.setItem('ps-sp-checks', JSON.stringify({ week: spWeekKey(), done: spChecks })); } catch (_) {}
+      PS.pages.position(tab);
+    });
+    main.querySelectorAll('[data-pf-tab]').forEach(b => b.onclick = () => { spState.pf = b.dataset.pfTab; PS.pages.position('profile'); });
+    main.querySelector('#pfUnlock')?.addEventListener('click', () => { spState.editing[spState.pf] = true; PS.pages.position('profile'); });
+    main.querySelector('#pfCancel')?.addEventListener('click', () => { delete spState.editing[spState.pf]; PS.pages.position('profile'); });
+    main.querySelectorAll('[data-pf-f]').forEach(el => el.oninput = () => {
+      const c = main.querySelector(`[data-pf-count="${el.dataset.pfF}"]`);
+      if (c) c.textContent = String(el.value.length);
+    });
+    main.querySelectorAll('[data-pf-copy]').forEach(b => b.onclick = () => {
+      const field = main.querySelector(`[data-pf-f="${b.dataset.pfCopy}"]`);
+      copyText(field ? field.value : ((studio.profile || {})[spState.pf] || {})[b.dataset.pfCopy] || '');
+    });
+    main.querySelectorAll('[data-pf-applied]').forEach(b => b.onclick = async () => {
+      try {
+        const res = await PS.api('POST', '/api/studio-positioning/applied', { key: b.dataset.pfApplied });
+        PS.S.studioPositioning = res.studio;
+        PS.save();
+        PS.toast('已记下同步日期 ✓', 'good');
+        PS.pages.position('profile');
+      } catch (err) { PS.toast(err.message || '保存失败', 'warn'); }
+    });
+    main.querySelector('#pfSave')?.addEventListener('click', async () => {
+      try {
+        for (const el of main.querySelectorAll('[data-pf-f]')) {
+          const res = await PS.api('PUT', '/api/studio-positioning', { path: ['profile', spState.pf, el.dataset.pfF], value: el.value });
+          PS.S.studioPositioning = res.studio;
+        }
+        delete spState.editing[spState.pf];
+        PS.save();
+        PS.toast('对外简介已保存 ✓', 'good');
+        PS.pages.position('profile');
+      } catch (err) { PS.toast(err.message || '保存失败', 'warn'); }
+    });
   };
 })();

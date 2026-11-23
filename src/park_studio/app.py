@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, cdp, config, daemon, dailies, db, metrics, platforms, projects, publisher, vault
+from . import ai, cdp, config, daemon, dailies, db, metrics, platforms, projects, publisher, studiopos, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -102,6 +102,15 @@ class ImportProjectReq(BaseModel):
 class MoneyCardStateReq(BaseModel):
     id: str
     state: str
+
+
+class StudioPosEditReq(BaseModel):
+    path: list[Any]
+    value: Any
+
+
+class StudioPosAppliedReq(BaseModel):
+    key: str
 
 
 def _row_topic(r) -> dict[str, Any]:
@@ -219,6 +228,7 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "clients": clients,
             "daemonLogs": logs,
             "positioning": positioning,
+            "studioPositioning": studiopos.load_studio_positioning(conn, cfg),
         }
 
     # ---------- AI 日报按期/按条解析（对齐 xuanti 工作台） ----------
@@ -371,6 +381,13 @@ def create_app(db_file: Path | None = None) -> FastAPI:
 
     # ---------- 本地 Coding Agent AI 动作（默认 Gemini CLI / Neon） ----------
     def _positioning_text() -> str:
+        sp = studiopos.load_studio_positioning(conn)
+        if sp and sp.get("positioning"):
+            p = sp["positioning"]
+            co = p.get("company") or {}
+            qs = "；".join(f"{q.get('label', '')}：{q.get('title', '')}" for q in (p.get("questions") or [])[:3])
+            diffs = "；".join(d.get("h", "") for d in (p.get("diff") or [])[:3])
+            return f"创作者定位：{co.get('name', '')}（{co.get('core_title', '')}，{co.get('core_line', '')}）；{qs}；差异化：{diffs}"
         r = conn.execute("SELECT v FROM kv WHERE k='positioning'").fetchone()
         if not r:
             return ""
@@ -478,6 +495,42 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('positioning', ?)", (json.dumps(body, ensure_ascii=False),))
         conn.commit()
         return body
+
+    @app.get("/api/studio-positioning")
+    def get_studio_positioning() -> dict[str, Any]:
+        cfg = config.load_config()
+        return {"studio": studiopos.load_studio_positioning(conn, cfg)}
+
+    @app.put("/api/studio-positioning")
+    def put_studio_positioning(req: StudioPosEditReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            st = studiopos.update_studio_field(conn, req.path, req.value, cfg=cfg)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"studio": st}
+
+    @app.post("/api/studio-positioning/reload")
+    def reload_studio_positioning() -> dict[str, Any]:
+        cfg = config.load_config()
+        return {"studio": studiopos.load_studio_positioning(conn, cfg, force_reload=True)}
+
+    @app.post("/api/studio-positioning/applied")
+    def applied_studio_positioning(req: StudioPosAppliedReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            st = studiopos.mark_profile_applied(conn, req.key, cfg=cfg)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"studio": st}
+
+    @app.get("/api/studio-positioning/file")
+    def get_studio_persona_file(path: str) -> FileResponse:
+        cfg = config.load_config()
+        resolved = studiopos.resolve_persona_file(path, cfg=cfg)
+        if resolved is None:
+            raise HTTPException(404, "形象配图不存在")
+        return FileResponse(resolved)
 
     @app.put("/api/settings")
     def put_settings(patch: dict[str, Any]) -> dict[str, Any]:
