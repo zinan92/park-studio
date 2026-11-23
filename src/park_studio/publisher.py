@@ -13,7 +13,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from . import cdp, config, db, platforms
+from . import cdp, config, db, platforms, projects
 
 UPLOAD_URLS: dict[str, str] = {
     "douyin": "https://creator.douyin.com/creator-micro/content/upload",
@@ -148,6 +148,92 @@ def pack_episode(
     updated = get_episode(conn, episode_id)
     assert updated is not None
     return {"ok": True, "path": str(out_file), "episode": updated}
+
+
+def import_from_project_dir(conn: sqlite3.Connection, folder: str, *, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """一键从标准期次文件夹（含 final/上传/）自动载入成片、3 张封面、文案.txt 并写入 publish_episodes。"""
+    p = Path(folder).expanduser().resolve()
+    if not p.is_dir():
+        raise ValueError(f"找不到工程目录：{folder}")
+
+    info = projects.inspect_episode_dir(p)
+    copy_data = info.get("copyData") or {}
+    existing_pj = info.get("publishJson") or {}
+    title = copy_data.get("title") or existing_pj.get("title") or info["title"]
+    nick = title[:24]
+    ts = db.now_iso()
+
+    # 若该工程目录已经导入过（按 campaign=folder_name 匹配），直接更新它；否则新建一期
+    campaign = p.name[:60]
+    row = conn.execute("SELECT * FROM publish_episodes WHERE campaign=?", (campaign,)).fetchone()
+    if row:
+        ep_id = int(row["id"])
+        ep_num = int(row["episode"])
+    else:
+        max_ep = conn.execute("SELECT COALESCE(MAX(episode), 42) FROM publish_episodes").fetchone()[0]
+        ep_num = int(max_ep) + 1
+        cur = conn.execute(
+            """INSERT INTO publish_episodes(episode, nick, title, campaign, schedule, video_path, cover_v_path, cover_h_path, publish_json, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                ep_num,
+                nick,
+                title,
+                campaign,
+                f"{info['date']}T19:00:00+08:00" if info.get("date") else "",
+                info["videoPath"],
+                info["coverVPath"],
+                info["cover169Path"] or info["coverHPath"],
+                "{}",
+                ts,
+                ts,
+            ),
+        )
+        ep_id = int(cur.lastrowid)
+        for pid in platforms.PLAT_ORDER:
+            conn.execute(
+                """INSERT OR IGNORE INTO publish_tasks(episode_id, platform, state, detail, url, screenshot_path, metrics_json, updated_at)
+                   VALUES (?,?, 'planned', '已从工程目录自动载入素材，点「填这一家」开跑', '', '', '{}', ?)""",
+                (ep_id, pid, ts),
+            )
+        conn.commit()
+
+    merged_platforms = dict(existing_pj.get("platforms") or {})
+    for pid, pdata in (copy_data.get("platforms") or {}).items():
+        merged_platforms[pid] = {**(merged_platforms.get(pid) or {}), **pdata}
+
+    pjson = {
+        **existing_pj,
+        "episode": ep_num,
+        "folder": str(p),
+        "title": title,
+        "description": copy_data.get("description") or existing_pj.get("description") or title,
+        "tags": copy_data.get("tags") or existing_pj.get("tags") or [],
+        "utm_campaign": campaign,
+        "video_path": info["videoPath"],
+        "cover_v_path": info["coverVPath"],
+        "cover_h_path": info["coverHPath"],
+        "cover_169_path": info["cover169Path"],
+        "copy_txt_path": info["copyPath"],
+        "platforms": merged_platforms,
+    }
+    res = pack_episode(
+        conn,
+        ep_id,
+        video_path=info["videoPath"],
+        cover_v_path=info["coverVPath"],
+        cover_h_path=info["cover169Path"] or info["coverHPath"],
+        publish_json=pjson,
+    )
+    # 同步一份 publish.json 到工程自己的 final/上传/ 目录（如果存在且可写），让 AI 与人始终读同一份标准包
+    upload_dir = p / "final" / "上传"
+    if upload_dir.is_dir():
+        try:
+            (upload_dir / "publish.json").write_text(json.dumps(pjson, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+    db.log_event(conn, f"EP{ep_num}", "工程包", "自动载入标准目录", p.name[:44])
+    return {**res, "project": info}
 
 
 def _copy_for_platform(ep: dict[str, Any], pid: str) -> tuple[str, str, list[str]]:

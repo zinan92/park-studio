@@ -58,7 +58,7 @@ def test_fastapi_step1_crud_and_worktable_export(tmp_path: Path, monkeypatch) ->
     vroot = tmp_path / "vault"
     (vroot / "006_ai daily newsletter").mkdir(parents=True)
     (vroot / "006_ai daily newsletter" / "26-11-22.md").write_text("# 测试日报\nhello", encoding="utf-8")
-    config.save_config({"obsidianPath": str(vroot), "aiBackend": "gemini", "aiModel": "neon"})
+    config.save_config({"obsidianPath": str(vroot), "projectRoot": str(tmp_path / "exports"), "aiBackend": "gemini", "aiModel": "neon"})
 
     client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
 

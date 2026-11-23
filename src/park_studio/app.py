@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, cdp, config, daemon, db, platforms, publisher, vault
+from . import ai, cdp, config, daemon, db, platforms, projects, publisher, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -93,6 +93,10 @@ class MarkPublishReq(BaseModel):
     state: str = "published"
     url: str = ""
     detail: str = ""
+
+
+class ImportProjectReq(BaseModel):
+    folder: str
 
 
 def _row_topic(r) -> dict[str, Any]:
@@ -187,6 +191,7 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "chromeStatus": cdp.chrome_status(cfg),
             "platformStatus": platforms.get_platform_status_map(conn),
             "publishEpisodes": publisher.list_episodes(conn),
+            "projects": projects.scan_projects(cfg, limit=25),
             "launchd": daemon.daemon_status(),
             "followersLive": followers_live,
             "hasLiveFollowers": bool(followers_live),
@@ -275,7 +280,11 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         )
         conn.commit()
         if req.finalize:
-            db.log_event(conn, f"#{topic_id}", "选题台", "稿子定稿", title[:40])
+            try:
+                ep_dir = projects.scaffold_episode_dir(title, script_body=body)
+                db.log_event(conn, f"#{topic_id}", "工程包", "定稿并建标准目录", ep_dir.name[:44])
+            except OSError:
+                db.log_event(conn, f"#{topic_id}", "选题台", "稿子定稿", title[:40])
         return _row_topic(conn.execute("SELECT * FROM topics WHERE id=?", (topic_id,)).fetchone())
 
     # ---------- 剪辑镜头表 Spec Table + 真实 worktable.json 导出 ----------
@@ -536,7 +545,26 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         db.log_event(conn, "系统", "飞书", "测试发送", "连通成功")
         return {**res, "daemonLogs": _recent_logs()}
 
-    # ---------- Step 3：100% MIT 自研 CDP 自动填表发布引擎 + 截图存档 + 自动取链 + launchd ----------
+    # ---------- Step 3：100% MIT 自研 CDP 自动填表发布引擎 + 标准工程目录扫描 + 自动取链 + launchd ----------
+    @app.get("/api/projects")
+    def api_projects(limit: int = 30) -> dict[str, Any]:
+        cfg = config.load_config()
+        return projects.scan_projects(cfg, limit=limit)
+
+    @app.post("/api/publish/from-project")
+    def api_publish_from_project(req: ImportProjectReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = publisher.import_from_project_dir(conn, req.folder, cfg=cfg)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {
+            **res,
+            "episodes": publisher.list_episodes(conn),
+            "projects": projects.scan_projects(cfg, limit=25),
+            "daemonLogs": _recent_logs(),
+        }
+
     @app.get("/api/publish/episodes")
     def api_publish_episodes() -> dict[str, Any]:
         return {"episodes": publisher.list_episodes(conn)}

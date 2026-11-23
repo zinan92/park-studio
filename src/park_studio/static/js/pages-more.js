@@ -152,6 +152,7 @@
           </div>
           <div><label class="sub" style="display:block;margin-bottom:4px">模型名称（默认 neon；若 CLI 未识别会自动回退默认模型）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || 'neon')}" placeholder="neon / gemini-2.5-pro / 留空走默认"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 笔记库路径（只读）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿建目录 / 打包自动扫描）</label><input type="text" id="projRootIn" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">本地语音转写</label>
             <select id="trEng"><option value="mlx-whisper" ${s.transcribeEngine === 'mlx-whisper' ? 'selected' : ''}>mlx-whisper（Apple Silicon 极速本机）</option><option value="faster-whisper" ${s.transcribeEngine === 'faster-whisper' ? 'selected' : ''}>faster-whisper（macOS / Windows 通用）</option></select>
           </div>
@@ -381,11 +382,12 @@
     main.querySelector('#saveAiCfg').onclick = async () => {
       s.aiModel = main.querySelector('#aiModelIn').value.trim();
       s.obsidianPath = main.querySelector('#obPath').value.trim();
+      s.projectRoot = main.querySelector('#projRootIn').value.trim();
       s.transcribeEngine = main.querySelector('#trEng').value;
       try {
-        await PS.api('PUT', '/api/settings', { aiBackend: s.aiBackend, aiModel: s.aiModel, obsidianPath: s.obsidianPath, transcribeEngine: s.transcribeEngine });
+        await PS.api('PUT', '/api/settings', { aiBackend: s.aiBackend, aiModel: s.aiModel, obsidianPath: s.obsidianPath, projectRoot: s.projectRoot, transcribeEngine: s.transcribeEngine });
         await PS.syncFromBackend();
-        PS.toast('配置已写入 ~/.park-studio/config.yaml 并重新扫描 Obsidian ✓', 'good');
+        PS.toast('配置已写入 ~/.park-studio/config.yaml 并重新扫描 Obsidian 与工程目录 ✓', 'good');
       } catch {
         PS.toast('本地配置已保存', 'good');
       }

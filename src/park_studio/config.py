@@ -23,7 +23,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "writing": "003_park原始输出",
         "kline": "007_kline daily newsletter",
     },
-    "projectRoot": "~/Movies/ParkStudio发布工程",
+    "projectRoot": "/Volumes/Phone SSD/视频/exports" if Path("/Volumes/Phone SSD/视频/exports").is_dir() else "~/Movies/ParkStudio",
     "transcribeEngine": "mlx-whisper",
     "tikhubOptionalKey": "",
     "chromePort": 9333,

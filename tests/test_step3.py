@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from park_studio import app as app_mod, config, daemon, publisher
+from park_studio import app as app_mod, config, daemon, projects, publisher
 
 
 def test_mp4_faststart_validator(tmp_path: Path) -> None:
@@ -76,3 +76,40 @@ def test_publish_pack_mark_screenshot_and_launchd(tmp_path: Path, monkeypatch) -
     plist = daemon.render_plist(port=8792)
     assert "com.parkstudio.server" in plist
     assert "<string>8792</string>" in plist
+
+
+def test_universal_project_folder_scaffold_and_import(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    root = tmp_path / "exports"
+    cfg = config.save_config({"obsidianPath": str(tmp_path / "empty"), "projectRoot": str(root)})
+
+    # 1. 定稿自动建标准目录结构
+    ep_dir = projects.scaffold_episode_dir("测试自动标准包", day="2026-11-23", script_body="口播正文", cfg=cfg)
+    assert (ep_dir / "拍摄提纲.md").is_file()
+    assert (ep_dir / "final" / "上传").is_dir()
+    assert (ep_dir / "subtitles").is_dir()
+
+    # 2. 模拟 AI 把成片、3 张封面、文案.txt 放进 final/上传/
+    up = ep_dir / "final" / "上传"
+    (up / "视频（抖音、视频号、小红书、B站、YouTube）.mp4").write_bytes(b"ftypmp42moov0000mdat0000")
+    (up / "竖封面（抖音、视频号）.png").write_bytes(b"\x89PNG")
+    (up / "横封面（抖音、小红书）.png").write_bytes(b"\x89PNG")
+    (up / "16比9封面（B站、YouTube）.png").write_bytes(b"\x89PNG")
+    (up / "文案.txt").write_text(
+        "如果AI有你的手脚，他会比你赚更多吗\n\n话题 · 抖音：#AI工作流 #一人公司\n话题 · 小红书：#效率神器 #Redskill\n",
+        encoding="utf-8",
+    )
+
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+    scanned = client.get("/api/projects").json()
+    assert scanned["mounted"] is True
+    assert len(scanned["projects"]) == 1
+    p0 = scanned["projects"][0]
+    assert p0["stage"] == "ready"
+    assert p0["copyData"]["platforms"]["douyin"]["tags"] == ["AI工作流", "一人公司"]
+
+    imp = client.post("/api/publish/from-project", json={"folder": str(ep_dir)}).json()
+    assert imp["ok"] is True
+    assert imp["episode"]["preflight"]["video"]["faststart"] is True
+    assert (up / "publish.json").is_file()
+

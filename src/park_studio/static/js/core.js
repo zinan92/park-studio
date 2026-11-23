@@ -581,6 +581,7 @@
           }
         }
       }
+      if (b.projects) PS.S.projects = b.projects;
       if (b.launchd) PS.S.launchd = b.launchd;
       if (b.lastMetricsAt) PS.S.daemon.lastMetricsAt = b.lastMetricsAt;
       PS.S.liveFollowerPlats = Object.keys(b.followersLive || {});

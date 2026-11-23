@@ -38,6 +38,7 @@
       PS.S.chromeStatus = res.chromeStatus;
       PS.S.daemon.chromeOnline = !!res.chromeStatus.online;
     }
+    if (res.projects) PS.S.projects = res.projects;
     if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
     PS.save();
   }
@@ -63,51 +64,117 @@
     `, 'mid');
   };
 
-  // ==================== 发布 · 打包（#pub-pack） ====================
+  // ==================== 发布 · 打包（#pub-pack · 统一标准工程目录自动识别） ====================
   PS.pages['pub-pack'] = function () {
     const list = pubEpisodes();
     const ep = list.find(e => e.id === curPubEpId) || list[0];
     curPubEpId = ep.id;
     const pf = ep.preflight || { video: { exists: false, faststart: false, note: '未检测' }, cover_v: false, cover_h: false };
-    const main = PS.shell('pub-pack', [['发布工作台', '#pub-confirm'], ['打包 · publish.json', '#pub-pack']], `
+    const projState = PS.S.projects || { root: PS.S.settings.projectRoot || '~/Movies/ParkStudio', mounted: false, projects: [] };
+    const readyProjs = (projState.projects || []).filter(p => p.stage === 'ready');
+    const cuttingProjs = (projState.projects || []).filter(p => p.stage !== 'ready');
+
+    const projRow = p => {
+      const coversN = [p.coverVPath, p.coverHPath, p.cover169Path].filter(Boolean).length;
+      return `<div class="row" style="padding:10px 12px;border-radius:10px;background:var(--sunk);gap:10px">
+        <div class="min0 grow">
+          <div class="row" style="gap:6px">
+            <b class="clip1" style="font-size:13.5px">${PS.esc(p.title)}</b>
+            <span class="pill ${p.stage === 'ready' ? 'good' : 'info'}">${PS.esc(p.stageLabel)}</span>
+          </div>
+          <div class="row" style="gap:6px;margin-top:4px;font-size:11.5px">
+            <span class="sub mono">${PS.esc(p.date || p.name)}</span>
+            ${p.videoPath ? '<span class="pill good">成片 MP4 ✓</span>' : '<span class="pill">无成片</span>'}
+            ${coversN ? `<span class="pill good">${coversN} 张封面 ✓</span>` : ''}
+            ${p.copyPath ? '<span class="pill good">文案.txt ✓</span>' : ''}
+          </div>
+        </div>
+        ${p.stage === 'ready'
+          ? `<button class="btn primary s" data-import-proj="${PS.esc(p.folder)}">一键载入 → 去填表</button>`
+          : `<span class="sub" style="font-size:12px">待剪完出片</span>`}
+      </div>`;
+    };
+
+    const main = PS.shell('pub-pack', [['发布工作台', '#pub-confirm'], ['打包 · 标准工程目录', '#pub-pack']], `
       <div class="ph">
         <div>
-          <h1>打包 · 各平台文案与工程校验</h1>
-          <p>绑定本地成片与封面路径、纯 Python 校验 MP4 faststart，并真实导出 <code class="mono">~/.park-studio/projects/EP${ep.episode}/publish.json</code>。</p>
+          <h1>打包 · 标准工程包自动识别</h1>
+          <p>所有用户共用同一套标准目录结构（定稿自动建目录、AI 自动放进 <code class="mono">final/上传/</code>），点一下自动识别成片、3 张封面与各平台文案。</p>
         </div>
         <div class="acts">
-          <select id="pkSel" style="width:240px">${list.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
+          <button class="btn" id="rescanProj">${PS.icon('refresh', 'sm')}重新扫描目录</button>
           <a class="btn primary" href="#pub-confirm">去确认 · Chrome 填表 ›</a>
         </div>
       </div>
 
       <div class="card stack">
+        <div class="card-h" style="margin-bottom:2px">
+          <h3>本机工程目录 <span class="pill ${projState.mounted ? 'good' : 'wait'}" style="margin-left:6px">${projState.mounted ? `已挂载 · ${readyProjs.length} 期可发` : '目录未挂载'}</span></h3>
+          <span class="sub mono" style="font-size:12px">${PS.esc(projState.root)}</span>
+        </div>
+        ${readyProjs.length
+          ? `<div class="stack tight">${readyProjs.slice(0, 6).map(projRow).join('')}</div>`
+          : `<div class="src-notice">当前目录暂未扫到含 <code class="mono">final/上传/</code> 的可发成片（可在「系统」页修改统一工程目录）。</div>`}
+        ${cuttingProjs.length ? `<details class="sub"><summary>还有 ${cuttingProjs.length} 个剪辑中 / 草稿目录</summary>
+          <div class="stack tight" style="margin-top:8px">${cuttingProjs.slice(0, 6).map(projRow).join('')}</div>
+        </details>` : ''}
+      </div>
+
+      <div class="card stack">
         <div class="row">
-          <span class="pill ${pf.video?.exists ? (pf.video.faststart ? 'good' : 'wait') : ''}">${pf.video?.exists ? PS.esc(pf.video.note) : '未绑定本地视频'}</span>
-          <span class="pill ${pf.cover_v ? 'good' : ''}">3:4 封面 ${pf.cover_v ? '✓' : '可选'}</span>
-          <span class="pill ${pf.cover_h ? 'good' : ''}">16:9 封面 ${pf.cover_h ? '✓' : '可选'}</span>
-          <span class="pill info">UTM：${PS.esc(ep.campaign || `ep${ep.episode}`)}</span>
+          <b style="font-size:14.5px">当前发布清单</b>
+          <select id="pkSel" style="width:260px">${list.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
+          <span class="grow"></span>
+          <span class="pill ${pf.video?.exists ? (pf.video.faststart ? 'good' : 'wait') : ''}">${pf.video?.exists ? PS.esc(pf.video.note) : '未绑定视频'}</span>
+          <span class="pill ${pf.cover_v ? 'good' : ''}">竖封面 ${pf.cover_v ? '✓' : '–'}</span>
+          <span class="pill ${pf.cover_h ? 'good' : ''}">横/16:9 封面 ${pf.cover_h ? '✓' : '–'}</span>
         </div>
-        <div class="sys-2col">
-          <div>
-            <label class="sub" style="display:block;margin-bottom:4px">本地成片路径（自动注入上传框 + faststart 校验）</label>
-            <input type="text" id="pkVideo" class="mono" value="${PS.esc(ep.videoPath || '')}" placeholder="/Users/wendy/Movies/EP${ep.episode}.mp4">
+        <details class="sub">
+          <summary>高级：手动覆盖成片路径或排期时间</summary>
+          <div class="stack" style="margin-top:10px">
+            <div class="sys-2col">
+              <div>
+                <label class="sub" style="display:block;margin-bottom:4px">本地成片路径</label>
+                <input type="text" id="pkVideo" class="mono" value="${PS.esc(ep.videoPath || '')}" placeholder="/Volumes/Phone SSD/视频/exports/.../视频.mp4">
+              </div>
+              <div>
+                <label class="sub" style="display:block;margin-bottom:4px">计划发布时间（ISO）</label>
+                <input type="text" id="pkSched" class="mono" value="${PS.esc(ep.schedule || '')}" placeholder="2026-11-24T19:00:00+08:00">
+              </div>
+            </div>
+            <div><button class="btn primary s" id="pkSaveBtn">${PS.icon('check', 'sm')}保存并导出 publish.json</button></div>
           </div>
-          <div>
-            <label class="sub" style="display:block;margin-bottom:4px">计划发布时间（ISO）</label>
-            <input type="text" id="pkSched" class="mono" value="${PS.esc(ep.schedule || '')}" placeholder="2026-11-24T19:00:00+08:00">
-          </div>
-        </div>
-        <div class="row">
-          <button class="btn primary" id="pkSaveBtn">${PS.icon('check', 'sm')}校验并导出 publish.json</button>
-          <span class="sub">落盘路径：<code class="mono">~/.park-studio/projects/EP${ep.episode}/publish.json</code></span>
-        </div>
+        </details>
         <pre class="codebox">${PS.esc(JSON.stringify(ep.publishJson || {}, null, 2))}</pre>
       </div>
     `, 'mid');
 
     main.querySelector('#pkSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-pack'](); };
-    main.querySelector('#pkSaveBtn').onclick = async e => {
+    main.querySelector('#rescanProj').onclick = async e => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try {
+        PS.S.projects = await PS.api('GET', '/api/projects');
+        PS.save();
+        PS.toast(`已扫描 ${(PS.S.projects.projects || []).length} 个本机工程目录`, 'good');
+        PS.pages['pub-pack']();
+      } catch (err) { PS.toast(err.message, 'warn'); btn.disabled = false; }
+    };
+    main.querySelectorAll('[data-import-proj]').forEach(b => b.onclick = async e => {
+      const btn = e.currentTarget;
+      const folder = b.dataset.importProj;
+      btn.disabled = true; btn.textContent = '载入中…';
+      try {
+        const res = await PS.api('POST', '/api/publish/from-project', { folder });
+        applyPubRes(res);
+        if (res.episode?.id) curPubEpId = res.episode.id;
+        PS.toast(`已载入《${res.episode?.nick || ''}》成片、封面与文案，正进入填表确认页`, 'good');
+        location.hash = '#pub-confirm';
+      } catch (err) {
+        PS.toast(err.message || '载入失败', 'warn');
+        btn.disabled = false; btn.textContent = '一键载入 → 去填表';
+      }
+    });
+    main.querySelector('#pkSaveBtn')?.addEventListener('click', async e => {
       const btn = e.currentTarget;
       btn.disabled = true;
       try {
@@ -122,7 +189,7 @@
         PS.toast(err.message || '导出失败', 'warn');
         btn.disabled = false;
       }
-    };
+    });
   };
 
   // ==================== 发布 · 确认（#pub-confirm · 100% MIT 开源自研专用 Chrome 填表引擎） ====================
