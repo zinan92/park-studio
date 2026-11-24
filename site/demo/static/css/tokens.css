@@ -1,0 +1,193 @@
+/* Park Studio 设计系统 — Calends 极简黑白灰 + 靛蓝（Radix 12-Step 精密中性灰 · 深色默认 / 浅色高对比） */
+:root {
+  /* Light theme tokens */
+  --ground: #F9F9FA;
+  --surface: #FFFFFF;
+  --sunk: #F3F3F5;
+  --hover: rgba(0, 0, 0, .04);
+  --press: rgba(0, 0, 0, .08);
+  --line: rgba(0, 0, 0, .11);
+  --line-soft: rgba(0, 0, 0, .065);
+
+  /* Frosted top dock */
+  --glass-bg: rgba(255, 255, 255, .80);
+  --glass-bg-strong: rgba(255, 255, 255, .94);
+  --glass-border: rgba(0, 0, 0, .085);
+  --glass-hairline: rgba(0, 0, 0, .06);
+  --glass-thumb: rgba(0, 0, 0, .065);
+  --glass-thumb-hi: rgba(255, 255, 255, .96);
+  --glass-shadow: 0 8px 24px -10px rgba(0, 0, 0, .10), 0 1px 3px rgba(0, 0, 0, .05);
+  --glass-shadow-sm: 0 4px 16px -8px rgba(0, 0, 0, .08), 0 1px 2px rgba(0, 0, 0, .04);
+  --spring: cubic-bezier(0.34, 1.5, 0.64, 1);
+
+  --ink: #111113;
+  --ink-2: #55555B;
+  --ink-3: #86868D;
+
+  /* High-contrast monochrome primary CTA */
+  --cta-bg: #111113;
+  --cta-hover: #27272A;
+  --cta-ink: #FFFFFF;
+  --on-accent: #FFFFFF;
+
+  /* Indigo semantic accent (Calends palette) */
+  --accent: #3E63DD;
+  --accent-hover: #3358D4;
+  --accent-soft: rgba(62, 99, 221, .10);
+  --accent-line: rgba(62, 99, 221, .28);
+
+  --good: #30A46C;
+  --good-soft: rgba(48, 164, 108, .11);
+  --hot: #D97706;
+  --hot-soft: rgba(217, 119, 6, .11);
+  --warn: #E5484D;
+  --warn-soft: rgba(229, 72, 77, .11);
+  --info: #3E63DD;
+  --info-soft: rgba(62, 99, 221, .10);
+  --pub: #7C5CE6;
+  --pub-soft: rgba(124, 92, 230, .11);
+  --pack: #12A594;
+  --pack-soft: rgba(18, 165, 148, .11);
+  --idle: #76767B;
+  --idle-soft: rgba(0, 0, 0, .055);
+
+  /* 平台品牌色（保留识别度） */
+  --p-douyin: #18181B;
+  --p-xhs: #E5484D;
+  --p-bilibili: #00A1D6;
+  --p-channels: #F76B15;
+  --p-youtube: #E52D27;
+  --p-x: #3F3F46;
+  --p-wechat: #30A46C;
+  --p-site: #3E63DD;
+
+  /* 兼容辅助暗色块 */
+  --rail: #0F0F10;
+  --rail-2: #171718;
+  --rail-3: #222224;
+  --rail-ink: #EDEDED;
+  --rail-dim: #76767B;
+  --rail-mute: #A8A8AD;
+  --rail-line: rgba(255, 255, 255, .09);
+  --rail-hot: #7C9BF5;
+  --rail-live: #3DD68C;
+  --brand-ink: #55555B;
+  --brand-hi: #EDEDED;
+  --brand-dot: #3E63DD;
+
+  --studio-bg: #121213;
+  --studio-panel: #19191A;
+  --studio-line: rgba(255, 255, 255, .10);
+  --studio-ink: #EDEDED;
+  --studio-gold: #7C9BF5;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .04);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, .04), 0 10px 26px -10px rgba(0, 0, 0, .08);
+  --shadow-3: 0 24px 64px -16px rgba(0, 0, 0, .22);
+  --lift: 0 2px 6px rgba(0, 0, 0, .05), 0 20px 40px -20px rgba(0, 0, 0, .18);
+  --scrim: rgba(0, 0, 0, .42);
+
+  --sans: "Geist", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --serif: "Geist", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  --mono: "Geist Mono", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --ease: cubic-bezier(.16, 1, .3, 1);
+  --ease-in: cubic-bezier(.16, 1, .3, 1);
+  --fast: 120ms;
+  --mid: 200ms;
+  --side: 244px;
+}
+
+:root[data-theme="dark"] {
+  --ground: #0F0F10;
+  --surface: #171718;
+  --sunk: #121213;
+  --hover: rgba(255, 255, 255, .045);
+  --press: rgba(255, 255, 255, .085);
+  --line: rgba(255, 255, 255, .12);
+  --line-soft: rgba(255, 255, 255, .075);
+
+  --glass-bg: rgba(22, 22, 24, .78);
+  --glass-bg-strong: rgba(25, 25, 27, .94);
+  --glass-border: rgba(255, 255, 255, .09);
+  --glass-hairline: rgba(255, 255, 255, .06);
+  --glass-thumb: rgba(255, 255, 255, .10);
+  --glass-thumb-hi: rgba(255, 255, 255, .14);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 14px 36px -12px rgba(0, 0, 0, .68);
+  --glass-shadow-sm: inset 0 1px 0 rgba(255, 255, 255, .06), 0 8px 22px -10px rgba(0, 0, 0, .54);
+
+  --ink: #EDEDED;
+  --ink-2: #A8A8AD;
+  --ink-3: #76767B;
+
+  /* High-contrast white-on-obsidian primary CTA (Calends dark signature) */
+  --cta-bg: #EDEDED;
+  --cta-hover: #FFFFFF;
+  --cta-ink: #0D0D0D;
+  --on-accent: #0D0D0D;
+
+  --accent: #7C9BF5;
+  --accent-hover: #96B0F8;
+  --accent-soft: rgba(124, 155, 245, .15);
+  --accent-line: rgba(124, 155, 245, .32);
+
+  --good: #3DD68C;
+  --good-soft: rgba(61, 214, 140, .14);
+  --hot: #F5A524;
+  --hot-soft: rgba(245, 165, 36, .15);
+  --warn: #FF5A5F;
+  --warn-soft: rgba(255, 90, 95, .15);
+  --info: #7C9BF5;
+  --info-soft: rgba(124, 155, 245, .15);
+  --pub: #A78BFA;
+  --pub-soft: rgba(167, 139, 250, .15);
+  --pack: #2DD4BF;
+  --pack-soft: rgba(45, 212, 191, .15);
+  --idle: #8E8E93;
+  --idle-soft: rgba(255, 255, 255, .07);
+
+  --p-douyin: #E5E5E7;
+  --p-x: #A1A1AA;
+
+  --rail: #0B0B0C;
+  --rail-2: #151516;
+  --rail-3: #1E1E20;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, .4), 0 12px 28px -12px rgba(0, 0, 0, .45);
+  --shadow-3: 0 24px 64px rgba(0, 0, 0, .68);
+  --lift: 0 2px 6px rgba(0, 0, 0, .4), 0 24px 48px -24px rgba(0, 0, 0, .75);
+  --scrim: rgba(0, 0, 0, .64);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 14px/1.6 var(--sans);
+  font-feature-settings: "ss01";
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.85; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.lg { width: 20px; height: 20px; }
+svg.i.sm { width: 13px; height: 13px; }
+.m0 { margin: 0; }
+.min0 { min-width: 0; }
+.grow { flex: 1; }
+.sub { color: var(--ink-3); font-size: 13px; }
+.mono { font-family: var(--mono); }
+.clip1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.stack.tight { gap: 6px; }
+.rel { position: relative; }

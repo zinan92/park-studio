@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Park Studio · 在线演示</title>
+  <meta name="description" content="Park Studio 免注册在线演示：直接体验中控大屏、选题、剪辑镜头表、7 平台安全填表发布与全网复盘。">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <script>
+    try {
+      var t = localStorage.getItem('ps:theme');
+      if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      else document.documentElement.dataset.theme = 'dark';
+    } catch (e) {
+      document.documentElement.dataset.theme = 'dark';
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700;900&display=swap">
+  <link rel="stylesheet" href="static/css/tokens.css?v=9">
+  <link rel="stylesheet" href="static/css/layout.css?v=9">
+  <link rel="stylesheet" href="static/css/views.css?v=17">
+  <style>
+    .demo-banner {
+      position: sticky;
+      top: 0;
+      z-index: 70;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 20px;
+      font-size: 12.5px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      color: var(--ink-2);
+      flex-wrap: wrap;
+    }
+    .demo-banner-l { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+    .demo-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+    .demo-banner-r { display: flex; align-items: center; gap: 14px; font-weight: 550; }
+    .demo-banner a { color: var(--ink); text-decoration: none; }
+    .demo-banner a:hover { color: var(--accent); }
+    .demo-banner button { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 12px; padding: 0; }
+    .demo-banner button:hover { color: var(--ink); text-decoration: underline; }
+    .top-dock { top: 38px !important; }
+  </style>
+</head>
+<body>
+  <div class="demo-banner" role="region" aria-label="Demo Notice">
+    <div class="demo-banner-l">
+      <span class="demo-dot"></span>
+      <span>这是一个在线演示 — 你可以随意点按、切换深浅色与体验 5 大工作台，所有改动仅保存在当前浏览器。</span>
+      <button type="button" onclick="window.PS && PS.resetDemo()">重置演示数据</button>
+    </div>
+    <div class="demo-banner-r">
+      <a href="../">← 返回官网</a>
+      <a href="../docs/#quickstart">文档</a>
+      <a href="../#community" style="color:var(--accent)">¥199 实战群 &amp; 定制</a>
+      <a href="../#deploy">部署你自己的 →</a>
+    </div>
+  </div>
+  <div id="app"></div>
+  <div id="tip" role="tooltip"></div>
+  <div id="toasts" aria-live="polite"></div>
+
+  <script src="demo-shim.js"></script>
+  <script src="static/js/icons.js?v=8"></script>
+  <script src="static/js/data.js?v=19"></script>
+  <script src="static/js/charts.js?v=13"></script>
+  <script src="static/js/core.js?v=19"></script>
+  <script src="static/js/pages-home.js?v=13"></script>
+  <script src="static/js/pages-flow.js?v=17"></script>
+  <script src="static/js/pages-ops.js?v=15"></script>
+  <script src="static/js/pages-more.js?v=18"></script>
+  <script>PS.boot();</script>
+</body>
+</html>
