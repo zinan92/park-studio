@@ -27,7 +27,7 @@
         </div>
         <div class="acts">
           <a class="btn" href="#position">${PS.icon('star', 'sm')}我的定位</a>
-          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.1.2</a>
+          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.2.0</a>
           <a class="btn" href="https://github.com/zinan92/park-studio/issues" target="_blank" rel="noopener">GitHub Issues ↗</a>
         </div>
       </div>
