@@ -45,6 +45,7 @@
           <p>Park Studio 本机运行状态、${PS.PLAT_ORDER.length} 平台专用浏览器体检（已启用 ${active.length} 家）、本地 Agent / 可选 API 与通知集成。</p>
         </div>
         <div class="acts">
+          <button class="btn" id="btnOnboardingTop">${PS.icon('spark', 'sm')}选平台引导</button>
           <a class="btn" href="#position">${PS.icon('star', 'sm')}我的定位</a>
           <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.3.0</a>
           <a class="btn" href="https://github.com/zinan92/park-studio/issues" target="_blank" rel="noopener">GitHub Issues ↗</a>
@@ -79,9 +80,10 @@
         <span>登录、体检和常用操作；扫码要人在这台电脑前</span>
       </div>
       <section class="card stack">
-        <div class="row">
+        <div class="row" style="flex-wrap:wrap">
           <button class="btn primary" id="btnDocAll">${PS.icon('check', 'sm')}全部检查</button>
           <button class="btn" id="btnLoginAll">${PS.icon('chrome', 'sm')}打开全部登录页</button>
+          <button class="btn" id="btnOnboarding">${PS.icon('spark', 'sm')}按需重选平台</button>
           <button class="btn" id="btnSyncCur">取「${PS.esc(curEp.nick)}」的链接</button>
           <button class="btn" id="btnMetrics">采流量</button>
           <button class="btn" id="btnFollowers">采粉丝</button>
@@ -447,6 +449,8 @@
       }
       PS.save(); PS.pages.settings();
     };
+    main.querySelector('#btnOnboardingTop')?.addEventListener('click', () => PS.openOnboarding());
+    main.querySelector('#btnOnboarding')?.addEventListener('click', () => PS.openOnboarding());
     main.querySelector('#resetDemo')?.addEventListener('click', () => PS.resetDemo());
   };
   PS.pages.system = PS.pages.settings;

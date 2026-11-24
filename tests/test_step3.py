@@ -517,6 +517,37 @@ def test_v030_configurable_teardown_7_angles_and_ai_test(tmp_path: Path, monkeyp
     assert t.json()["reply"] == "OK"
 
 
+def test_v030_onboarding_subset_platforms(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    config.save_config({"obsidianPath": str(tmp_path / "empty")})
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+
+    # 全新用户首次启动应弹出平台选择引导
+    boot1 = client.get("/api/bootstrap").json()
+    assert boot1["needsOnboarding"] is True
+
+    # 用户只发 5 个平台（如 抖音、小红书、B站、YouTube、TikTok）
+    picked = ["douyin", "xhs", "bilibili", "youtube", "tiktok"]
+    done = client.post("/api/onboarding/complete", json={"platforms": picked, "aiBackend": "gemini-api"})
+    assert done.status_code == 200
+    res = done.json()
+    assert res["ok"] is True
+    assert res["needsOnboarding"] is False
+    assert set(res["enabled"]) == set(picked)
+
+    ps = res["platformStatus"]
+    for pid, st in ps.items():
+        if pid in picked:
+            assert st["disabled"] is False
+        else:
+            assert st["disabled"] is True
+
+    # 再次 bootstrap 不再重复弹引导
+    boot2 = client.get("/api/bootstrap").json()
+    assert boot2["needsOnboarding"] is False
+    assert boot2["config"]["onboardingDone"] is True
+
+
 
 
 

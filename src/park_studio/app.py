@@ -164,6 +164,12 @@ class AITestReq(BaseModel):
     geminiApiKey: str | None = None
 
 
+class OnboardingCompleteReq(BaseModel):
+    platforms: list[str]
+    aiBackend: str | None = None
+    aiModel: str | None = None
+
+
 class KbFoldersReq(BaseModel):
     enabled: list[str]
 
@@ -254,11 +260,18 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         lm_row = conn.execute("SELECT v FROM kv WHERE k='last_metrics_at'").fetchone()
         last_metrics_at = lm_row["v"] if lm_row else ""
         followers_live = platforms.get_followers_map(conn, days=30)
+        plat_status = platforms.get_platform_status_map(conn)
+        already_checked = any(
+            (v.get("checkedAt") or "") not in ("", "未检查", "未启用")
+            for v in plat_status.values()
+        )
+        needs_onboarding = (not bool(cfg.get("onboardingDone"))) and (not already_checked)
         return {
             "config": cfg,
+            "needsOnboarding": needs_onboarding,
             "vaultStatus": vault.vault_status(cfg),
             "chromeStatus": cdp.chrome_status(cfg),
-            "platformStatus": platforms.get_platform_status_map(conn),
+            "platformStatus": plat_status,
             "publishEpisodes": publisher.list_episodes(conn),
             "projects": projects.scan_projects(cfg, limit=25),
             "launchd": daemon.daemon_status(),
@@ -846,6 +859,33 @@ def create_app(db_file: Path | None = None) -> FastAPI:
     def _said_text() -> str:
         rows = conn.execute("SELECT topic, text FROM said WHERE muted=0 ORDER BY id DESC LIMIT 12").fetchall()
         return "\n".join(f"- [{r['topic']}] {r['text']}" for r in rows)
+
+    @app.post("/api/onboarding/complete")
+    def api_onboarding_complete(req: OnboardingCompleteReq) -> dict[str, Any]:
+        enabled = [p for p in platforms.PLAT_ORDER if p in set(req.platforms or [])]
+        enabled_set = set(enabled)
+        for pid in platforms.PLAT_ORDER:
+            conn.execute(
+                "UPDATE platform_status SET disabled=? WHERE platform=?",
+                (0 if pid in enabled_set else 1, pid),
+            )
+        conn.commit()
+        patch: dict[str, Any] = {"onboardingDone": True}
+        if req.aiBackend:
+            patch["aiBackend"] = req.aiBackend
+        if req.aiModel is not None:
+            patch["aiModel"] = req.aiModel
+        cfg = config.save_config(patch)
+        names = "、".join(platforms.PLATFORM_SPECS[p]["name"] for p in enabled) or "暂不启用平台"
+        db.log_event(conn, "引导", f"{len(enabled)}/{len(platforms.PLAT_ORDER)} 平台", "完成平台按需选择", names[:60])
+        return {
+            "ok": True,
+            "enabled": enabled,
+            "needsOnboarding": False,
+            "platformStatus": platforms.get_platform_status_map(conn),
+            "config": cfg,
+            "daemonLogs": _recent_logs(),
+        }
 
     @app.post("/api/ai/test")
     def api_ai_test(req: AITestReq | None = None) -> dict[str, Any]:

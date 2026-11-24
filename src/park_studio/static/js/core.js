@@ -566,10 +566,154 @@
       if (b.kb) PS.S.kb = b.kb;
       if (b.materials) PS.S.materials = b.materials;
       if (b.cutEnv) PS.S.cutEnv = b.cutEnv;
+      PS.S.needsOnboarding = !!b.needsOnboarding;
       PS.save();
     } catch (e) {
       PS.backendOnline = false;
     }
+  };
+
+  PS.openOnboarding = function () {
+    const selected = new Set(PS.activePlats());
+    let pickedAi = PS.S.settings.aiBackend || 'gemini-api';
+    const corePlats = PS.PLAT_ORDER.filter(p => !['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(p));
+    const globalPlats = PS.PLAT_ORDER.filter(p => ['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(p));
+
+    const PRESETS = {
+      cn4: ['douyin', 'xhs', 'bilibili', 'channels'],
+      cn5: ['douyin', 'xhs', 'bilibili', 'channels', 'wechat'],
+      mix7: ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'x', 'wechat'],
+      global5: ['youtube', 'x', 'tiktok', 'instagram', 'linkedin'],
+      all12: [...PS.PLAT_ORDER],
+      none: [],
+    };
+
+    const renderGrid = list => list.map(pid => {
+      const p = PS.PLATFORMS[pid];
+      const on = selected.has(pid);
+      return `<button type="button" data-ob-plat="${pid}" class="row" style="text-align:left;padding:10px 12px;border-radius:10px;border:1.5px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'color-mix(in srgb,var(--accent-soft) 45%,var(--surface))' : 'var(--surface)'};cursor:pointer;gap:9px;width:100%;transition:all .15s">
+        ${PS.plogo(pid, 22)}
+        <span class="min0 grow" style="display:flex;flex-direction:column;gap:1px">
+          <b style="font-size:13px;color:var(--ink)">${PS.esc(p.name)}</b>
+          <span class="sub" style="font-size:11px">${PS.esc(p.mode || '')}</span>
+        </span>
+        <span class="pill ${on ? 'accent' : ''}" style="font-size:11px;padding:1px 7px">${on ? '✓ 已选' : '未选'}</span>
+      </button>`;
+    }).join('');
+
+    PS.modal({
+      title: '欢迎使用 Park Studio · 按需选择你真正在发的平台',
+      wide: true,
+      body: `<div class="stack">
+        <div class="callout-warm" style="font-size:13px;line-height:1.6">
+          <b>支持 12 个平台，但不需要全填。</b><br>
+          你平时只发 3 个或 5 个平台，就只勾那几个；没选的平台会自动隐藏，不会出现在大屏、体检或发布队列里，随时都能在「● 系统」里增减。
+        </div>
+        <div class="row" style="gap:6px;flex-wrap:wrap">
+          <span class="sub" style="font-size:12px;font-weight:600">常用组合一键套用：</span>
+          <button type="button" class="btn s" data-ob-preset="cn4">国内 4 家</button>
+          <button type="button" class="btn s" data-ob-preset="cn5">国内 5 家（+ 公众号）</button>
+          <button type="button" class="btn s" data-ob-preset="mix7">国内 + 出海 7 家</button>
+          <button type="button" class="btn s" data-ob-preset="global5">纯出海 5 家</button>
+          <button type="button" class="btn s" data-ob-preset="all12">全部 12 家</button>
+          <button type="button" class="btn s" data-ob-preset="none">清空重选</button>
+        </div>
+        <div class="stack tight">
+          <div class="row"><b style="font-size:13px">中文与主流平台（7 家）</b><span class="grow"></span><span class="pill accent" id="obCount">已选 ${selected.size} / ${PS.PLAT_ORDER.length} 个平台</span></div>
+          <div id="obCoreGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px">${renderGrid(corePlats)}</div>
+        </div>
+        <div class="stack tight">
+          <b style="font-size:13px">海外扩展平台（5 家）</b>
+          <div id="obGlobalGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px">${renderGrid(globalPlats)}</div>
+        </div>
+        <div class="stack tight" style="border-top:1px solid var(--line-soft);padding-top:10px">
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <b style="font-size:13px">顺手选一个 AI 引擎（随时可换）：</b>
+            <div class="seg" style="flex-wrap:wrap" id="obAiSeg">
+              ${[
+                ['gemini-api', 'Gemini API'],
+                ['agy', 'Antigravity'],
+                ['gemini', 'Gemini CLI'],
+                ['claude', 'Claude Code'],
+                ['codex', 'Codex'],
+                ['api', '可选 API'],
+              ].map(([id, lab]) => `<button type="button" class="${pickedAi === id ? 'on' : ''}" data-ob-ai="${id}">${lab}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>`,
+      foot: `<button class="btn" id="obSkip" data-close>稍后再说</button><button class="btn primary" id="obDone">完成配置，进入工作台（已选 ${selected.size} 个）</button>`,
+      onOpen(mb, close) {
+        const refresh = () => {
+          mb.querySelector('#obCoreGrid').innerHTML = renderGrid(corePlats);
+          mb.querySelector('#obGlobalGrid').innerHTML = renderGrid(globalPlats);
+          mb.querySelector('#obCount').textContent = `已选 ${selected.size} / ${PS.PLAT_ORDER.length} 个平台`;
+          mb.querySelector('#obDone').textContent = selected.size
+            ? `完成配置，进入工作台（已选 ${selected.size} 个）`
+            : '暂不启用平台，先体验选题与剪辑';
+          bindGrid();
+        };
+        const bindGrid = () => {
+          mb.querySelectorAll('[data-ob-plat]').forEach(btn => {
+            btn.onclick = () => {
+              const pid = btn.dataset.obPlat;
+              if (selected.has(pid)) selected.delete(pid);
+              else selected.add(pid);
+              refresh();
+            };
+          });
+        };
+        bindGrid();
+        mb.querySelectorAll('[data-ob-preset]').forEach(btn => {
+          btn.onclick = () => {
+            selected.clear();
+            for (const p of (PRESETS[btn.dataset.obPreset] || [])) selected.add(p);
+            refresh();
+          };
+        });
+        mb.querySelectorAll('[data-ob-ai]').forEach(btn => {
+          btn.onclick = () => {
+            pickedAi = btn.dataset.obAi;
+            mb.querySelectorAll('[data-ob-ai]').forEach(x => x.classList.toggle('on', x.dataset.obAi === pickedAi));
+          };
+        });
+        mb.querySelector('#obSkip').onclick = async () => {
+          PS.S.needsOnboarding = false;
+          PS.S.settings.onboardingDone = true;
+          await PS.api('PUT', '/api/settings', { onboardingDone: true }).catch(() => {});
+          PS.save();
+          close();
+        };
+        mb.querySelector('#obDone').onclick = async e => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          btn.textContent = '正在保存配置…';
+          try {
+            const r = await PS.api('POST', '/api/onboarding/complete', {
+              platforms: [...selected],
+              aiBackend: pickedAi,
+            });
+            if (r.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...r.platformStatus };
+            if (r.config) PS.S.settings = { ...PS.S.settings, ...r.config };
+            if (r.daemonLogs) PS.S.daemonLogs = r.daemonLogs;
+            PS.S.needsOnboarding = false;
+            PS.save();
+            close();
+            PS.toast(
+              r.enabled.length
+                ? `已为你启用 ${r.enabled.length} 个平台，其余 ${PS.PLAT_ORDER.length - r.enabled.length} 个已安静隐藏 ✓`
+                : '已设为暂不启用发布平台，随时可在「系统」开启 ✓',
+              'good',
+            );
+            PS.route();
+          } catch (err) {
+            PS.toast(err.message || '保存失败', 'warn');
+            btn.disabled = false;
+            refresh();
+          }
+        };
+      },
+    });
   };
 
   PS.boot = async function () {
@@ -577,5 +721,8 @@
     if (!location.hash || location.hash === '#home') location.hash = '#dashboard';
     await PS.syncFromBackend();
     PS.route();
+    if (PS.S.needsOnboarding) {
+      setTimeout(() => PS.openOnboarding(), 180);
+    }
   };
 })();

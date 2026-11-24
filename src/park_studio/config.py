@@ -21,6 +21,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "teardownMode": "standard",     # lite | standard | deep | custom
     "teardownModules": ["mainline", "opening", "segments", "angles7"],
     "teardownCustomPrompt": "",
+    "onboardingDone": False,
     "obsidianPath": "~/Documents/Obsidian",
     "newsletterItemsPath": "",
     "obsidianFolders": {
