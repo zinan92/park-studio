@@ -370,5 +370,153 @@ def test_dual_mode_cutter_srt_render_and_landing(tmp_path: Path, monkeypatch) ->
         assert landed["publishEpisode"]["preflight"]["video"]["faststart"] is True
 
 
+def test_v030_twelve_platforms_and_global_toggle(tmp_path: Path, monkeypatch) -> None:
+    from park_studio import platforms
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    config.save_config({"obsidianPath": str(tmp_path / "empty")})
+    assert len(platforms.PLAT_ORDER) == 12
+    for pid in ("tiktok", "instagram", "threads", "linkedin", "meta"):
+        assert pid in platforms.PLAT_ORDER
+        assert pid in publisher.UPLOAD_URLS
+
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+    boot = client.get("/api/bootstrap").json()
+    ps = boot["platformStatus"]
+    assert len(ps) == 12
+    assert ps["douyin"]["disabled"] is False
+    for pid in ("tiktok", "instagram", "threads", "linkedin", "meta"):
+        assert ps[pid]["disabled"] is True
+
+    # 一键启用 TikTok 后应写入 SQLite
+    toggled = client.patch("/api/platforms/tiktok", json={"disabled": False})
+    assert toggled.status_code == 200
+    assert toggled.json()["platformStatus"]["tiktok"]["disabled"] is False
+
+
+def test_v030_cut_import_clears_stale_hooks_and_shots(tmp_path: Path, monkeypatch) -> None:
+    from park_studio import cutter
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    config.save_config({"obsidianPath": str(tmp_path / "empty")})
+    monkeypatch.setattr(
+        cutter,
+        "probe_video",
+        lambda _p: {"duration": 12.5, "durationText": "12.5 秒", "width": 1920, "height": 1080, "sizeMb": 5.0},
+    )
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+    cut = client.get("/api/bootstrap").json()["cutProject"]
+    cut_id = cut["id"]
+    # 先确认默认示例有旧 hookIdx 和 shots
+    assert len(cut["hookIdx"]) > 0
+    assert len(cut["shots"]) > 0
+
+    fake_video = tmp_path / "new_ep.mp4"
+    fake_video.write_bytes(b"ftypmp42moov0000mdat0000")
+    imp = client.post(
+        f"/api/cut/{cut_id}/import-media",
+        json={"video_path": str(fake_video), "mode": "rough"},
+    )
+    assert imp.status_code == 200
+    updated = imp.json()["cutProject"]
+    assert updated["hookIdx"] == []
+    assert updated["shots"] == []
+    assert updated["outputPath"] == ""
+
+
+def test_v030_materials_four_kinds_and_pagination(tmp_path: Path, monkeypatch) -> None:
+    from park_studio import materials
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    cat_dir = tmp_path / "catalog"
+    cat_dir.mkdir()
+    (cat_dir / "image-styles.json").write_text(json.dumps([{"id": "i1", "name": "极简白底", "cat": "封面"}]), encoding="utf-8")
+    (cat_dir / "motion-styles.json").write_text(json.dumps([{"id": "m1", "name": "弹字", "cat": "字幕"}]), encoding="utf-8")
+    (cat_dir / "motions.json").write_text(json.dumps({"cards": [{"id": "mc1", "title": "数字翻转", "group": "数据卡", "summary": "大字滚动"}]}), encoding="utf-8")
+    (cat_dir / "make.json").write_text(json.dumps([{"id": "v1", "name": "Remotion", "group": "动效"}]), encoding="utf-8")
+    (cat_dir / "video-cases.json").write_text(
+        json.dumps([{"id": f"c{i}", "title": f"案例 {i}", "cat": "爆款"} for i in range(60)]),
+        encoding="utf-8",
+    )
+    cfg = config.save_config({"obsidianPath": str(tmp_path / "empty"), "catalogDir": str(cat_dir)})
+    page1 = materials.get_materials(kind="cases", offset=0, limit=20, cfg=cfg)
+    assert page1["counts"]["image"] == 1
+    assert page1["counts"]["motion"] == 2
+    assert page1["counts"]["video"] == 1
+    assert page1["counts"]["cases"] == 60
+    assert page1["counts"]["all"] == 64
+    assert len(page1["items"]) == 20
+    assert page1["hasMore"] is True
+
+    page3 = materials.get_materials(kind="cases", offset=40, limit=20, cfg=cfg)
+    assert len(page3["items"]) == 20
+    assert page3["hasMore"] is False
+
+
+def test_v030_configurable_teardown_7_angles_and_ai_test(tmp_path: Path, monkeypatch) -> None:
+    from park_studio import ai, benchmarks
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    config.save_config({"obsidianPath": str(tmp_path / "empty")})
+
+    captured_prompts: list[str] = []
+
+    def fake_run_prompt(prompt: str, **kwargs):
+        captured_prompts.append(prompt)
+        if prompt.strip() == "请只回复 OK":
+            return {"text": "OK", "backend": "gemini-api", "model": "gemini-2.5-flash"}
+        if "CUSTOM_MARKER" in prompt:
+            return {
+                "text": json.dumps({"mainline": "自定义主线", "why_hit": ["自定义原因"], "markdown": "## 自定义\n完成"}, ensure_ascii=False),
+                "backend": "gemini-api",
+                "model": "gemini-2.5-flash",
+            }
+        angles = [
+            {"lens": lens, "say": f"我用{lens}视角讲个实话，其实这件事没那么复杂。" * 3, "text": f"{lens}展开", "needs_own": "补一段自己数据"}
+            for lens in benchmarks.TEARDOWN_LENSES
+        ]
+        payload = {
+            "mainline": "普通人用本地工作流省下 80% 重复运营",
+            "why_hit": ["强反差开头", "真实录屏证明"],
+            "opening": {"hook": "前3秒抛反差数字", "promise": "看完就能自己装一套"},
+            "segments": [{"part": "破题", "role": "留存", "summary": "晒痛点"}],
+            "universal_truth": "工具的价值在于消除手动摩擦",
+            "angles": angles,
+            "strongest": [{"lens": "个人经历", "index": 0, "why": "最真实可信"}, {"lens": "认知反差", "index": 3, "why": "最抓前3秒"}],
+            "hooks": ["钩子A", "钩子B"],
+            "my_angle": "结合开源本地中控实战",
+        }
+        return {"text": json.dumps(payload, ensure_ascii=False), "backend": "gemini-api", "model": "gemini-2.5-flash"}
+
+    monkeypatch.setattr(ai, "run_prompt", fake_run_prompt)
+
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+
+    # 1. 标准 7 角度拆解 + 详情回读 structured
+    r = client.post("/api/benchmarks/teardown", json={"title": "AI如何租人", "author": "测试博主", "mode": "standard"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["mode"] == "standard"
+    assert len(data["structured"]["angles"]) == 7
+    assert len(data["structured"]["strongest"]) == 2
+    det = client.get(f"/api/benchmarks/detail?id={data['id']}").json()
+    assert len(det["structured"]["angles"]) == 7
+
+    # 2. 自定义 Prompt 模板拆解
+    r2 = client.post(
+        "/api/benchmarks/teardown",
+        json={"title": "自定义测试", "mode": "custom", "custom_prompt": "CUSTOM_MARKER 标题={title} 作者={author}"},
+    )
+    assert r2.status_code == 200
+    assert any("CUSTOM_MARKER 标题=自定义测试" in p for p in captured_prompts)
+
+    # 3. AI 连通性测试接口
+    t = client.post("/api/ai/test", json={"aiBackend": "gemini-api", "aiModel": "gemini-2.5-flash"})
+    assert t.status_code == 200
+    assert t.json()["ok"] is True
+    assert t.json()["reply"] == "OK"
+
+
+
 
 

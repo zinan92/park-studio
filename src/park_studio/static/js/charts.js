@@ -57,7 +57,7 @@
         const y1 = Y(acc), y2 = Y(acc + g.v);
         const hh = Math.max(1.5, y1 - y2 - (j < r.segs.length - 1 ? 1 : 0));
         acc += g.v;
-        const col = `var(--p-${g.p}, ${PS.PLATFORMS[g.p]?.color || '#C2480A'})`;
+        const col = `var(--p-${g.p}, ${PS.PLATFORMS[g.p]?.color || '#3E63DD'})`;
         svg += `<rect x="${x.toFixed(1)}" y="${y2.toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" rx="${j === r.segs.length - 1 ? 3 : 1}" fill="${col}" fill-opacity="0.88"/>`;
       });
 
@@ -96,7 +96,7 @@
     const X = i => (i / (vals.length - 1)) * W;
     const Y = v => H - 3 - (hi === lo ? 0.5 : (v - lo) / (hi - lo)) * (H - 8);
     const pts = vals.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
-    const col = `var(--p-${platId}, ${PS.PLATFORMS[platId]?.color || '#C2480A'})`;
+    const col = `var(--p-${platId}, ${PS.PLATFORMS[platId]?.color || '#3E63DD'})`;
     const gid = `sp-${platId}`;
     const tip = `${PS.PLATFORMS[platId].name} 近 ${days.length} 天\n${PS.fmt(vals[0])} → ${PS.fmt(vals[vals.length - 1])} (+${PS.fmt(vals[vals.length - 1] - vals[0])})`;
     return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" data-tip="${PS.esc(tip)}">

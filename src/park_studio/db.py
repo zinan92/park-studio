@@ -348,6 +348,20 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
                 (pid, st, det, ts),
             )
 
+    # 扩展海外 5 平台（默认停用，用户在「系统」按需一键启用，不撑爆国内默认视图）
+    global_extras = [
+        ("tiktok", "warn", "海外可选平台 · 在系统页点「启用」后通过专用 Chrome 登录"),
+        ("instagram", "warn", "海外可选平台 · 支持 Instagram Reels / 图文半自动填表"),
+        ("threads", "warn", "海外可选平台 · 支持 Threads 短帖半自动填表"),
+        ("linkedin", "warn", "海外可选平台 · 支持 LinkedIn 视频/长帖半自动填表"),
+        ("meta", "warn", "海外可选平台 · Meta Business Suite（一次同时发 IG + Facebook）"),
+    ]
+    for pid, st, det in global_extras:
+        conn.execute(
+            "INSERT OR IGNORE INTO platform_status(platform, state, detail, disabled, checked_at, updated_at) VALUES (?,?,?,1,'未启用',?)",
+            (pid, st, det, ts),
+        )
+
     if conn.execute("SELECT COUNT(*) FROM publish_episodes").fetchone()[0] == 0:
         ep_seeds = [
             (

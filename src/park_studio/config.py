@@ -17,6 +17,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "apiBaseUrl": "https://api.deepseek.com/v1",
     "apiKey": "",
     "apiModel": "deepseek-chat",
+    "geminiApiKey": "",
+    "teardownMode": "standard",     # lite | standard | deep | custom
+    "teardownModules": ["mainline", "opening", "segments", "angles7"],
+    "teardownCustomPrompt": "",
     "obsidianPath": "~/Documents/Obsidian",
     "newsletterItemsPath": "",
     "obsidianFolders": {

@@ -150,6 +150,18 @@ class BenchmarkTeardownReq(BaseModel):
     author: str = ""
     url: str = ""
     transcript: str = ""
+    mode: str = ""
+    modules: list[str] | None = None
+    custom_prompt: str = ""
+
+
+class AITestReq(BaseModel):
+    aiBackend: str | None = None
+    aiModel: str | None = None
+    apiBaseUrl: str | None = None
+    apiKey: str | None = None
+    apiModel: str | None = None
+    geminiApiKey: str | None = None
 
 
 class KbFoldersReq(BaseModel):
@@ -381,16 +393,20 @@ def create_app(db_file: Path | None = None) -> FastAPI:
                 url=req.url,
                 transcript=req.transcript,
                 positioning_text=_positioning_text(),
+                mode=req.mode,
+                modules=req.modules,
+                custom_prompt=req.custom_prompt,
+                cfg=cfg,
             )
         except ai.AIError as exc:
             raise HTTPException(502, str(exc)) from exc
         return {**res, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg)}
 
-    # ---------- 视觉素材库（三大类：图片 / 视频动效 / 做视频） ----------
+    # ---------- 视觉素材库（四大类：图片 / 视频动效 / 做视频 / 视频案例 2,656+） ----------
     @app.get("/api/materials")
-    def api_materials(kind: str = "image", cat: str = "", q: str = "", limit: int = 60) -> dict[str, Any]:
+    def api_materials(kind: str = "image", cat: str = "", q: str = "", offset: int = 0, limit: int = 48) -> dict[str, Any]:
         cfg = config.load_config()
-        return materials.get_materials(kind=kind, cat=cat, q=q, limit=limit, cfg=cfg)
+        return materials.get_materials(kind=kind, cat=cat, q=q, offset=offset, limit=limit, cfg=cfg)
 
     @app.get("/api/materials/asset")
     def api_material_asset(folder: str, file: str) -> FileResponse:
@@ -580,12 +596,22 @@ def create_app(db_file: Path | None = None) -> FastAPI:
                         srt_str = str(cand)
                         break
 
+        prev_src = str(row["source_file"] or "")
+        src_changed = bool(vp_str and vp_str != prev_src)
         meta_patch: dict[str, Any] = {
             "mode": req.mode or ("motion" if srt_str else "rough"),
             "srtPath": srt_str,
             "videoInfo": vinfo,
         }
-        lines_json = row["lines_json"]
+        lines_json = "[]" if (src_changed and not srt_str) else row["lines_json"]
+        if src_changed:
+            meta_patch["dropIdx"] = []
+            meta_patch["outputPath"] = ""
+            meta_patch["publishFolder"] = ""
+            meta_patch["hasRealTranscript"] = bool(srt_str)
+            if not srt_str:
+                conn.execute("DELETE FROM kv WHERE k=?", (f"cut_plan:{cut_id}",))
+
         if srt_str:
             try:
                 plan_data = cutter.parse_srt(Path(srt_str).expanduser())
@@ -596,10 +622,16 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             meta_patch["dropIdx"] = plan_data["drop"]
             meta_patch["hasRealTranscript"] = True
 
-        conn.execute(
-            "UPDATE cut_projects SET title=?, source_file=?, duration=?, lines_json=?, updated_at=? WHERE id=?",
-            (title, vp_str or row["source_file"], dur_txt, lines_json, db.now_iso(), cut_id),
-        )
+        if src_changed or srt_str:
+            conn.execute(
+                "UPDATE cut_projects SET title=?, source_file=?, duration=?, lines_json=?, hook_idx_json='[]', shots_json='[]', worktable_path='', status='editing', updated_at=? WHERE id=?",
+                (title, vp_str or row["source_file"], dur_txt, lines_json, db.now_iso(), cut_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE cut_projects SET title=?, source_file=?, duration=?, lines_json=?, updated_at=? WHERE id=?",
+                (title, vp_str or row["source_file"], dur_txt, lines_json, db.now_iso(), cut_id),
+            )
         conn.commit()
         _save_cut_meta(conn, cut_id, meta_patch)
         db.log_event(conn, f"EP{row['episode']}", "剪辑台", "导入原片/SRT", Path(vp_str or srt_str).name[:44])
@@ -632,11 +664,17 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             try:
                 c2.execute("INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)", (f"cut_plan:{cut_id}", json.dumps(plan_data, ensure_ascii=False)))
                 c2.execute(
-                    "UPDATE cut_projects SET source_file=?, duration=?, lines_json=?, updated_at=? WHERE id=?",
+                    "UPDATE cut_projects SET source_file=?, duration=?, lines_json=?, hook_idx_json='[]', shots_json='[]', worktable_path='', status='editing', updated_at=? WHERE id=?",
                     (str(vp), vinfo["durationText"], json.dumps(plan_data["lines"], ensure_ascii=False), db.now_iso(), cut_id),
                 )
                 c2.commit()
-                _save_cut_meta(c2, cut_id, {"dropIdx": plan_data["drop"], "videoInfo": vinfo, "hasRealTranscript": True})
+                _save_cut_meta(c2, cut_id, {
+                    "dropIdx": plan_data["drop"],
+                    "videoInfo": vinfo,
+                    "hasRealTranscript": True,
+                    "outputPath": "",
+                    "publishFolder": "",
+                })
                 db.log_event(c2, f"EP{row['episode']}", tr.get("engine", "whisper"), "本地转写与口误分析", f"{len(plan_data['lines'])} 句 · 标出 {len(plan_data['drop'])} 处可剪")
             finally:
                 c2.close()
@@ -808,6 +846,30 @@ def create_app(db_file: Path | None = None) -> FastAPI:
     def _said_text() -> str:
         rows = conn.execute("SELECT topic, text FROM said WHERE muted=0 ORDER BY id DESC LIMIT 12").fetchall()
         return "\n".join(f"- [{r['topic']}] {r['text']}" for r in rows)
+
+    @app.post("/api/ai/test")
+    def api_ai_test(req: AITestReq | None = None) -> dict[str, Any]:
+        import time as _time
+        cfg = config.load_config()
+        if req is not None:
+            for k in ("aiBackend", "aiModel", "apiBaseUrl", "apiKey", "apiModel", "geminiApiKey"):
+                v = getattr(req, k, None)
+                if v is not None:
+                    cfg[k] = v
+        t0 = _time.monotonic()
+        try:
+            res = ai.run_prompt("请只回复 OK", cfg=cfg, timeout=25)
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        ms = int((_time.monotonic() - t0) * 1000)
+        db.log_event(conn, "AI", f"{res['backend']}/{res['model']}", "连通性测试", f"成功 · {ms}ms")
+        return {
+            "ok": True,
+            "backend": res["backend"],
+            "model": res["model"],
+            "reply": res["text"][:120],
+            "latencyMs": ms,
+        }
 
     @app.post("/api/ai/hooks")
     def ai_hooks(req: AIRequest) -> dict[str, Any]:

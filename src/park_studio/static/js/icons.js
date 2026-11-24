@@ -74,9 +74,29 @@
       id: 'wechat', name: '公众号', short: '公', color: '#07C160', mode: 'auto',
       svg: '<path fill="#fff" d="M9.5 4C5.3 4 2 6.8 2 10.3c0 1.9 1 3.6 2.6 4.7L4 17.5l2.7-1.4c.9.3 1.8.4 2.8.4.4 0 .7 0 1.1-.1-.2-.6-.3-1.2-.3-1.9 0-3.2 3-5.8 6.8-5.8h.5C16.9 6 13.5 4 9.5 4zm7.6 6.2c-3.1 0-5.7 2.1-5.7 4.7s2.6 4.7 5.7 4.7c.7 0 1.4-.1 2.1-.3l2.1 1.1-.5-1.9c1.2-.9 2-2.2 2-3.6 0-2.6-2.5-4.7-5.7-4.7z"/>',
     },
+    tiktok: {
+      id: 'tiktok', name: 'TikTok', short: 'TT', color: '#111111', mode: 'manual',
+      svg: '<path fill="#fff" d="M16.6 5.82A4.28 4.28 0 0 1 15.54 3h-3.09v12.4a2.59 2.59 0 0 1-2.59 2.5 2.59 2.59 0 0 1-2.6-2.6 2.59 2.59 0 0 1 2.6-2.6c.27 0 .53.04.77.12V9.66a5.7 5.7 0 0 0-.77-.05A5.7 5.7 0 0 0 4.15 15.3 5.7 5.7 0 0 0 9.86 21a5.7 5.7 0 0 0 5.7-5.7V9.01a7.35 7.35 0 0 0 4.29 1.38V7.3s-1.88.09-3.25-1.48z"/>',
+    },
+    instagram: {
+      id: 'instagram', name: 'Instagram', short: 'IG', color: '#E1306C', mode: 'manual',
+      svg: '<rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="#fff" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="#fff"/>',
+    },
+    threads: {
+      id: 'threads', name: 'Threads', short: 'Th', color: '#1A1A1A', mode: 'manual',
+      svg: '<text x="12" y="16.5" text-anchor="middle" fill="#fff" font-size="14" font-weight="800" font-family="sans-serif">@</text>',
+    },
+    linkedin: {
+      id: 'linkedin', name: 'LinkedIn', short: 'in', color: '#0A66C2', mode: 'manual',
+      svg: '<text x="12" y="16" text-anchor="middle" fill="#fff" font-size="12" font-weight="800" font-family="sans-serif">in</text>',
+    },
+    meta: {
+      id: 'meta', name: 'Meta', short: 'FB', color: '#1877F2', mode: 'manual',
+      svg: '<path fill="#fff" d="M13.5 21v-7.5h2.5l.4-3h-2.9V8.6c0-.9.3-1.5 1.5-1.5h1.5V4.4c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H8v3h2.4V21h3.1z"/>',
+    },
   };
 
-  PS.PLAT_ORDER = ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'x', 'wechat'];
+  PS.PLAT_ORDER = ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'x', 'wechat', 'tiktok', 'instagram', 'threads', 'linkedin', 'meta'];
 
   PS.plogo = (id, size = 22) => {
     const p = PS.PLATFORMS[id] || { color: '#4A515B', svg: '' };

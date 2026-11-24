@@ -23,9 +23,14 @@ UPLOAD_URLS: dict[str, str] = {
     "youtube": "https://studio.youtube.com/",
     "x": "https://x.com/compose/post",
     "wechat": "https://mp.weixin.qq.com/",
+    "tiktok": "https://www.tiktok.com/tiktokstudio/upload",
+    "instagram": "https://www.instagram.com/",
+    "threads": "https://www.threads.net/",
+    "linkedin": "https://www.linkedin.com/feed/",
+    "meta": "https://business.facebook.com/latest/composer",
 }
 
-DOMESTIC_MANUAL = {"douyin", "xhs", "bilibili", "channels"}
+DOMESTIC_MANUAL = {"douyin", "xhs", "bilibili", "channels", "tiktok", "instagram", "threads", "linkedin", "meta"}
 
 
 def check_mp4_faststart(path: Path) -> dict[str, Any]:
@@ -432,6 +437,34 @@ async def fill_platform(
             if await _click_selector(client, sid, "#upload-icon, ytcp-icon-button#upload-icon", wait_s=10.0):
                 await asyncio.sleep(2.0)
 
+        # 抖音：若顶部弹出「你还有上次未发布的视频，是否继续编辑？[继续编辑][放弃]」，先点「放弃」腾出干净上传区
+        if pid == "douyin":
+            dismissed_draft = await client.evaluate(
+                sid,
+                """(() => {
+                  const body = (document.body && document.body.innerText) || '';
+                  if (!body.includes('未发布的视频')) return false;
+                  for (const el of document.querySelectorAll('button, a, span, div')) {
+                    if ((el.innerText || '').trim() === '放弃') { el.click(); return true; }
+                  }
+                  return false;
+                })()""",
+            )
+            if dismissed_draft:
+                await asyncio.sleep(1.5)
+                filled_notes.append("已自动清理上次未发布草稿提示")
+
+        # LinkedIn / Instagram / Threads 需要先点「新建帖子」按钮才会弹出编辑器
+        if pid == "linkedin":
+            await _click_selector(client, sid, "button.share-box-feed-entry__trigger, button[aria-label*='Start a post'], button[aria-label*='开始发帖']", wait_s=8.0)
+            await asyncio.sleep(1.5)
+        elif pid == "instagram":
+            await _click_selector(client, sid, "svg[aria-label='New post'], svg[aria-label='新帖子'], a[href='#'] svg[aria-label*='Create']", wait_s=8.0)
+            await asyncio.sleep(1.5)
+        elif pid == "threads":
+            await _click_selector(client, sid, "svg[aria-label='Create'], div[role=button][aria-label*='Create'], div[role=button][aria-label*='发帖']", wait_s=8.0)
+            await asyncio.sleep(1.5)
+
         # 公众号：若已登录首页（URL 带 token），直接跳到新建图文草稿编辑器
         if pid == "wechat":
             import re
@@ -448,9 +481,11 @@ async def fill_platform(
                 return _fail_login("公众号尚未登录（未检测到 token），请扫码后重试")
 
         # 1. 如绑定了本地视频文件，等待上传框挂载并通过原生 CDP setFileInputFiles 自动注入（支持穿透 Shadow DOM）
+        video_required_plats = {"douyin", "xhs", "bilibili", "channels", "youtube", "tiktok", "instagram", "meta"}
+        uploaded_ok = False
+        text_filled_ok = False
         if has_video and video_file is not None and pid != "wechat":
-            uploaded = False
-            sels = ("input[type=file]",) if pid == "youtube" else (
+            sels = ("input[type=file]",) if pid in ("youtube", "tiktok", "instagram", "meta", "linkedin") else (
                 "input.upload-input",
                 "input[type=file][accept*='video']",
                 "input[type=file][accept*='.mp4']",
@@ -470,39 +505,45 @@ async def fill_platform(
                 try:
                     if await client.set_file_input(sid, sel, [str(video_file)]):
                         filled_notes.append(f"已自动选片 {video_file.name}")
-                        uploaded = True
-                        await asyncio.sleep(5.0 if pid == "youtube" else 3.5)
+                        uploaded_ok = True
+                        await asyncio.sleep(5.0 if pid in ("youtube", "tiktok", "meta") else 3.5)
                         break
                 except Exception:
                     continue
-            if not uploaded:
-                filled_notes.append("未找到视频上传框，请在页面手动拖入成片")
-        elif pid in ("douyin", "xhs", "bilibili", "channels", "youtube"):
-            filled_notes.append("未在「发布 → 打包」绑定本地 .mp4（抖音/小红书/B站需先选片才会出现标题和文案框）")
+            if not uploaded_ok:
+                filled_notes.append("未找到视频上传框或选片未生效")
+        elif pid in video_required_plats:
+            filled_notes.append("未在「发布 → 打包」绑定本地 .mp4（视频平台需先选片才会出现标题和文案框）")
 
         # 2. 按平台等待输入框挂载并填写标题 / 文案 / 封面（绝不点击最终发布按钮！）
         try:
             if pid == "x":
                 if await _focus_and_insert(client, sid, "[data-testid=tweetTextarea_0]", full_body[:275], wait_s=14.0):
                     filled_notes.append("已自动填入 X 文案")
+                    text_filled_ok = True
                 else:
                     filled_notes.append("未等到 X 发帖输入框挂载")
             elif pid == "douyin":
-                if has_video:
+                if uploaded_ok:
                     if await _set_input_value(client, sid, "input[placeholder*='标题'], input[placeholder*='作品标题']", title[:30], wait_s=14.0):
                         filled_notes.append("已填抖音标题")
+                        text_filled_ok = True
                     if douyin_body and await _focus_and_insert(client, sid, ".zone-container[contenteditable=true], [contenteditable=true]", douyin_body[:400], wait_s=6.0):
                         filled_notes.append("已填简介与话题")
+                        text_filled_ok = True
             elif pid == "xhs":
-                if has_video:
+                if uploaded_ok:
                     if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:20], wait_s=14.0):
                         filled_notes.append("已填小红书标题")
+                        text_filled_ok = True
                     if await _focus_and_insert(client, sid, ".tiptap.ProseMirror, .ProseMirror, #post-textarea, [contenteditable=true]", full_body[:600], wait_s=6.0):
                         filled_notes.append("已填正文与标签")
+                        text_filled_ok = True
             elif pid == "bilibili":
-                if has_video:
+                if uploaded_ok:
                     if await _set_input_value(client, sid, "input[placeholder*='标题']", title[:80], wait_s=14.0):
                         filled_notes.append("已填 B 站标题")
+                        text_filled_ok = True
                     # 关闭 B 站首次弹出的「开启通知 → 知道了」引导弹窗
                     await client.evaluate(
                         sid,
@@ -515,19 +556,40 @@ async def fill_platform(
                     )
                     await asyncio.sleep(0.3)
             elif pid == "channels":
-                if has_video:
+                if uploaded_ok:
                     if await _focus_and_insert(client, sid, "[contenteditable=true]", full_body[:500], wait_s=12.0):
                         filled_notes.append("已填视频号描述")
+                        text_filled_ok = True
             elif pid == "youtube":
-                if has_video:
+                if uploaded_ok:
                     if await _focus_and_insert(client, sid, "#textbox", title[:100], nth=0, clear_first=True, wait_s=14.0):
                         filled_notes.append("已填 YouTube 标题")
+                        text_filled_ok = True
                     if full_body and await _focus_and_insert(client, sid, "#textbox", full_body[:4500], nth=1, wait_s=6.0):
                         filled_notes.append("已填 YouTube 简介与标签")
+                        text_filled_ok = True
                     if has_cover_h and cover_h_file is not None and await _wait_for_selector(client, sid, "input#file-loader", timeout_s=5.0):
                         if await client.set_file_input(sid, "input#file-loader", [str(cover_h_file)]):
                             filled_notes.append(f"已上传 16:9 封面 {cover_h_file.name}")
                             await asyncio.sleep(1.5)
+            elif pid == "tiktok":
+                if uploaded_ok:
+                    if await _focus_and_insert(client, sid, ".public-DraftEditor-content, [contenteditable=true]", full_body[:2000], wait_s=14.0):
+                        filled_notes.append("已填 TikTok 文案与话题")
+                        text_filled_ok = True
+            elif pid in ("instagram", "meta"):
+                if uploaded_ok:
+                    if await _focus_and_insert(client, sid, "div[role=textbox][contenteditable=true], textarea[aria-label*='caption'], [contenteditable=true]", full_body[:2000], wait_s=12.0):
+                        filled_notes.append(f"已填 {platforms.PLATFORM_SPECS[pid]['name']} 文案")
+                        text_filled_ok = True
+            elif pid == "threads":
+                if await _focus_and_insert(client, sid, "div[role=textbox][contenteditable=true], [contenteditable=true]", full_body[:480], wait_s=12.0):
+                    filled_notes.append("已填 Threads 文案")
+                    text_filled_ok = True
+            elif pid == "linkedin":
+                if await _focus_and_insert(client, sid, ".ql-editor, div[role=textbox][contenteditable=true]", full_body[:2800], wait_s=12.0):
+                    filled_notes.append("已填 LinkedIn 正文")
+                    text_filled_ok = True
             elif pid == "wechat":
                 # 先关掉公众号编辑器首次弹出的功能引导弹窗（「我知道了」）
                 await client.evaluate(
@@ -541,36 +603,50 @@ async def fill_platform(
                 await asyncio.sleep(0.5)
                 if await _set_input_value(client, sid, "#title, textarea[placeholder*='标题'], input[placeholder*='标题']", title[:64], wait_s=12.0):
                     filled_notes.append("已填公众号标题")
+                    text_filled_ok = True
                 if await _focus_and_insert(client, sid, ".ProseMirror, [contenteditable=true]", full_body[:4000], wait_s=8.0):
                     filled_notes.append("已填公众号正文草稿")
-                if not filled_notes:
-                    filled_notes.append("已打开公众号新建图文编辑器")
+                    text_filled_ok = True
         except Exception as exc:
             filled_notes.append(f"部分字段待人工补全({str(exc)[:40]})")
 
-        # 3. 截取提交前存档 JPEG（不关标签页，留给用户直接点最后一下「发布」）
+        # 3. 截取提交前存档 JPEG（不关标签页，留给用户直接核对或重试）
         try:
             await client.capture_screenshot(sid, shot_path)
             filled_notes.append("已截图留档")
         except Exception:
             shot_path = None
 
-    detail = " · ".join(filled_notes) + " · 请在专用 Chrome 核对后亲自点「发布」"
+    # 4. 严格验证门禁：绝不报「假成功」——视频平台必须上传且回填文本成功，图文平台必须正文填入成功！
+    verified = False
+    if pid in video_required_plats:
+        verified = bool(uploaded_ok and text_filled_ok)
+    else:
+        verified = bool(text_filled_ok or uploaded_ok)
+
     ts = db.now_iso()
+    pname = platforms.PLATFORM_SPECS[pid]["name"]
+    if verified:
+        final_state = "awaiting_user"
+        detail = " · ".join(filled_notes) + " · 请在专用 Chrome 核对后亲自点「发布」"
+    else:
+        final_state = "failed"
+        miss_why = "视频未成功上传" if (pid in video_required_plats and not uploaded_ok) else "未检测到标题/文案输入框或写入失败"
+        detail = f"填表未通过校验（{miss_why}）：" + " · ".join(filled_notes)
+
     conn.execute(
         """INSERT INTO publish_tasks(episode_id, platform, state, detail, url, screenshot_path, metrics_json, updated_at)
-           VALUES (?,?, 'awaiting_user', ?, '', ?, '{}', ?)
+           VALUES (?,?, ?, ?, '', ?, '{}', ?)
            ON CONFLICT(episode_id, platform) DO UPDATE SET
-             state='awaiting_user', detail=excluded.detail, screenshot_path=excluded.screenshot_path, updated_at=excluded.updated_at""",
-        (episode_id, pid, detail, str(shot_path) if shot_path else "", ts),
+             state=excluded.state, detail=excluded.detail, screenshot_path=excluded.screenshot_path, updated_at=excluded.updated_at""",
+        (episode_id, pid, final_state, detail, str(shot_path) if shot_path else "", ts),
     )
     conn.commit()
-    pname = platforms.PLATFORM_SPECS[pid]["name"]
-    db.log_event(conn, f"EP{ep['episode']}", pname, "专用 Chrome 填表", detail[:60])
+    db.log_event(conn, f"EP{ep['episode']}", pname, "专用 Chrome 填表" if verified else "填表校验失败", detail[:60])
     return {
-        "ok": True,
+        "ok": verified,
         "platform": pid,
-        "state": "awaiting_user",
+        "state": final_state,
         "detail": detail,
         "screenshot": str(shot_path) if shot_path else "",
         "episode": get_episode(conn, episode_id),

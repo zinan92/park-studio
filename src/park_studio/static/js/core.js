@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const PS = (window.PS = window.PS || {});
-  const STORE_KEY = 'park-studio:state:v2';
+  const STORE_KEY = 'park-studio:state:v3';
 
   PS.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   PS.md = function (src) {
@@ -55,7 +55,9 @@
           ...parsed,
           settings: { ...def.settings, ...(parsed.settings || {}), modules: { ...def.settings.modules, ...(parsed.settings?.modules || {}) } },
           daemon: { ...def.daemon, ...(parsed.daemon || {}) },
-          releases: parsed.releases || def.releases,
+          platformStatus: { ...def.platformStatus, ...(parsed.platformStatus || {}) },
+          followers: { ...def.followers, ...(parsed.followers || {}) },
+          releases: def.releases,
         };
       }
     } catch (e) {}
@@ -279,10 +281,12 @@
           <div class="top-dock-row">
             <div class="top-left">
               <a class="lg-brand lg-island" href="#dashboard" title="Park Studio · 开源内容中控">
-                <svg class="brand-mark" viewBox="0 0 120 120" aria-hidden="true">
-                  <path class="bm1" d="M14 66 Q30 28 48 86" fill="none" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path class="bm2" d="M48 86 Q76 88 106 22" fill="none" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-                  <circle class="bm3" cx="48" cy="86" r="10"/>
+                <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+                  <rect x="2" y="2" width="28" height="28" rx="8" fill="var(--cta-bg)"/>
+                  <rect x="8.5" y="8.5" width="6" height="6" rx="1.8" fill="var(--cta-ink)"/>
+                  <rect x="17.5" y="8.5" width="6" height="6" rx="1.8" fill="var(--accent)"/>
+                  <rect x="8.5" y="17.5" width="6" height="6" rx="1.8" fill="var(--cta-ink)" fill-opacity=".42"/>
+                  <rect x="17.5" y="17.5" width="6" height="6" rx="1.8" fill="var(--cta-ink)" fill-opacity=".82"/>
                 </svg>
                 <b>Park Studio</b>
               </a>
@@ -299,6 +303,7 @@
 
             <div class="top-right">
               <button type="button" class="lg-btn lg-island circ" id="cmdkBtn" title="搜索页面和选题 (⌘K)" aria-label="搜索">${PS.icon('search')}</button>
+              <button type="button" class="lg-btn lg-island circ" id="themeQuickBtn" title="切换深浅色外观" aria-label="切换深浅色"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41"/></svg></button>
               <a class="lg-btn lg-island" id="sysNavBtn" href="#settings" title="系统 · 守护进程 / 7 平台体检 / 集成">
                 <span class="dot live" id="sysDot"></span><span class="lbl">系统</span>
               </a>
@@ -329,6 +334,7 @@
       };
     });
     document.getElementById('cmdkBtn').onclick = () => PS.cmdk();
+    document.getElementById('themeQuickBtn').onclick = () => PS.toggleTheme();
     document.getElementById('moreMenuBtn').onclick = e => {
       e.stopPropagation();
       const host = document.getElementById('moreHost');
@@ -532,20 +538,22 @@
       }
       if (b.topics?.length) {
         PS.S.topics = b.topics;
-        const activeTopic = b.topics.find(t => !t.trash && !t.final_at) || b.topics[0];
+        const kept = PS.S.activeTopicId ? b.topics.find(t => t.id === PS.S.activeTopicId && !t.trash) : null;
+        const activeTopic = kept || b.topics.find(t => !t.trash && !t.final_at) || b.topics[0];
         if (activeTopic) {
           PS.S.activeTopicId = activeTopic.id;
           PS.S.script.id = activeTopic.id;
-          PS.S.script.title = activeTopic.title;
-          if (activeTopic.body) PS.S.script.body = activeTopic.body;
-          if (activeTopic.audit?.revised) PS.S.script.audit = activeTopic.audit;
+          PS.S.script.title = activeTopic.title || '';
+          PS.S.script.body = activeTopic.body || '';
+          PS.S.script.audit = activeTopic.audit?.revised ? activeTopic.audit : { value: '', resonate: '', pace: '', revised: '' };
         }
       }
       if (b.cutProject) {
         PS.S.cutProject = { ...PS.S.cutProject, ...b.cutProject };
-        if (b.topics?.length && b.topics[0].hooks?.length) {
-          PS.S.cutProject.hooks = b.topics[0].hooks;
-          PS.S.cutProject.pickedHook = b.topics[0].picked_hook || 0;
+        const curT = PS.S.topics?.find(t => t.id === PS.S.activeTopicId);
+        if (curT) {
+          PS.S.cutProject.hooks = Array.isArray(curT.hooks) ? [...curT.hooks] : [];
+          PS.S.cutProject.pickedHook = curT.picked_hook || 0;
         }
       }
       if (b.said) PS.S.said = b.said;

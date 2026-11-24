@@ -8,7 +8,7 @@
     scheduled:     { label: '已定时', cls: 'info' },
     awaiting_user: { label: '填好 · 等你点发', cls: 'wait' },
     running:       { label: '专用 Chrome 填表中…', cls: 'accent' },
-    failed:        { label: '需处理', cls: 'warn' },
+    failed:        { label: '上传 / 填表失败', cls: 'warn' },
     planned:       { label: '待开跑', cls: '' },
   };
 
@@ -217,8 +217,11 @@
           const t = ep.tasks[pid] || { state: 'planned', detail: '等待开跑' };
           const sm = STATE_META[t.state] || STATE_META.planned;
           let btn = '';
-          if (t.state === 'planned' || t.state === 'failed') {
+          if (t.state === 'planned') {
             btn = `<button class="btn primary s" data-fill="${pid}">填这一家</button>`;
+          } else if (t.state === 'failed') {
+            btn = `<button class="btn primary s" data-fill="${pid}">重试填表</button>`
+              + (t.hasScreenshot ? `<button class="btn s" data-shot="${pid}">看现场截图</button>` : '');
           } else if (t.state === 'awaiting_user') {
             btn = `<button class="btn good s" data-sync="${pid}">我已点发 → 自动取链</button>`
               + `<button class="btn s" data-mark="${pid}">贴链确认</button>`
@@ -255,7 +258,7 @@
       try {
         const res = await PS.api('POST', `/api/publish/${ep.id}/fill`, { platform: pid });
         applyPubRes(res);
-        PS.toast(res.ok ? `${p.name} 已在专用 Chrome 填好并截图留档，请亲自点发布` : (res.reason || `${p.name} 需要先登录`), res.ok ? 'good' : 'warn');
+        PS.toast(res.ok ? `${p.name} 已校验填妥并截图留档，请亲自点发布` : (res.detail || res.reason || `${p.name} 填表未通过校验`), res.ok ? 'good' : 'warn');
         PS.pages['pub-confirm']();
       } catch (err) {
         PS.toast(err.message || `${p.name} 填表失败`, 'warn');

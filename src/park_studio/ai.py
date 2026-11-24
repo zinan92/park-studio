@@ -251,10 +251,11 @@ def _run_gemini_api(prompt: str, *, model: str = "", cfg: dict[str, Any], timeou
 
 
 def _run_api(prompt: str, *, cfg: dict[str, Any], timeout: int) -> dict[str, Any]:
-    key = str(cfg.get("apiKey") or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY") or "").strip()
-    if not key:
-        raise AIError("选择了 API 模式但未填写 apiKey（可在系统页改回本机 Gemini / Claude / Codex CLI 零费用运行）")
     base = str(cfg.get("apiBaseUrl") or "https://api.deepseek.com/v1").rstrip("/")
+    is_local = any(h in base.lower() for h in ("127.0.0.1", "localhost", "0.0.0.0"))
+    key = str(cfg.get("apiKey") or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY") or ("ollama" if is_local else "")).strip()
+    if not key:
+        raise AIError("选择了可选 API 模式但未填写 API Key（请在「系统 → 全局 Agent」填写 API Key，或切回本机 Gemini / Antigravity / Claude / Codex）")
     model = str(cfg.get("apiModel") or "deepseek-chat")
     resp = httpx.post(
         f"{base}/chat/completions",

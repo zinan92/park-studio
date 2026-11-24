@@ -188,6 +188,13 @@ def get_benchmark_detail(conn: sqlite3.Connection, item_id: str, *, cfg: dict[st
         r = conn.execute("SELECT * FROM benchmark_items WHERE id=?", (rid,)).fetchone()
         if not r:
             return None
+        structured = None
+        kv_row = conn.execute("SELECT v FROM kv WHERE k=?", (f"bm_report:{r['id']}",)).fetchone()
+        if kv_row and kv_row["v"]:
+            try:
+                structured = json.loads(kv_row["v"])
+            except Exception:
+                structured = None
         return {
             "id": f"db:{r['id']}",
             "kind": "db",
@@ -202,6 +209,7 @@ def get_benchmark_detail(conn: sqlite3.Connection, item_id: str, *, cfg: dict[st
             "whyHit": r["why_hit"] or "",
             "excerpt": (r["mainline"] or r["why_hit"] or "")[:180],
             "body": r["body"] or "",
+            "structured": structured,
         }
     return None
 
@@ -309,6 +317,167 @@ async def fetch_account_works_cdp(conn: sqlite3.Connection, acc_id: int, *, cfg:
     return {"ok": True, "fetched": saved, "name": name}
 
 
+TEARDOWN_LENSES = [
+    "个人经历",
+    "情绪发泄",
+    "现实痛点",
+    "认知反差",
+    "拆解过程",
+    "给建议",
+    "顺势聊结果",
+]
+
+MODE_DEFAULT_MODULES: dict[str, list[str]] = {
+    "lite": ["mainline"],
+    "standard": ["mainline", "opening", "segments", "angles7"],
+    "deep": ["mainline", "opening", "segments", "angles7", "agenda", "pacing"],
+}
+
+
+def _build_teardown_prompt(
+    *,
+    title: str,
+    author: str,
+    url: str,
+    transcript: str,
+    positioning_text: str,
+    mode: str,
+    modules: list[str],
+    custom_prompt: str,
+) -> str:
+    body_text = (transcript or "无逐字稿，请按标题与结构拆解")[:5500]
+    if mode == "custom" and custom_prompt.strip():
+        rendered = (
+            custom_prompt.strip()
+            .replace("{title}", title)
+            .replace("{author}", author or "未知")
+            .replace("{url}", url or "无")
+            .replace("{transcript}", body_text)
+            .replace("{positioning}", positioning_text or "无")
+        )
+        return (
+            f"{rendered}\n\n"
+            "请尽量返回 JSON 对象（若方便解析），包含 mainline（一句话主线）、why_hit（爆款原因列表）和 markdown（完整拆解报告正文）；"
+            "也可直接输出结构化 Markdown。"
+        )
+
+    eff_mods = set(modules or MODE_DEFAULT_MODULES.get(mode, MODE_DEFAULT_MODULES["standard"]))
+    schema_lines = [
+        '- "mainline": 一句话主线（<=80字，讲清这条视频真正打中的核心观点）',
+        '- "why_hit": 3-4 条为什么爆（字符串数组，每条具体到情绪/反差/结构，不写空话）',
+        '- "hooks": 可借用的 2-3 个前 5 秒开头钩子（字符串数组）',
+        '- "my_angle": 结合我方定位的一句话切入建议（<=120字）',
+    ]
+    if "opening" in eff_mods:
+        schema_lines += [
+            '- "opening": 开头 15 秒是怎么抓人的（对象：{"hook":"前3秒怎么打断滑动","promise":"给观众什么承诺"}）',
+        ]
+    if "segments" in eff_mods:
+        schema_lines += [
+            '- "segments": 全片结构分节数组（3-5 项，每项 {"part":"段落名","role":"这一段在留存/转化里的作用","summary":"1句话内容"}）',
+        ]
+    if "angles7" in eff_mods:
+        schema_lines += [
+            '- "universal_truth": 剥掉原视频外衣后，底层共通的 1 句核心真相（<=60字）',
+            '- "angles": 基于 Dan Koe Find your angle 方法论，为我方生成的 7 个可换切入角度数组，lens 必须依次对应 ['
+            + "、".join(TEARDOWN_LENSES)
+            + ']；每项严格包含 {"lens":"角度名","say":"80-130字第一人称可直接开口念的短视频开头（口语自然、无废话、像真人在说话）","text":"这个角度后续如何展开（1-2句）","needs_own":"需要创作者自己补上的真实案例/数字/细节（没有就留空字符串）"}',
+            '- "strongest": 从上面 7 个角度里挑出最适合我方定位的 Top 2（数组，每项 {"lens":"角度名","index":0到6的整数,"why":"为什么这两个最能打、不超过50字"}）',
+        ]
+    if "agenda" in eff_mods:
+        schema_lines += [
+            '- "agenda": 变现与人设动机拆解（对象：{"persona":"他在立什么人设","funnel":"暗藏的私域/产品/课程引导路径","risk":"直接照抄的雷区"}）',
+        ]
+    if "pacing" in eff_mods:
+        schema_lines += [
+            '- "pacing": 节奏与画面设计（对象：{"rhythm":"信息密度与转折节奏","visuals":"最值得抄的画面/字幕/B-roll 手法"}）',
+        ]
+    schema_lines.append('- "markdown": 完整可读的 Markdown 拆解报告总结（可选，便于归档）。')
+
+    return (
+        f"{positioning_text}\n\n"
+        f"请以资深短视频内容策划视角拆解这条对标视频（模式：{mode}）：\n"
+        f"标题：{title}\n作者：{author or '未知'}\n链接：{url or '无'}\n"
+        f"已有正文/逐字稿：\n{body_text}\n\n"
+        "严格返回一个合法 JSON 对象（不要加多余解释），字段如下：\n"
+        + "\n".join(schema_lines)
+    )
+
+
+def _format_teardown_markdown(parsed: dict[str, Any], mode: str) -> str:
+    parts: list[str] = []
+    if parsed.get("mainline"):
+        parts.append(f"## 主线\n{parsed['mainline']}")
+    why = parsed.get("why_hit")
+    if isinstance(why, list) and why:
+        parts.append("## 为什么爆\n" + "\n".join(f"- {x}" for x in why))
+    elif isinstance(why, str) and why.strip():
+        parts.append(f"## 为什么爆\n{why.strip()}")
+
+    opening = parsed.get("opening")
+    if isinstance(opening, dict) and (opening.get("hook") or opening.get("promise")):
+        parts.append(
+            "## 开头抓手\n"
+            + (f"- **前 3 秒钩子**：{opening.get('hook', '')}\n" if opening.get("hook") else "")
+            + (f"- **核心承诺**：{opening.get('promise', '')}" if opening.get("promise") else "")
+        )
+
+    segs = parsed.get("segments")
+    if isinstance(segs, list) and segs:
+        lines = [
+            f"- **{s.get('part', '')}**（{s.get('role', '')}）：{s.get('summary', '')}"
+            for s in segs if isinstance(s, dict)
+        ]
+        if lines:
+            parts.append("## 结构分节\n" + "\n".join(lines))
+
+    if parsed.get("universal_truth"):
+        parts.append(f"## 底层真相\n> {parsed['universal_truth']}")
+
+    angles = parsed.get("angles")
+    if isinstance(angles, list) and angles:
+        alines = []
+        for idx, a in enumerate(angles, 1):
+            if not isinstance(a, dict):
+                continue
+            alines.append(
+                f"### {idx}. {a.get('lens', '')}\n"
+                f"> {a.get('say', '')}\n\n"
+                f"{a.get('text', '')}"
+                + (f"\n- *需补个人素材*：{a['needs_own']}" if a.get("needs_own") else "")
+            )
+        if alines:
+            parts.append("## 7 个可换切入角度（Dan Koe）\n" + "\n\n".join(alines))
+
+    agenda = parsed.get("agenda")
+    if isinstance(agenda, dict) and any(agenda.values()):
+        parts.append(
+            "## 变现与人设动机\n"
+            + (f"- **人设**：{agenda.get('persona', '')}\n" if agenda.get("persona") else "")
+            + (f"- **转化路径**：{agenda.get('funnel', '')}\n" if agenda.get("funnel") else "")
+            + (f"- **照抄雷区**：{agenda.get('risk', '')}" if agenda.get("risk") else "")
+        )
+
+    pacing = parsed.get("pacing")
+    if isinstance(pacing, dict) and any(pacing.values()):
+        parts.append(
+            "## 节奏与画面设计\n"
+            + (f"- **节奏**：{pacing.get('rhythm', '')}\n" if pacing.get("rhythm") else "")
+            + (f"- **画面/字幕手法**：{pacing.get('visuals', '')}" if pacing.get("visuals") else "")
+        )
+
+    hooks = parsed.get("hooks")
+    if isinstance(hooks, list) and hooks:
+        parts.append("## 可借用开头钩子\n" + "\n".join(f"- {h}" for h in hooks))
+
+    if parsed.get("my_angle"):
+        parts.append(f"## 我方切入建议\n{parsed['my_angle']}")
+
+    if parts:
+        return "\n\n".join(parts)
+    return str(parsed.get("markdown") or "").strip()
+
+
 def ai_teardown_benchmark(
     conn: sqlite3.Connection,
     *,
@@ -317,27 +486,43 @@ def ai_teardown_benchmark(
     url: str = "",
     transcript: str = "",
     positioning_text: str = "",
+    mode: str = "",
+    modules: list[str] | None = None,
+    custom_prompt: str = "",
+    cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """调用本机 Coding Agent 生成结构化《爆款拆解报告》并持久化到 SQLite benchmark_items。"""
-    prompt = (
-        f"{positioning_text}\n\n"
-        f"请拆解这条对标视频：\n标题：{title}\n作者：{author or '未知'}\n链接：{url or '无'}\n"
-        f"已有正文/逐字稿：\n{(transcript or '无逐字稿，请按标题与结构拆解')[:4500]}\n\n"
-        "严格返回一个 JSON 对象，字段必须包含：\n"
-        '- "mainline": 一句话主线（<=80字）\n'
-        '- "why_hit": 3-4条为什么爆（换行列表）\n'
-        '- "hooks": 可借用的2个开头钩子（数组）\n'
-        '- "my_angle": 结合我方定位的切入角度（<=120字）\n'
-        '- "markdown": 完整可读的 Markdown 拆解报告（含主线、为什么爆、结构节奏、我方怎么借题发挥）。'
+    """调用本机 Coding Agent / API 生成 3 层可配置《爆款拆解报告》（支持 Dan Koe 7 角度）并持久化到 SQLite。"""
+    cfg = cfg or config.load_config()
+    eff_mode = (mode or str(cfg.get("teardownMode") or "standard")).strip().lower()
+    if eff_mode not in ("lite", "standard", "deep", "custom"):
+        eff_mode = "standard"
+    eff_modules = list(modules) if modules is not None else (
+        list(cfg.get("teardownModules") or MODE_DEFAULT_MODULES["standard"])
+        if eff_mode == "custom"
+        else list(MODE_DEFAULT_MODULES.get(eff_mode, MODE_DEFAULT_MODULES["standard"]))
     )
-    res = ai.run_prompt(prompt)
+    eff_custom = custom_prompt if custom_prompt else str(cfg.get("teardownCustomPrompt") or "")
+
+    prompt = _build_teardown_prompt(
+        title=title,
+        author=author,
+        url=url,
+        transcript=transcript,
+        positioning_text=positioning_text,
+        mode=eff_mode,
+        modules=eff_modules,
+        custom_prompt=eff_custom,
+    )
+    res = ai.run_prompt(prompt, cfg=cfg)
     parsed = ai.extract_json_block(res["text"])
+    structured: dict[str, Any] = {"mode": eff_mode, "modules": eff_modules}
     if isinstance(parsed, dict):
         mainline = str(parsed.get("mainline") or "").strip()
         why_hit = parsed.get("why_hit") or ""
         if isinstance(why_hit, list):
             why_hit = "\n".join(f"- {x}" for x in why_hit)
-        body = str(parsed.get("markdown") or "").strip() or f"## 主线\n{mainline}\n\n## 为什么爆\n{why_hit}\n\n## 我方切入\n{parsed.get('my_angle', '')}"
+        structured.update({k: v for k, v in parsed.items() if k != "markdown"})
+        body = _format_teardown_markdown(parsed, eff_mode) or str(parsed.get("markdown") or "").strip()
     else:
         mainline = title[:60]
         why_hit = ""
@@ -349,14 +534,21 @@ def ai_teardown_benchmark(
            VALUES (?,?,?,?,?,?,0,?,?,?,?)""",
         (title.strip(), author.strip() or "AI 拆解", "douyin", url.strip(), datetime.now(CN).strftime("%Y-%m-%d"), 0, mainline, str(why_hit), body, ts),
     )
+    rid = cur.lastrowid
+    conn.execute(
+        "INSERT OR REPLACE INTO kv(k, v) VALUES (?, ?)",
+        (f"bm_report:{rid}", json.dumps(structured, ensure_ascii=False)),
+    )
     conn.commit()
-    db.log_event(conn, "对标", f"{res['backend']}/{res['model']}", "AI 爆款拆解", title[:30])
+    db.log_event(conn, "对标", f"{res['backend']}/{res['model']}", f"AI 拆解({eff_mode})", title[:30])
     return {
         "ok": True,
-        "id": f"db:{cur.lastrowid}",
+        "id": f"db:{rid}",
+        "mode": eff_mode,
         "mainline": mainline,
         "whyHit": str(why_hit),
         "body": body,
+        "structured": structured,
         "backend": res["backend"],
         "model": res["model"],
     }

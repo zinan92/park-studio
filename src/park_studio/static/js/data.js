@@ -9,39 +9,14 @@
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
-  function buildFollowers() {
-    const base = {
-      douyin: 41200, xhs: 14800, bilibili: 22900, channels: 11200, youtube: 8650, x: 16400, wechat: 18500,
-    };
-    const dailyMean = {
-      douyin: 58, xhs: 44, bilibili: 35, channels: 22, youtube: 18, x: 31, wechat: 16,
-    };
-    // 发布日放大因子
-    const boostDays = { [-24]: 2.8, [-17]: 3.2, [-10]: 2.6, [-3]: 4.1, [-1]: 2.3 };
-    const out = {};
-    for (const p of PS.PLAT_ORDER) out[p] = {};
-    const cur = { ...base };
-    for (let i = -29; i <= 0; i++) {
-      const d = dayStr(i);
-      const b = boostDays[i] || 1;
-      for (const p of PS.PLAT_ORDER) {
-        const wave = 0.78 + ((Math.abs(i * 17 + p.length * 13) % 10) / 20);
-        const gain = Math.round(dailyMean[p] * b * wave);
-        if (i > -29) cur[p] += gain;
-        out[p][d] = cur[p];
-      }
-    }
-    return out;
-  }
-
   PS.defaultState = function () {
     const d0 = dayStr(0), d1 = dayStr(-1), d3 = dayStr(-3), d10 = dayStr(-10), d17 = dayStr(-17), dNext = dayStr(2);
     return {
       meta: {
         owner: 'Park',
         workspaceName: 'Park Studio',
-        version: 'v0.2.0',
-        demoMode: true,
+        version: 'v0.3.0',
+        demoMode: false,
         runtimeMode: 'localhost', // localhost | desktop-app
       },
       daemon: {
@@ -49,18 +24,25 @@
         chromeOnline: true,
         chromePort: 9333,
         chromeProfile: '~/.park-studio/chrome-profile',
-        lastMetricsAt: '今天 09:32',
+        lastMetricsAt: '未检查',
         nextSyncMin: 18,
-        feishuEnabled: true,
+        feishuEnabled: false,
         feishuWebhook: '',
         wechatIlinkEnabled: false,
         remindMinutes: 20,
         scheduleTamperAlert: true,
       },
       settings: {
-        aiBackend: 'gemini', // gemini | claude | codex | api
-        aiModel: 'neon',
+        aiBackend: 'gemini-api', // gemini-api | agy | gemini | claude | codex | api
+        aiModel: 'gemini-2.5-flash',
+        apiBaseUrl: 'https://api.deepseek.com/v1',
+        apiKey: '',
+        apiModel: 'deepseek-chat',
+        geminiApiKey: '',
         apiKeySet: false,
+        teardownMode: 'standard',
+        teardownModules: ['mainline', 'opening', 'segments', 'angles7'],
+        teardownCustomPrompt: '',
         obsidianPath: '~/Documents/Obsidian',
         obsidianWritingDir: '003_park原始输出',
         projectRoot: '~/Movies/ParkStudio',
@@ -88,7 +70,14 @@
         },
       },
       releases: [
-        { ver: 'v0.2.0', date: '2026-11-23', tag: '最新', title: '双模式本地剪辑台 + 对标爆款库 + 视觉素材库 + Obsidian 知识库 + Gemini 引擎', notes: [
+        { ver: 'v0.3.0', date: '2026-11-24', tag: '最新', title: 'E2E 验收修复 + 2,656 视觉素材库 + 7 角度可配拆解 + 12 平台支持 + API 可视化配置', notes: [
+          '修复选题池进入写稿串稿、剪辑台切换原片残留旧 Hook/镜头表、抖音未上传误报“填好”与启动瞬闪假粉丝 4 项端到端缺陷',
+          '视觉素材库恢复全部 2,656 条（图片 352 + 视频动效 258 + 做视频 124 + 视频案例 1,922），支持 4 标签分页与分类筛选',
+          '对标爆款拆解升级 3 层可配置引擎（⚡ 极简速览 / 🎯 标准 7 角度 / 🔬 深度全维度 / ⚙ 自定义模块与 Prompt 模板），支持“用这个角度写 ›”一键开稿',
+          '扩展至 12 平台：在原 7 家基础上新增 TikTok、Instagram、Threads、LinkedIn、Meta Business Suite（默认停用，按需一键启用）',
+          '系统设置新增可视化 API 配置（DeepSeek / OpenAI / OpenRouter / Ollama 一键预设 + API Key 输入）与“测试 AI 连通性”按钮'
+        ] },
+        { ver: 'v0.2.0', date: '2026-11-23', tag: '历史', title: '双模式本地剪辑台 + 对标爆款库 + 视觉素材库 + Obsidian 知识库 + Gemini 引擎', notes: [
           '双模式本地视频剪辑台：一键粗剪（mlx-whisper / faster-whisper 离线转写 + 自动标口误/停顿 + ffmpeg 两遍 -16 LUFS & ASS 字幕烧录 + faststart 自动落盘）与高级动效模式（SRT 秒解析 + Spec Table 镜头表 + 独立剪辑 Agent 后台实时日志）',
           '补齐对标爆款库（本地拆解目录 + 3× 爆款筛选 + 博主追踪抓取 + AI 拆解）、视觉素材库（图片 / 视频动效 / 做视频三大类 + 实图/视频预览）与 3 栏 Obsidian 知识库',
           'AI 引擎新增 Gemini API（自动读取 GOOGLE_API_KEY / GEMINI_API_KEY）与 Antigravity CLI (agy)，支持全局 Agent 与独立剪辑 Agent 拆分配置'
@@ -105,8 +94,13 @@
         youtube:  { state: 'ok',   checkedAt: '09:30', detail: 'Studio 正常 · 支持校验后自动定时', disabled: false },
         x:        { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 支持自动发布', disabled: false },
         wechat:   { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 自动存草稿箱', disabled: false },
+        tiktok:   { state: 'warn', checkedAt: '未启用', detail: '海外可选平台 · 点「启用」接入 TikTok Studio', disabled: true },
+        instagram:{ state: 'warn', checkedAt: '未启用', detail: '海外可选平台 · 点「启用」接入 Instagram Reels', disabled: true },
+        threads:  { state: 'warn', checkedAt: '未启用', detail: '海外可选平台 · 点「启用」接入 Threads', disabled: true },
+        linkedin: { state: 'warn', checkedAt: '未启用', detail: '海外可选平台 · 点「启用」接入 LinkedIn', disabled: true },
+        meta:     { state: 'warn', checkedAt: '未启用', detail: '海外可选平台 · Meta Business Suite（IG + FB）', disabled: true },
       },
-      followers: buildFollowers(),
+      followers: { douyin: {}, xhs: {}, bilibili: {}, channels: {}, youtube: {}, x: {}, wechat: {}, tiktok: {}, instagram: {}, threads: {}, linkedin: {}, meta: {} },
       doing: {
         id: 105,
         episode: 42,
@@ -127,7 +121,7 @@
           durationSec: 462,
           videoName: 'EP41-多平台发布闭环-成片.mp4',
           videoSizeMb: 418,
-          coverGrad: 'linear-gradient(145deg,#C2480A 0%,#1F242D 65%,#0E1116 100%)',
+          coverGrad: 'linear-gradient(145deg,#3E63DD 0%,#1E2235 65%,#0F0F10 100%)',
           coverTitle: '7 平台发布\n彻底闭环',
           campaign: 'ep41-local-pub',
           packed: ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'x', 'wechat'],
@@ -431,7 +425,7 @@
         { ts: '21:15', ep: 'EP41', plat: '公众号', action: '存草稿箱', result: '已排版入草稿箱' },
         { ts: '19:15', ep: 'EP41', plat: 'B站', action: '自动取链', result: '已回填 BV1park41 到「作品」页' },
         { ts: '19:12', ep: 'EP41', plat: '抖音', action: '自动取链', result: '已回填作品链接并启动 6h 采样' },
-        { ts: '09:32', ep: '全平台', plat: '7 平台', action: '每日采数', result: '总粉 142,840（今日 +418）' },
+        { ts: '09:32', ep: '全平台', plat: '全部平台', action: '每日采数', result: '等待本机首次真实采集' },
       ],
       wendyMsgs: [
         {
@@ -472,7 +466,7 @@
           { id: 3, ts: '00:26–00:44', style: '录屏放大 · 4 仓合一动效', preview: '4 个旧仓 → Park Studio (MIT)', reason: '直观展示架构收敛，建立开源可信度。' },
           { id: 4, ts: '00:44–00:58', style: '四格导航高亮追踪', preview: '[ 选题 | 剪辑 | 发布 | 复盘 ]', reason: '镜头聚焦左栏四宫格切换，降低观众理解门槛。' },
           { id: 5, ts: '00:58–01:22', style: '分屏实录 · 专用 Chrome 自动填表', preview: '国内只填不点发 · 零 API 费', reason: '同时解决观众对「贵」和「封号」的两大顾虑。' },
-          { id: 6, ts: '01:22–01:45', style: '运营大屏推镜 + 涨粉曲线动画', preview: '142,359 粉丝 · 同龄 1.7×', reason: '结尾视觉高潮，给足“我也想装一套”的获得感。' },
+          { id: 6, ts: '01:22–01:45', style: '运营大屏推镜 + 涨粉曲线动画', preview: '全平台真实粉丝 · 同龄 1.7×', reason: '结尾视觉高潮，给足“我也想装一套”的获得感。' },
         ],
         hooks: [
           '我们线上验证过，写完稿愿意手动贴链接复盘的人几乎为零——所以我把发布和大屏做成开源本地中控了。',

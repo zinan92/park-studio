@@ -60,7 +60,8 @@ def get_materials(
     kind: str = "image",
     cat: str = "",
     q: str = "",
-    limit: int = 60,
+    offset: int = 0,
+    limit: int = 48,
     cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     cfg = cfg or config.load_config()
@@ -79,13 +80,20 @@ def get_materials(
 
     img_raw = _load_json("image-styles.json")
     mot_raw = _load_json("motion-styles.json")
+    mot_cards_raw = _load_json("motions.json")
     make_raw = _load_json("make.json")
+    cases_raw = _load_json("video-cases.json")
+
+    mot_cards_list = (mot_cards_raw.get("cards") if isinstance(mot_cards_raw, dict) else None) or []
+    mot_total = (len(mot_raw) if isinstance(mot_raw, list) else len(STARTER_MOTIONS)) + len(mot_cards_list)
 
     counts = {
         "image": len(img_raw) if isinstance(img_raw, list) else len(STARTER_IMAGES),
-        "motion": len(mot_raw) if isinstance(mot_raw, list) else len(STARTER_MOTIONS),
+        "motion": mot_total,
         "video": len(make_raw) if isinstance(make_raw, list) else len(STARTER_MAKE),
+        "cases": len(cases_raw) if isinstance(cases_raw, list) else 0,
     }
+    counts["all"] = counts["image"] + counts["motion"] + counts["video"] + counts["cases"]
 
     items: list[dict[str, Any]] = []
     if kind == "image":
@@ -112,7 +120,7 @@ def get_materials(
             cid = str(x.get("id") or "")
             items.append({
                 "id": cid,
-                "cat": str(x.get("cat") or "动效"),
+                "cat": str(x.get("cat") or "动效风格"),
                 "name": str(x.get("name") or cid),
                 "en": str(x.get("en") or ""),
                 "sum": str(x.get("sum") or ""),
@@ -120,6 +128,44 @@ def get_materials(
                 "how": str(x.get("how") or x.get("repo") or ""),
                 "preview": _find_asset(sdir, "motion-styles", cid, (".webp", ".png", ".jpg")) if mot_raw else "",
                 "video": _find_asset(sdir, "motion-styles", cid, (".mp4", ".webm")) if mot_raw else "",
+            })
+        # 同时合并 motions.json 157 张场景动效卡（带适用语境 use / 时长 / 能量）
+        for x in mot_cards_list:
+            if not isinstance(x, dict):
+                continue
+            cid = str(x.get("name") or "")
+            items.append({
+                "id": f"card-{cid}",
+                "cat": str(x.get("category") or "场景动效卡"),
+                "name": str(x.get("zh") or cid),
+                "en": cid,
+                "sum": str(x.get("summary") or ""),
+                "fit": str(x.get("use") or x.get("intention") or ""),
+                "prompt": f"动效：{x.get('zh') or cid}（{x.get('duration') or ''} · 能量 {x.get('energy') or ''}）\n{x.get('summary') or ''}\n适用：{x.get('use') or ''}\n脚本内容：{{script}}",
+                "by": str(x.get("duration") or ""),
+                "preview": _find_asset(sdir, "motion", cid, (".webp", ".png", ".jpg")),
+                "video": _find_asset(sdir, "motion", cid, (".mp4", ".webm")),
+            })
+    elif kind == "cases":
+        src_list = cases_raw if isinstance(cases_raw, list) else []
+        for x in src_list:
+            if not isinstance(x, dict):
+                continue
+            cid = str(x.get("id") or "")
+            secs = str(x.get("secs") or "").strip()
+            model_txt = str(x.get("model") or "").strip()
+            by_parts = [p for p in (x.get("author_name") or x.get("author"), model_txt, f"{secs}s" if secs else "") if p]
+            items.append({
+                "id": cid,
+                "cat": str(x.get("cat") or "视频案例"),
+                "name": str(x.get("title") or x.get("en") or cid),
+                "en": str(x.get("en") or ""),
+                "sum": str(x.get("sum") or x.get("sum_en") or ""),
+                "prompt": str(x.get("prompt") or x.get("sum") or ""),
+                "by": " · ".join(str(p) for p in by_parts),
+                "url": str(x.get("post") or ""),
+                "preview": str(x.get("cover") or ""),
+                "video": "",
             })
     else:
         src_list = make_raw if isinstance(make_raw, list) else STARTER_MAKE
@@ -151,16 +197,21 @@ def get_materials(
     filtered = [
         it for it in items
         if (not cat or it["cat"] == cat)
-        and (not qq or qq in f"{it['name']} {it['en']} {it['sum']} {it['cat']}".lower())
+        and (not qq or qq in f"{it['name']} {it['en']} {it['sum']} {it['cat']} {it.get('by','')}".lower())
     ]
 
+    off = max(0, int(offset))
+    lim = max(1, min(int(limit), 200))
     return {
         "kind": kind,
         "hasLocalCatalog": cdir is not None,
         "counts": counts,
         "total": len(filtered),
+        "offset": off,
+        "limit": lim,
+        "hasMore": off + lim < len(filtered),
         "categories": cats,
-        "items": filtered[:limit],
+        "items": filtered[off : off + lim],
     }
 
 

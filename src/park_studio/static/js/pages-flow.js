@@ -472,6 +472,21 @@
   let bmSelId = '';
   const bmDetailCache = new Map();
 
+  const TEARDOWN_MODES = [
+    { id: 'lite', label: '⚡ 极简速览' },
+    { id: 'standard', label: '🎯 7 角度' },
+    { id: 'deep', label: '🔬 深度全维' },
+    { id: 'custom', label: '⚙ 自定义' },
+  ];
+  const TEARDOWN_MODULE_OPTS = [
+    { id: 'mainline', label: '一句话主线 + 爆款原因 + 2 开头钩子' },
+    { id: 'opening', label: '前 15 秒抓手与核心承诺' },
+    { id: 'segments', label: '全片结构分节（3–5 段留存作用）' },
+    { id: 'angles7', label: 'Dan Koe 7 个可换切入角度 + 80–130 字可直接念开头 + Top 2 最能打' },
+    { id: 'agenda', label: '人设动机 / 私域变现路径 / 照抄雷区' },
+    { id: 'pacing', label: '信息密度节奏与画面 / B-roll 手法' },
+  ];
+
   PS.pages.feed = async function () {
     let bm = PS.S.benchmarks;
     try {
@@ -481,12 +496,89 @@
     bm = bm || { total: 0, hit3x: 0, authors: [], tracked: [], items: [] };
     const items = bm.items || [];
     if (!bmSelId || !items.some(x => x.id === bmSelId)) bmSelId = items[0]?.id || '';
+    const tdMode = PS.S.settings.teardownMode || 'standard';
+    const tdModules = Array.isArray(PS.S.settings.teardownModules) && PS.S.settings.teardownModules.length
+      ? PS.S.settings.teardownModules
+      : ['mainline', 'opening', 'segments', 'angles7'];
+    const tdCustom = PS.S.settings.teardownCustomPrompt || '';
+
+    const renderStructured = det => {
+      const st = det?.structured;
+      if (!st || typeof st !== 'object') return '';
+      const angles = Array.isArray(st.angles) ? st.angles : [];
+      const strongestMap = new Map();
+      for (const s of (Array.isArray(st.strongest) ? st.strongest : [])) {
+        if (s && typeof s.index === 'number') strongestMap.set(s.index, s.why || '');
+        else if (s && s.lens) {
+          const hit = angles.findIndex(a => a && a.lens === s.lens);
+          if (hit >= 0) strongestMap.set(hit, s.why || '');
+        }
+      }
+      const blocks = [];
+      if (st.opening && (st.opening.hook || st.opening.promise)) {
+        blocks.push(`<div class="card stack tight" style="background:var(--sunk);border:0">
+          <b style="font-size:13px">开头 15 秒抓手</b>
+          ${st.opening.hook ? `<div style="font-size:13px"><b>前 3 秒打断：</b>${PS.esc(st.opening.hook)}</div>` : ''}
+          ${st.opening.promise ? `<div style="font-size:13px"><b>核心承诺：</b>${PS.esc(st.opening.promise)}</div>` : ''}
+        </div>`);
+      }
+      if (Array.isArray(st.segments) && st.segments.length) {
+        blocks.push(`<div class="card stack tight" style="background:var(--sunk);border:0">
+          <b style="font-size:13px">全片结构分节</b>
+          <div class="stack tight">${st.segments.map((sg, i) => `<div style="font-size:12.5px">
+            <span class="pill" style="font-size:11px;padding:1px 7px">${i + 1}. ${PS.esc(sg.part || '')}</span>
+            <span class="sub" style="margin-left:6px">${PS.esc(sg.role || '')}</span>
+            <div style="margin-top:3px;color:var(--ink-2)">${PS.esc(sg.summary || '')}</div>
+          </div>`).join('')}</div>
+        </div>`);
+      }
+      if (st.universal_truth || angles.length) {
+        blocks.push(`<div class="stack tight" style="margin-top:4px">
+          ${st.universal_truth ? `<div class="callout-warm"><b>底层共通真相：</b>${PS.esc(st.universal_truth)}</div>` : ''}
+          ${angles.length ? `<div class="row" style="margin-top:6px"><b style="font-size:14px">7 个可换切入角度（Dan Koe · Find your angle）</b><span class="sub" style="font-size:12px">选一个最顺口的直接进写稿台</span></div>
+          <div class="stack tight" style="gap:10px">
+            ${angles.map((a, idx) => {
+              const topWhy = strongestMap.has(idx) ? strongestMap.get(idx) : null;
+              return `<div class="card stack tight" style="padding:12px 14px;${topWhy !== null ? 'border:1.5px solid var(--accent);background:color-mix(in srgb,var(--accent-soft) 35%,var(--surface))' : ''}">
+                <div class="row" style="gap:8px;flex-wrap:wrap">
+                  <span class="pill ${topWhy !== null ? 'accent' : ''}">${idx + 1}. ${PS.esc(a.lens || `角度 ${idx + 1}`)}</span>
+                  ${topWhy !== null ? `<span class="pill good">★ 最能打</span>` : ''}
+                  ${topWhy ? `<span class="sub" style="font-size:12px">${PS.esc(topWhy)}</span>` : ''}
+                  <span class="grow"></span>
+                  <button class="btn primary s" type="button" data-use-angle="${idx}">用这个角度写 ›</button>
+                </div>
+                ${a.say ? `<blockquote style="margin:4px 0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--sunk);border-radius:6px;font-size:13.5px;line-height:1.65">“${PS.esc(a.say)}”</blockquote>` : ''}
+                ${a.text ? `<div style="font-size:12.5px;color:var(--ink-2)"><b>展开方向：</b>${PS.esc(a.text)}</div>` : ''}
+                ${a.needs_own ? `<div class="sub" style="font-size:11.5px">✎ 需补个人真实细节：${PS.esc(a.needs_own)}</div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>` : ''}
+        </div>`);
+      }
+      if (st.agenda && (st.agenda.persona || st.agenda.funnel || st.agenda.risk)) {
+        blocks.push(`<div class="card stack tight" style="background:var(--sunk);border:0">
+          <b style="font-size:13px">变现与人设动机</b>
+          ${st.agenda.persona ? `<div style="font-size:12.5px"><b>人设定位：</b>${PS.esc(st.agenda.persona)}</div>` : ''}
+          ${st.agenda.funnel ? `<div style="font-size:12.5px"><b>转化路径：</b>${PS.esc(st.agenda.funnel)}</div>` : ''}
+          ${st.agenda.risk ? `<div style="font-size:12.5px;color:var(--warn)"><b>照抄雷区：</b>${PS.esc(st.agenda.risk)}</div>` : ''}
+        </div>`);
+      }
+      if (st.pacing && (st.pacing.rhythm || st.pacing.visuals)) {
+        blocks.push(`<div class="card stack tight" style="background:var(--sunk);border:0">
+          <b style="font-size:13px">节奏与画面手法</b>
+          ${st.pacing.rhythm ? `<div style="font-size:12.5px"><b>节奏密度：</b>${PS.esc(st.pacing.rhythm)}</div>` : ''}
+          ${st.pacing.visuals ? `<div style="font-size:12.5px"><b>画面 / 字幕：</b>${PS.esc(st.pacing.visuals)}</div>` : ''}
+        </div>`);
+      }
+      return blocks.length ? `<div class="stack tight" style="margin-top:14px">${blocks.join('')}</div>` : '';
+    };
 
     const renderBmReader = (det, loading = false) => {
       if (!det) return '<div style="padding:28px" class="sub">左侧选一条对标爆款查看拆解报告，或点击右上角「+ 添加对标账号 / AI 拆解新视频」。</div>';
       const multBadge = det.multiple > 0
         ? `<span class="pill ${det.multiple >= 3 ? 'accent' : 'good'}">${det.multiple}× 平时</span>`
         : '';
+      const modeLabel = TEARDOWN_MODES.find(m => m.id === (det.structured?.mode || tdMode))?.label || '🎯 7 角度';
       return `
         <div class="stack tight" style="padding-bottom:14px;border-bottom:1px solid var(--line-soft)">
           <div class="row" style="gap:7px;flex-wrap:wrap">
@@ -494,16 +586,18 @@
             <b>${PS.esc(det.author)}</b>
             ${multBadge}
             ${det.likes ? `<span class="pill">赞 ${PS.fmt(det.likes)}</span>` : ''}
+            ${det.structured?.mode ? `<span class="pill accent">${PS.esc(modeLabel)}</span>` : ''}
             ${det.published ? `<span class="sub mono" style="font-size:12px">${PS.esc(det.published)}</span>` : ''}
             <span class="grow"></span>
             ${det.url ? `<a class="btn s" href="${PS.esc(det.url)}" target="_blank" rel="noopener">原视频 ↗</a>` : ''}
-            <button class="btn s" id="bmReTearBtn">${PS.icon('spark', 'sm')}AI 二次拆解</button>
+            <button class="btn s" id="bmReTearBtn">${PS.icon('spark', 'sm')}按「${PS.esc(TEARDOWN_MODES.find(m => m.id === tdMode)?.label || '7 角度')}」重拆</button>
             <button class="btn primary s" id="bmAddTopicBtn">+ 加入选题池</button>
           </div>
           <h2 class="m0" style="font-size:19px;line-height:1.35">${PS.esc(det.title)}</h2>
         </div>
         ${det.mainline ? `<div class="callout-warm" style="margin-top:14px"><b>主线：</b>${PS.esc(det.mainline)}</div>` : ''}
         ${det.whyHit ? `<div class="card stack tight" style="margin-top:12px;background:var(--sunk);border:0"><b style="font-size:13px">为什么爆</b><div class="md-body">${PS.md(det.whyHit)}</div></div>` : ''}
+        ${renderStructured(det)}
         <div class="md-body" style="margin-top:14px">${loading ? '<p class="sub">正在加载完整拆解与逐字稿…</p>' : PS.md(det.body || det.excerpt || '暂无正文')}</div>`;
     };
 
@@ -546,9 +640,12 @@
       <div class="ph">
         <div>
           <h1>对标爆款库</h1>
-          <p>直接读取本地 Obsidian <code>002_对标内容</code>（${bm.total} 条真实拆解）+ 追踪主页 CDP 抓取 + 本机 Agent 零 API 费拆解。</p>
+          <p>支持 3 层可配置拆解（极简速览 / Dan Koe 7 角度 / 深度全维 / 自定义模块与 Prompt）· 直接读取 Obsidian <code>002_对标内容</code>（${bm.total} 条）。</p>
         </div>
-        <div class="acts">
+        <div class="acts" style="flex-wrap:wrap">
+          <div class="seg" id="bmModeSeg" title="切换 AI 拆解深度与角度模板">
+            ${TEARDOWN_MODES.map(m => `<button class="${tdMode === m.id ? 'on' : ''}" data-tdm="${m.id}">${m.label}</button>`).join('')}
+          </div>
           <div class="seg">
             <button class="${bmSort === 'multiple' ? 'on' : ''}" data-bms="multiple">按几倍平时</button>
             <button class="${bmSort === 'likes' ? 'on' : ''}" data-bms="likes">按点赞</button>
@@ -570,6 +667,58 @@
     const listBox = main.querySelector('#bmList');
     let curDetail = cached || activeBasic;
 
+    const openCustomTeardownModal = () => {
+      PS.modal({
+        title: '自定义对标拆解模板（模块勾选 + Prompt 模板）',
+        wide: true,
+        body: `<div class="stack">
+          <div>
+            <b style="font-size:13px">第 2 层：按需勾选拆解模块</b>
+            <div class="stack tight" style="margin-top:8px">
+              ${TEARDOWN_MODULE_OPTS.map(opt => `<label class="row" style="gap:8px;cursor:pointer;font-size:13px">
+                <input type="checkbox" data-td-mod="${opt.id}" ${tdModules.includes(opt.id) ? 'checked' : ''} style="accent-color:var(--accent)">
+                <span>${PS.esc(opt.label)}</span>
+              </label>`).join('')}
+            </div>
+          </div>
+          <div>
+            <b style="font-size:13px">第 3 层：完全自定义 Prompt 模板（留空则按上方勾选模块自动组装）</b>
+            <p class="sub m0" style="font-size:12px;margin:4px 0 6px">可用占位符：<code>{title}</code> 标题 · <code>{author}</code> 作者 · <code>{url}</code> 链接 · <code>{transcript}</code> 逐字稿 · <code>{positioning}</code> 我的定位</p>
+            <textarea id="tdCustomPromptIn" rows="6" placeholder="例如：请只帮我拆解这条视频的 3 个情绪钩子、2 个评论区争议点，以及适合我方 B 站/抖音的 100 字开场白…\n\n标题：{title}\n逐字稿：{transcript}">${PS.esc(tdCustom)}</textarea>
+          </div>
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="tdSaveCustom">保存自定义配置并启用</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#tdSaveCustom').onclick = async () => {
+            const mods = [...mb.querySelectorAll('[data-td-mod]:checked')].map(el => el.dataset.tdMod);
+            const promptTxt = mb.querySelector('#tdCustomPromptIn').value.trim();
+            PS.S.settings.teardownMode = 'custom';
+            PS.S.settings.teardownModules = mods.length ? mods : ['mainline'];
+            PS.S.settings.teardownCustomPrompt = promptTxt;
+            await PS.api('PUT', '/api/settings', {
+              teardownMode: 'custom',
+              teardownModules: PS.S.settings.teardownModules,
+              teardownCustomPrompt: promptTxt,
+            }).catch(() => {});
+            PS.save();
+            close();
+            PS.toast('已保存自定义拆解模板（写入 config.yaml）✓', 'good');
+            PS.pages.feed();
+          };
+        },
+      });
+    };
+
+    main.querySelectorAll('[data-tdm]').forEach(b => b.onclick = async () => {
+      const m = b.dataset.tdm;
+      if (m === 'custom') return openCustomTeardownModal();
+      PS.S.settings.teardownMode = m;
+      await PS.api('PUT', '/api/settings', { teardownMode: m }).catch(() => {});
+      PS.save();
+      PS.toast(`已切换拆解模式：${TEARDOWN_MODES.find(x => x.id === m)?.label || m}`, 'good');
+      PS.pages.feed();
+    });
+
     const bindReaderBtns = det => {
       main.querySelector('#bmAddTopicBtn')?.addEventListener('click', async () => {
         if (!det) return;
@@ -581,21 +730,59 @@
           PS.toast('已加入「选题池」（写入本地 SQLite）', 'good');
         } catch (err) { PS.toast(err.message || '加入失败', 'warn'); }
       });
+      main.querySelectorAll('[data-use-angle]').forEach(btn => btn.onclick = async () => {
+        const idx = +btn.dataset.useAngle;
+        const angle = det?.structured?.angles?.[idx];
+        if (!angle) return;
+        const title = `${det.title}（${angle.lens}角度）`;
+        const body = [
+          angle.say ? `## 开场（可直接开口念）\n${angle.say}` : '',
+          angle.text ? `## 展开方向\n${angle.text}` : '',
+          angle.needs_own ? `## 待补个人真实素材\n- ${angle.needs_own}` : '',
+          det.structured?.universal_truth ? `## 底层真相\n${det.structured.universal_truth}` : '',
+          det.url ? `参考对标：${det.url}` : '',
+        ].filter(Boolean).join('\n\n');
+        try {
+          const created = await PS.api('POST', '/api/topics', {
+            title,
+            source_ref: `7 角度拆解 · ${angle.lens} · ${det.author}`,
+            body,
+          });
+          PS.S.topics.unshift(created);
+          PS.selectTopicForWrite(created.id);
+          PS.toast(`已用「${angle.lens}」角度新建草稿，正在进入写稿台 ✓`, 'good');
+          location.hash = `#write/${created.id}`;
+        } catch (err) {
+          PS.toast(err.message || '建稿失败', 'warn');
+        }
+      });
       main.querySelector('#bmReTearBtn')?.addEventListener('click', async e => {
         if (!det) return;
         const btn = e.currentTarget;
-        btn.disabled = true; btn.textContent = '本机 Agent 拆解中…';
+        const old = btn.innerHTML;
+        btn.disabled = true; btn.textContent = 'AI 拆解中…';
         try {
           const r = await PS.api('POST', '/api/benchmarks/teardown', {
-            title: det.title, author: det.author, url: det.url, transcript: (det.body || '').slice(0, 4500),
+            title: det.title,
+            author: det.author,
+            url: det.url,
+            transcript: (det.body || '').slice(0, 5500),
+            mode: tdMode,
+            modules: tdMode === 'custom' ? tdModules : null,
+            custom_prompt: tdMode === 'custom' ? tdCustom : '',
           });
           PS.S.benchmarks = r.benchmarks;
           bmSelId = r.id;
-          PS.toast(`已由 ${r.backend}/${r.model} 生成新拆解报告 ✓`, 'good');
+          bmDetailCache.set(r.id, {
+            id: r.id, kind: 'db', title: det.title, author: det.author || 'AI 拆解', platform: det.platform || 'douyin',
+            url: det.url || '', published: new Date().toISOString().slice(0, 10), likes: det.likes || 0, multiple: det.multiple || 0,
+            mainline: r.mainline, whyHit: r.whyHit, body: r.body, structured: r.structured,
+          });
+          PS.toast(`已由 ${r.backend}/${r.model} 按「${r.mode}」模式生成拆解报告 ✓`, 'good');
           PS.pages.feed();
         } catch (err) {
           PS.toast(err.message || '拆解失败', 'warn');
-          btn.disabled = false; btn.textContent = 'AI 二次拆解';
+          btn.disabled = false; btn.innerHTML = old;
         }
       });
     };
@@ -654,7 +841,7 @@
         title: '添加对标账号（支持专用 Chrome 抓取最新作品）',
         body: `<div class="stack">
           <div><label class="sub" style="display:block;margin-bottom:4px">博主昵称</label><input type="text" id="baName" placeholder="如 dontbesilent / 某科技博主"></div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">平台</label><select id="baPlat"><option value="douyin">抖音</option><option value="bilibili">B 站</option><option value="youtube">YouTube</option><option value="xhs">小红书</option></select></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">平台</label><select id="baPlat"><option value="douyin">抖音</option><option value="bilibili">B 站</option><option value="youtube">YouTube</option><option value="xhs">小红书</option><option value="tiktok">TikTok</option></select></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">博主主页链接</label><input type="url" id="baUrl" placeholder="https://www.douyin.com/user/... 或 https://space.bilibili.com/..."></div>
         </div>`,
         foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="baSave">添加并保存</button>`,
@@ -676,14 +863,17 @@
 
     main.querySelector('#bmNewTearBtn').onclick = () => {
       PS.modal({
-        title: '用本机 Agent 拆解一条新爆款视频',
+        title: '用本机 Agent / API 拆解一条新爆款视频',
         wide: true,
         body: `<div class="stack">
           <div><label class="sub" style="display:block;margin-bottom:4px">视频标题</label><input type="text" id="ntTitle" placeholder="输入爆款视频标题"></div>
           <div class="sys-2col">
             <div><label class="sub" style="display:block;margin-bottom:4px">作者</label><input type="text" id="ntAuthor" placeholder="博主名称"></div>
-            <div><label class="sub" style="display:block;margin-bottom:4px">原视频链接（可选）</label><input type="url" id="ntUrl" placeholder="https://..."></div>
+            <div><label class="sub" style="display:block;margin-bottom:4px">拆解模式</label>
+              <select id="ntMode">${TEARDOWN_MODES.map(m => `<option value="${m.id}" ${m.id === tdMode ? 'selected' : ''}>${m.label}</option>`).join('')}</select>
+            </div>
           </div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">原视频链接（可选）</label><input type="url" id="ntUrl" placeholder="https://..."></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">逐字稿或内容摘录（贴得越全拆得越准）</label><textarea id="ntBody" rows="7" placeholder="把口播逐字稿或视频内容粘贴到这里…"></textarea></div>
         </div>`,
         foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="ntRun">开始 AI 拆解</button>`,
@@ -691,15 +881,27 @@
           mb.querySelector('#ntRun').onclick = async e => {
             const title = mb.querySelector('#ntTitle').value.trim();
             if (!title) return PS.toast('先填视频标题', 'warn');
-            e.currentTarget.disabled = true; e.currentTarget.textContent = '本机 Agent 拆解中…';
+            const pickedMode = mb.querySelector('#ntMode').value;
+            e.currentTarget.disabled = true; e.currentTarget.textContent = 'AI 拆解中…';
             try {
               const r = await PS.api('POST', '/api/benchmarks/teardown', {
-                title, author: mb.querySelector('#ntAuthor').value.trim(), url: mb.querySelector('#ntUrl').value.trim(), transcript: mb.querySelector('#ntBody').value.trim(),
+                title,
+                author: mb.querySelector('#ntAuthor').value.trim(),
+                url: mb.querySelector('#ntUrl').value.trim(),
+                transcript: mb.querySelector('#ntBody').value.trim(),
+                mode: pickedMode,
+                modules: pickedMode === 'custom' ? tdModules : null,
+                custom_prompt: pickedMode === 'custom' ? tdCustom : '',
               });
               PS.S.benchmarks = r.benchmarks;
               bmSelId = r.id;
+              bmDetailCache.set(r.id, {
+                id: r.id, kind: 'db', title, author: mb.querySelector('#ntAuthor').value.trim() || 'AI 拆解',
+                platform: 'douyin', url: mb.querySelector('#ntUrl').value.trim(), published: new Date().toISOString().slice(0, 10),
+                likes: 0, multiple: 0, mainline: r.mainline, whyHit: r.whyHit, body: r.body, structured: r.structured,
+              });
               close();
-              PS.toast(`拆解完成（${r.backend}/${r.model}）✓`, 'good');
+              PS.toast(`拆解完成（${r.backend}/${r.model} · ${r.mode}）✓`, 'good');
               PS.pages.feed();
             } catch (err) {
               PS.toast(err.message || '拆解失败', 'warn');
@@ -721,18 +923,20 @@
   let matCat = '';
   let matQ = '';
   let matTopic = '';
+  let matOffset = 0;
 
   PS.pages.materials = async function (sub) {
-    if (['image', 'motion', 'video'].includes(sub)) {
-      if (matKind !== sub) { matKind = sub; matCat = ''; }
+    if (['image', 'motion', 'video', 'cases'].includes(sub)) {
+      if (matKind !== sub) { matKind = sub; matCat = ''; matOffset = 0; }
     }
     let data = PS.S.materials;
     try {
-      data = await PS.api('GET', `/api/materials?kind=${encodeURIComponent(matKind)}&cat=${encodeURIComponent(matCat)}&q=${encodeURIComponent(matQ)}&limit=60`);
+      data = await PS.api('GET', `/api/materials?kind=${encodeURIComponent(matKind)}&cat=${encodeURIComponent(matCat)}&q=${encodeURIComponent(matQ)}&offset=${matOffset}&limit=48`);
       PS.S.materials = data;
     } catch (e) {}
-    data = data || { kind: matKind, counts: { image: 0, motion: 0, video: 0 }, total: 0, categories: [], items: [] };
-    const counts = data.counts || { image: 0, motion: 0, video: 0 };
+    data = data || { kind: matKind, counts: { image: 0, motion: 0, video: 0, cases: 0, all: 0 }, total: 0, offset: 0, limit: 48, hasMore: false, categories: [], items: [] };
+    const counts = data.counts || { image: 0, motion: 0, video: 0, cases: 0, all: 0 };
+    const totalAll = counts.all || (counts.image + counts.motion + counts.video + (counts.cases || 0));
     const fillVar = txt => {
       if (!matTopic.trim()) return txt || '';
       return String(txt || '').replace(/\{topic\}|\{script\}/g, matTopic.trim());
@@ -741,27 +945,28 @@
     const main = PS.shell('materials', [['剪辑工作台', '#cut'], ['视觉素材库', '#materials']], `
       <div class="ph">
         <div>
-          <h1>视觉素材库</h1>
-          <p>三大类即拿即用：图片风格（${counts.image}）、视频动效（${counts.motion}）、做视频模板（${counts.video}），写稿封面与剪辑镜头表直接复用。</p>
+          <h1>视觉素材库（共 ${totalAll.toLocaleString()} 款）</h1>
+          <p>四大类全量即拿即用：图片风格（${counts.image}）、视频动效与场景卡（${counts.motion}）、做视频方法（${counts.video}）、真实爆款视频案例（${(counts.cases || 0).toLocaleString()}）。</p>
         </div>
         <div class="acts">
-          <div class="seg">
+          <div class="seg" style="flex-wrap:wrap">
             <button class="${matKind === 'image' ? 'on' : ''}" data-mk="image">图片 (${counts.image})</button>
             <button class="${matKind === 'motion' ? 'on' : ''}" data-mk="motion">视频动效 (${counts.motion})</button>
             <button class="${matKind === 'video' ? 'on' : ''}" data-mk="video">做视频 (${counts.video})</button>
+            <button class="${matKind === 'cases' ? 'on' : ''}" data-mk="cases">视频案例 (${(counts.cases || 0).toLocaleString()})</button>
           </div>
         </div>
       </div>
 
       <div class="card row" style="padding:10px 14px;flex-wrap:wrap;gap:10px">
-        <input type="search" id="matSearch" value="${PS.esc(matQ)}" placeholder="搜索风格名、场景或关键词…" style="max-width:240px">
+        <input type="search" id="matSearch" value="${PS.esc(matQ)}" placeholder="搜索风格名、作者、模型或关键词…" style="max-width:240px">
         <input type="text" id="matTopicIn" value="${PS.esc(matTopic)}" placeholder="填入你的主题（自动替换提示词里的 {topic} / {script}）" class="grow" style="min-width:220px">
-        <span class="sub" style="font-size:12px">命中 ${data.total} 款</span>
+        <span class="sub" style="font-size:12px">命中 ${data.total.toLocaleString()} 款 · 第 ${Math.floor((data.offset || 0) / 48) + 1} / ${Math.max(1, Math.ceil(data.total / 48))} 页</span>
       </div>
 
       <div class="row" style="flex-wrap:wrap;gap:6px">
         <button class="pill ${!matCat ? 'accent' : ''}" data-mc="" style="cursor:pointer;border:0">全部</button>
-        ${(data.categories || []).slice(0, 18).map(c => `<button class="pill ${matCat === c.name ? 'accent' : ''}" data-mc="${PS.esc(c.name)}" style="cursor:pointer;border:0">${PS.esc(c.name)} ${c.count}</button>`).join('')}
+        ${(data.categories || []).slice(0, 22).map(c => `<button class="pill ${matCat === c.name ? 'accent' : ''}" data-mc="${PS.esc(c.name)}" style="cursor:pointer;border:0">${PS.esc(c.name)} ${c.count}</button>`).join('')}
       </div>
 
       <div class="grid-3">
@@ -779,14 +984,23 @@
           <div class="row" style="margin-top:auto;padding-top:6px;gap:6px">
             <button class="btn primary s" data-mcopy="${idx}">${PS.icon('copy', 'sm')}复制提示词</button>
             <button class="btn s" data-mview="${idx}">看详情</button>
+            ${it.url ? `<a class="btn s" href="${PS.esc(it.url)}" target="_blank" rel="noopener">原帖 ↗</a>` : ''}
           </div>
         </div>`).join('') || '<div class="card sub">没有匹配的素材，换个关键词试试。</div>'}
       </div>
+
+      ${data.total > 48 ? `<div class="row" style="justify-content:center;gap:10px;padding:12px 0">
+        <button class="btn s" id="matPrev" ${matOffset <= 0 ? 'disabled' : ''}>‹ 上一页</button>
+        <span class="sub">第 ${Math.floor(matOffset / 48) + 1} / ${Math.max(1, Math.ceil(data.total / 48))} 页（共 ${data.total.toLocaleString()} 款）</span>
+        <button class="btn s" id="matNext" ${!data.hasMore ? 'disabled' : ''}>下一页 ›</button>
+      </div>` : ''}
     `);
 
-    main.querySelectorAll('[data-mk]').forEach(b => b.onclick = () => { matKind = b.dataset.mk; matCat = ''; PS.pages.materials(matKind); });
-    main.querySelectorAll('[data-mc]').forEach(b => b.onclick = () => { matCat = b.dataset.mc; PS.pages.materials(matKind); });
-    main.querySelector('#matSearch').onkeydown = e => { if (e.key === 'Enter') { matQ = e.target.value; PS.pages.materials(matKind); } };
+    main.querySelectorAll('[data-mk]').forEach(b => b.onclick = () => { matKind = b.dataset.mk; matCat = ''; matOffset = 0; PS.pages.materials(matKind); });
+    main.querySelectorAll('[data-mc]').forEach(b => b.onclick = () => { matCat = b.dataset.mc; matOffset = 0; PS.pages.materials(matKind); });
+    main.querySelector('#matSearch').onkeydown = e => { if (e.key === 'Enter') { matQ = e.target.value; matOffset = 0; PS.pages.materials(matKind); } };
+    main.querySelector('#matPrev')?.addEventListener('click', () => { matOffset = Math.max(0, matOffset - 48); PS.pages.materials(matKind); });
+    main.querySelector('#matNext')?.addEventListener('click', () => { if (data.hasMore) { matOffset += 48; PS.pages.materials(matKind); } });
     main.querySelector('#matTopicIn').oninput = e => { matTopic = e.target.value; };
     main.querySelectorAll('[data-mcopy]').forEach(b => b.onclick = () => {
       const it = (data.items || [])[+b.dataset.mcopy];
@@ -844,7 +1058,7 @@
             <b style="font-size:14.5px">${PS.esc(t.title)}</b>
             <div class="sub" style="margin-top:2px">停在「${t.stage}」 · 选题分 ${t.score}/15 · ${PS.esc(t.updated)}</div>
           </div>
-          <a class="btn primary s" href="#write">写骨架 / 出稿 ›</a>
+          <button class="btn primary s" data-open-topic="${t.id}">写骨架 / 出稿 ›</button>
           <button class="btn ghost s" data-trash="${t.id}">${PS.icon('trash', 'sm')}</button>
         </div>`).join('')}
       </div>
@@ -868,6 +1082,11 @@
       PS.toast('已写入选题池（SQLite）', 'good');
       PS.pages.pool();
     };
+    main.querySelectorAll('[data-open-topic]').forEach(b => b.onclick = () => {
+      const id = +b.dataset.openTopic;
+      PS.selectTopicForWrite(id);
+      location.hash = `#write/${id}`;
+    });
     main.querySelectorAll('[data-trash]').forEach(b => b.onclick = async () => {
       const id = +b.dataset.trash;
       const h = PS.S.topics.find(x => x.id === id);
@@ -884,10 +1103,30 @@
     });
   };
 
-  PS.pages.write = function () {
+  PS.selectTopicForWrite = function (id) {
+    const t = PS.S.topics.find(x => x.id === +id);
+    if (!t) return null;
+    PS.S.activeTopicId = t.id;
+    PS.S.script.id = t.id;
+    PS.S.script.title = t.title || '';
+    PS.S.script.body = t.body || '';
+    PS.S.script.audit = t.audit?.revised ? t.audit : { value: '', resonate: '', pace: '', revised: '' };
+    PS.S.cutProject.hooks = Array.isArray(t.hooks) ? [...t.hooks] : [];
+    PS.S.cutProject.pickedHook = Number(t.picked_hook || 0);
+    PS.save();
+    return t;
+  };
+
+  PS.pages.write = function (subId) {
+    if (subId && +subId !== PS.S.activeTopicId) {
+      PS.selectTopicForWrite(+subId);
+    } else if (PS.S.activeTopicId) {
+      const t = PS.S.topics.find(x => x.id === PS.S.activeTopicId);
+      if (t && PS.S.script.id !== t.id) PS.selectTopicForWrite(t.id);
+    }
     const sc = PS.S.script;
     const cp = PS.S.cutProject;
-    const chars = sc.body.replace(/\s/g, '').length;
+    const chars = (sc.body || '').replace(/\s/g, '').length;
 
     const main = PS.shell('write', [['选题工作台', '#source'], ['选题池', '#pool'], ['骨架与写稿', '#write']], `
       <div class="ph">
@@ -937,6 +1176,8 @@
       sc.title = main.querySelector('#scTitle').value.trim();
       sc.body = main.querySelector('#scBody').value;
       if (PS.S.activeTopicId) {
+        const curT = PS.S.topics.find(x => x.id === PS.S.activeTopicId);
+        if (curT) { curT.title = sc.title; curT.body = sc.body; curT.picked_hook = cp.pickedHook; curT.hooks = [...(cp.hooks || [])]; }
         await PS.api('PATCH', `/api/topics/${PS.S.activeTopicId}`, { title: sc.title, body: sc.body, picked_hook: cp.pickedHook }).catch(() => {});
       }
       PS.save();
@@ -946,8 +1187,16 @@
       const btn = e.currentTarget;
       btn.disabled = true; btn.textContent = '本机 AI 生成中…';
       try {
-        const res = await PS.api('POST', '/api/ai/hooks', { topic_id: PS.S.activeTopicId, title: main.querySelector('#scTitle').value, body: main.querySelector('#scBody').value });
-        if (res.hooks?.length) { cp.hooks = res.hooks; cp.pickedHook = 0; PS.save(); PS.toast(`本机 ${res.backend}/${res.model} 已生成 ${res.hooks.length} 条钩子`, 'good'); PS.pages.write(); }
+        const curTitle = main.querySelector('#scTitle').value;
+        const curBody = main.querySelector('#scBody').value;
+        sc.title = curTitle; sc.body = curBody;
+        const res = await PS.api('POST', '/api/ai/hooks', { topic_id: PS.S.activeTopicId, title: curTitle, body: curBody });
+        if (res.hooks?.length) {
+          cp.hooks = res.hooks; cp.pickedHook = 0;
+          const curT = PS.S.topics.find(x => x.id === PS.S.activeTopicId);
+          if (curT) { curT.title = curTitle; curT.body = curBody; curT.hooks = [...res.hooks]; curT.picked_hook = 0; }
+          PS.save(); PS.toast(`本机 ${res.backend}/${res.model} 已生成 ${res.hooks.length} 条钩子`, 'good'); PS.pages.write(PS.S.activeTopicId);
+        }
       } catch (err) {
         PS.toast(err.message, 'warn');
         btn.disabled = false; btn.textContent = '用本机 AI 重写钩子';

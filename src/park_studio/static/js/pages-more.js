@@ -19,15 +19,34 @@
       return '<span class="pill wait">未登录</span>';
     };
 
+    const corePlats = PS.PLAT_ORDER.filter(pid => !['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(pid));
+    const globalPlats = PS.PLAT_ORDER.filter(pid => ['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(pid));
+
+    const renderPlatRow = pid => {
+      const p = PS.PLATFORMS[pid];
+      const st = PS.S.platformStatus[pid] || { state: 'unknown', detail: '尚未检查', checkedAt: '未检查', disabled: false };
+      return `<div class="prow ${st.disabled ? 'off' : ''}">
+        ${PS.plogo(pid, 24)}
+        <span class="pname">
+          ${p.name}
+          <span class="psub">${st.disabled ? '不体检、不发布、不采粉丝（点右侧可启用）' : `${PS.esc(st.detail)} · 上次检查 ${PS.esc(st.checkedAt)}`}</span>
+        </span>
+        ${stChip(st)}
+        ${st.disabled ? '' : `<button class="btn s" data-doc="${pid}">检查</button>`}
+        ${st.disabled ? '' : `<button class="btn s" data-login="${pid}">${st.state === 'ok' ? '打开后台' : '去登录'}</button>`}
+        <button class="btn s" data-tog="${pid}">${st.disabled ? '启用' : '停用'}</button>
+      </div>`;
+    };
+
     const main = PS.shell('settings', [['系统', '#settings']], `
       <div class="ph">
         <div>
           <h1>系统</h1>
-          <p>Park Studio 本机运行状态、7 平台专用浏览器体检、飞书/站点集成与 Park 开源社区连接。</p>
+          <p>Park Studio 本机运行状态、${PS.PLAT_ORDER.length} 平台专用浏览器体检（已启用 ${active.length} 家）、本地 Agent / 可选 API 与通知集成。</p>
         </div>
         <div class="acts">
           <a class="btn" href="#position">${PS.icon('star', 'sm')}我的定位</a>
-          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.2.0</a>
+          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.3.0</a>
           <a class="btn" href="https://github.com/zinan92/park-studio/issues" target="_blank" rel="noopener">GitHub Issues ↗</a>
         </div>
       </div>
@@ -69,20 +88,14 @@
           ${s.siteEnabled ? '<button class="btn" id="btnSyncSite">同步知识站数据</button>' : ''}
         </div>
         <div>
-          ${PS.PLAT_ORDER.map(pid => {
-            const p = PS.PLATFORMS[pid], st = PS.S.platformStatus[pid];
-            return `<div class="prow ${st.disabled ? 'off' : ''}">
-              ${PS.plogo(pid, 24)}
-              <span class="pname">
-                ${p.name}
-                <span class="psub">${st.disabled ? '不体检、不发布、不采粉丝' : `${PS.esc(st.detail)} · 上次检查 ${PS.esc(st.checkedAt)}`}</span>
-              </span>
-              ${stChip(st)}
-              ${st.disabled ? '' : `<button class="btn s" data-doc="${pid}">检查</button>`}
-              ${st.disabled ? '' : `<button class="btn s" data-login="${pid}">${st.state === 'ok' ? '打开后台' : '去登录'}</button>`}
-              <button class="btn s" data-tog="${pid}">${st.disabled ? '启用' : '停用'}</button>
-            </div>`;
-          }).join('')}
+          ${corePlats.map(renderPlatRow).join('')}
+        </div>
+        <div style="border-top:1px dashed var(--line-soft);padding-top:12px">
+          <div class="row" style="margin-bottom:8px;gap:8px">
+            <b style="font-size:13px">可选海外平台（${globalPlats.length} 家）</b>
+            <span class="sub" style="font-size:12px">TikTok / Instagram / Threads / LinkedIn / Meta Business Suite 默认停用，按需一键启用即可纳入体检与填表发布</span>
+          </div>
+          ${globalPlats.map(renderPlatRow).join('')}
         </div>
       </section>
 
@@ -107,7 +120,34 @@
               <button class="${s.aiBackend === 'api' ? 'on' : ''}" data-aib="api">可选 API</button>
             </div>
           </div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">全局模型名称（Gemini API 默认 gemini-2.5-flash；留空走该引擎默认）</label><input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || '')}" placeholder="gemini-2.5-pro / gemini-2.5-flash / 留空走默认"></div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">全局模型名称（Gemini API 默认 gemini-2.5-flash；留空走该引擎默认）</label>
+            <input type="text" id="aiModelIn" class="mono" value="${PS.esc(s.aiModel || '')}" placeholder="gemini-2.5-pro / gemini-2.5-flash / 留空走默认">
+          </div>
+          ${s.aiBackend === 'gemini-api' ? `
+          <div style="padding:10px 12px;border-radius:10px;background:var(--sunk)" class="stack tight">
+            <label class="sub" style="display:block">Gemini API Key（可选，留空自动读取本机环境变量 <code>GOOGLE_API_KEY</code> / <code>GEMINI_API_KEY</code>）</label>
+            <input type="password" id="geminiKeyIn" class="mono" value="${PS.esc(s.geminiApiKey || '')}" placeholder="AIza...（留空则走环境变量）">
+          </div>` : ''}
+          ${s.aiBackend === 'api' ? `
+          <div style="padding:12px;border-radius:10px;background:var(--sunk)" class="stack tight">
+            <div class="row" style="gap:6px;flex-wrap:wrap">
+              <span class="sub" style="font-size:12px;font-weight:600">一键预设：</span>
+              <button type="button" class="btn s" data-api-preset="deepseek">DeepSeek</button>
+              <button type="button" class="btn s" data-api-preset="openai">OpenAI</button>
+              <button type="button" class="btn s" data-api-preset="openrouter">OpenRouter</button>
+              <button type="button" class="btn s" data-api-preset="ollama">Ollama 本机</button>
+            </div>
+            <div><label class="sub" style="display:block;margin-bottom:4px">API Base URL（OpenAI 兼容接口）</label><input type="url" id="apiBaseUrlIn" class="mono" value="${PS.esc(s.apiBaseUrl || 'https://api.deepseek.com/v1')}" placeholder="https://api.deepseek.com/v1"></div>
+            <div class="sys-2col">
+              <div><label class="sub" style="display:block;margin-bottom:4px">API Key（Ollama 本机可留空）</label><input type="password" id="apiKeyIn" class="mono" value="${PS.esc(s.apiKey || '')}" placeholder="sk-..."></div>
+              <div><label class="sub" style="display:block;margin-bottom:4px">API 模型名</label><input type="text" id="apiModelIn" class="mono" value="${PS.esc(s.apiModel || 'deepseek-chat')}" placeholder="deepseek-chat / gpt-4o-mini"></div>
+            </div>
+          </div>` : ''}
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <button type="button" class="btn s" id="testAiBtn">${PS.icon('spark', 'sm')}测试 AI 连通性</button>
+            <span class="sub" id="testAiStatus" style="font-size:12px">切换引擎或填写 API Key 后可立即验证是否可用</span>
+          </div>
           <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 知识库根目录（只读 · <a href="#kb">去选接入文件夹 ›</a>）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
           <div><label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿自动建目录 / 打包自动扫描）</label><input type="text" id="projRootIn" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}"></div>
         </div>
@@ -221,7 +261,7 @@
       }
     };
 
-    main.querySelector('#btnDocAll').onclick = e => runBtn(e.currentTarget, '正在探活 7 平台…', async () => {
+    main.querySelector('#btnDocAll').onclick = e => runBtn(e.currentTarget, `正在探活 ${active.length} 平台…`, async () => {
       const res = await PS.api('POST', '/api/platforms/check', {});
       applySysRes(res);
       const okN = Object.values(res.results || {}).filter(r => r.state === 'ok').length;
@@ -332,8 +372,54 @@
       await PS.api('PUT', '/api/settings', { cutAgentBackend: s.cutAgentBackend }).catch(() => {});
       PS.save(); PS.pages.settings();
     });
+    const API_PRESETS = {
+      deepseek: { base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+      openai: { base: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+      openrouter: { base: 'https://openrouter.ai/api/v1', model: 'google/gemini-2.5-flash' },
+      ollama: { base: 'http://127.0.0.1:11434/v1', model: 'qwen2.5:14b' },
+    };
+    main.querySelectorAll('[data-api-preset]').forEach(b => b.onclick = () => {
+      const p = API_PRESETS[b.dataset.apiPreset];
+      if (!p) return;
+      const baseEl = main.querySelector('#apiBaseUrlIn');
+      const modEl = main.querySelector('#apiModelIn');
+      if (baseEl) baseEl.value = p.base;
+      if (modEl) modEl.value = p.model;
+      PS.toast(`已填入 ${b.textContent} 预设（填好 Key 后点「测试 AI 连通性」或保存）`, 'good');
+    });
+
+    main.querySelector('#testAiBtn')?.addEventListener('click', e => runBtn(e.currentTarget, '正在测试连通性…', async () => {
+      const statusEl = main.querySelector('#testAiStatus');
+      const payload = {
+        aiBackend: s.aiBackend,
+        aiModel: main.querySelector('#aiModelIn')?.value.trim() ?? s.aiModel,
+      };
+      if (main.querySelector('#apiBaseUrlIn')) payload.apiBaseUrl = main.querySelector('#apiBaseUrlIn').value.trim();
+      if (main.querySelector('#apiKeyIn')) payload.apiKey = main.querySelector('#apiKeyIn').value.trim();
+      if (main.querySelector('#apiModelIn')) payload.apiModel = main.querySelector('#apiModelIn').value.trim();
+      if (main.querySelector('#geminiKeyIn')) payload.geminiApiKey = main.querySelector('#geminiKeyIn').value.trim();
+      try {
+        const r = await PS.api('POST', '/api/ai/test', payload);
+        if (statusEl) {
+          statusEl.style.color = 'var(--good)';
+          statusEl.textContent = `✓ 连通成功：${r.backend} / ${r.model}（${r.latencyMs}ms）`;
+        }
+        PS.toast(`AI 连通测试通过：${r.backend}/${r.model} · ${r.latencyMs}ms ✓`, 'good');
+      } catch (err) {
+        if (statusEl) {
+          statusEl.style.color = 'var(--warn)';
+          statusEl.textContent = `✗ ${err.message || '测试失败'}`;
+        }
+        throw err;
+      }
+    }));
+
     main.querySelector('#saveAiCfg').onclick = async () => {
       s.aiModel = main.querySelector('#aiModelIn').value.trim();
+      if (main.querySelector('#apiBaseUrlIn')) s.apiBaseUrl = main.querySelector('#apiBaseUrlIn').value.trim();
+      if (main.querySelector('#apiKeyIn')) s.apiKey = main.querySelector('#apiKeyIn').value.trim();
+      if (main.querySelector('#apiModelIn')) s.apiModel = main.querySelector('#apiModelIn').value.trim();
+      if (main.querySelector('#geminiKeyIn')) s.geminiApiKey = main.querySelector('#geminiKeyIn').value.trim();
       s.cutAgentModel = main.querySelector('#cutModelIn').value.trim();
       s.cutAgentCmd = main.querySelector('#cutCmdIn').value.trim();
       s.obsidianPath = main.querySelector('#obPath').value.trim();
@@ -343,6 +429,10 @@
         await PS.api('PUT', '/api/settings', {
           aiBackend: s.aiBackend,
           aiModel: s.aiModel,
+          apiBaseUrl: s.apiBaseUrl,
+          apiKey: s.apiKey,
+          apiModel: s.apiModel,
+          geminiApiKey: s.geminiApiKey,
           cutAgentBackend: s.cutAgentBackend || 'inherit',
           cutAgentModel: s.cutAgentModel,
           cutAgentCmd: s.cutAgentCmd,
@@ -395,7 +485,7 @@
       </div>
     `, 'narrow');
 
-    main.querySelector('#chkUpd').onclick = () => PS.toast('当前已是最新版 v0.1.2 ✓', 'good');
+    main.querySelector('#chkUpd').onclick = () => PS.toast('当前已是最新版 v0.3.0 ✓', 'good');
   };
 
   // ==================== 3. 知识库（Obsidian 接入文件夹总览与检索，取代零散「说过的话」） ====================

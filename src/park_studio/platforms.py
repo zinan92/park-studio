@@ -24,7 +24,11 @@ import httpx
 
 from . import cdp, config, db
 
-PLAT_ORDER = ("douyin", "xhs", "bilibili", "channels", "youtube", "x", "wechat")
+PLAT_ORDER = (
+    "douyin", "xhs", "bilibili", "channels", "youtube", "x", "wechat",
+    "tiktok", "instagram", "threads", "linkedin", "meta",
+)
+OPTIONAL_GLOBAL_PLATFORMS = {"tiktok", "instagram", "threads", "linkedin", "meta"}
 
 PLATFORM_SPECS: dict[str, dict[str, str]] = {
     "douyin": {
@@ -68,6 +72,36 @@ PLATFORM_SPECS: dict[str, dict[str, str]] = {
         "login_url": "https://mp.weixin.qq.com/",
         "home_url": "https://mp.weixin.qq.com/",
         "mode": "auto",
+    },
+    "tiktok": {
+        "name": "TikTok",
+        "login_url": "https://www.tiktok.com/tiktokstudio/upload",
+        "home_url": "https://www.tiktok.com/tiktokstudio",
+        "mode": "manual",
+    },
+    "instagram": {
+        "name": "Instagram",
+        "login_url": "https://www.instagram.com/",
+        "home_url": "https://www.instagram.com/",
+        "mode": "manual",
+    },
+    "threads": {
+        "name": "Threads",
+        "login_url": "https://www.threads.net/",
+        "home_url": "https://www.threads.net/",
+        "mode": "manual",
+    },
+    "linkedin": {
+        "name": "LinkedIn",
+        "login_url": "https://www.linkedin.com/feed/",
+        "home_url": "https://www.linkedin.com/feed/",
+        "mode": "manual",
+    },
+    "meta": {
+        "name": "Meta",
+        "login_url": "https://business.facebook.com/latest/composer",
+        "home_url": "https://business.facebook.com/latest/home",
+        "mode": "manual",
     },
 }
 
@@ -248,12 +282,50 @@ async def _probe_one(client: cdp.CDPClient, pid: str) -> dict[str, Any]:
                         return {"state": "warn", "detail": "公众号未登录（需微信扫码登录）"}
                 last_reason = "公众号未登录（需微信扫码）"
 
+            elif pid == "tiktok":
+                if "/login" in low:
+                    return {"state": "warn", "detail": "TikTok 未登录，请点「去登录」"}
+                if "tiktokstudio" in low and attempt >= 2:
+                    return {"state": "ok", "detail": "已登录（TikTok Studio 正常）"}
+                last_reason = "TikTok Studio 未返回登录态（请确认代理与登录）"
+
+            elif pid == "instagram":
+                if "/accounts/login" in low:
+                    return {"state": "warn", "detail": "Instagram 未登录，请点「去登录」"}
+                has_nav = await client.evaluate(sid, "!!document.querySelector('svg[aria-label=\"Home\"], a[href=\"/direct/inbox/\"], nav')")
+                if has_nav:
+                    return {"state": "ok", "detail": "已登录（Instagram 正常）"}
+                last_reason = "Instagram 未检测到登录态"
+
+            elif pid == "threads":
+                if "/login" in low:
+                    return {"state": "warn", "detail": "Threads 未登录，请点「去登录」"}
+                has_ui = await client.evaluate(sid, "!!document.querySelector('a[href=\"/activity\"], svg[aria-label=\"Create\"], [role=navigation]')")
+                if has_ui:
+                    return {"state": "ok", "detail": "已登录（Threads 正常）"}
+                last_reason = "Threads 未检测到登录态"
+
+            elif pid == "linkedin":
+                if "/login" in low or "/uas/login" in low or "/checkpoint" in low:
+                    return {"state": "warn", "detail": "LinkedIn 未登录，请点「去登录」"}
+                if "/feed" in low and attempt >= 2:
+                    return {"state": "ok", "detail": "已登录（LinkedIn Feed 正常）"}
+                last_reason = "LinkedIn 未检测到登录态"
+
+            elif pid == "meta":
+                if "/login" in low or "login.php" in low:
+                    return {"state": "warn", "detail": "Meta Business Suite 未登录，请点「去登录」"}
+                if "business.facebook.com/latest" in low and attempt >= 2:
+                    return {"state": "ok", "detail": "已登录（Meta Business Suite 正常）"}
+                last_reason = "Meta Business Suite 未检测到登录态"
+
         return {"state": "warn", "detail": last_reason}
 
     try:
         return await client.with_tab(url, inspect, wait_s=0.0, active=False, keep_open=False)
     except Exception as exc:
-        return {"state": "warn", "detail": f"检查出错：{str(exc)[:90]}"}
+        err_msg = str(exc).strip() or f"{type(exc).__name__}（页面加载超时或标签页中断）"
+        return {"state": "warn", "detail": f"检查出错：{err_msg[:90]}"}
 
 
 async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, Any] | None:
