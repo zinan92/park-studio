@@ -33,18 +33,6 @@
       ],
     },
     {
-      id: 'getfit',
-      portrait: true,
-      name: { zh: '轻练', en: 'Get-Fit (Coach & Member CRM)' },
-      tag: { zh: '小程序 · 会员管理', en: 'Mobile Member CRM' },
-      desc: { zh: '面向健身私教的 30 天训练与饮食打卡、会员档案跟进与续费管理小程序。', en: '30-day mobile workout & nutrition tracking, client review, and membership CRM for trainers.' },
-      shots: [
-        { src: 'assets/cases/getfit-1.png', cap: { zh: '轻练 · 学员端今日训练与动作要领', en: 'Client daily workout & posture cues' } },
-        { src: 'assets/cases/getfit-2.png', cap: { zh: '轻练 · 今日饮食打卡与热量记录', en: 'Daily meals & calorie tracking' } },
-        { src: 'assets/cases/getfit-3.png', cap: { zh: '轻练 · 教练端学员档案审核与建计划', en: 'Coach client profile review' } },
-      ],
-    },
-    {
       id: 'tianji',
       twoCols: true,
       name: { zh: '天机', en: 'Tianji (AI Metaphysics App)' },
@@ -86,6 +74,18 @@
         { src: 'assets/cases/ashare-1.png', cap: { zh: 'A 股看板 · ① 大盘位置与趋势门控', en: 'Stage 1: Market regime gate' } },
         { src: 'assets/cases/ashare-2.png', cap: { zh: 'A 股看板 · ② 攻防倾向与强势板块', en: 'Stage 2: Bias & sector strength' } },
         { src: 'assets/cases/ashare-3.png', cap: { zh: 'A 股看板 · ③ 个股定量筛选漏斗', en: 'Stage 3: Candidate stock funnel' } },
+      ],
+    },
+    {
+      id: 'getfit',
+      portrait: true,
+      name: { zh: '轻练', en: 'Get-Fit (Coach & Member CRM)' },
+      tag: { zh: '小程序 · 会员管理', en: 'Mobile Member CRM' },
+      desc: { zh: '面向健身私教的 30 天训练与饮食打卡、会员档案跟进与续费管理小程序。', en: '30-day mobile workout & nutrition tracking, client review, and membership CRM for trainers.' },
+      shots: [
+        { src: 'assets/cases/getfit-1.png', cap: { zh: '轻练 · 学员端今日训练与动作要领', en: 'Client daily workout & posture cues' } },
+        { src: 'assets/cases/getfit-2.png', cap: { zh: '轻练 · 今日饮食打卡与热量记录', en: 'Daily meals & calorie tracking' } },
+        { src: 'assets/cases/getfit-3.png', cap: { zh: '轻练 · 教练端学员档案审核与建计划', en: 'Coach client profile review' } },
       ],
     },
   ];
@@ -138,7 +138,7 @@
         h2: '接入你电脑里已有的任何 AI，每个环节都能自由换 Skill',
         lead: '不绑定任何一家云端模型或固定套路。海内外你电脑里装好的 AI 全都能接，写作、剪辑、生图每一步都可以替换成你最顺手的 Skill。',
         leftEyebrow: '模块化可插拔流水线',
-        leftH3: '写作、剪辑、AI 引擎——想换哪个换哪个',
+        leftH3: '写作、剪辑、AI——想换哪个换哪个',
         leftList: [
           '支持海外与国内全部主流 AI：Gemini CLI、Claude Code、Codex、Antigravity、WorkBuddy、豆包、千问 Agent',
           '写作步骤自由替换：可用 park-writing、DB skill，也可以换成符合你自己写作习惯的 Skill',
