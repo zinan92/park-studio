@@ -553,4 +553,66 @@ class CutJobManager:
             return {**j, "logs": list(j["logs"])}
 
 
+def _fmt_srt_ts(sec: float) -> str:
+    ms = max(0, int(round(sec * 1000)))
+    h, rem = divmod(ms, 3600000)
+    m, rem = divmod(rem, 60000)
+    s, rem = divmod(rem, 1000)
+    return f"{h:02d}:{m:02d}:{s:02d},{rem:03d}"
+
+
+def translate_srt(
+    lines: list[dict[str, Any]],
+    out_path: Path,
+    *,
+    target_lang: str = "en",
+    bilingual: bool = False,
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """用本机 AI 把逐字稿句级字幕翻译为英文（或中英双语）标准 .srt 文件，供 YouTube/TikTok/LinkedIn 外挂字幕。"""
+    valid = [ln for ln in (lines or []) if str(ln.get("text") or "").strip()]
+    if not valid:
+        raise CutError("当前没有可翻译的字幕句子，请先转写原片或导入 .srt")
+    cfg = cfg or config.load_config()
+    lang_label = "natural, concise English subtitles (<=80 chars per cue)" if target_lang == "en" else "自然简洁的简体中文字幕"
+    items_txt = "\n".join(f'{ln["i"]}: {str(ln.get("text") or "").strip()}' for ln in valid[:160])
+    prompt = (
+        f"You are a professional subtitle translator for short-form creator videos.\n"
+        f"Translate every numbered line below into {lang_label}. Keep meaning sharp and spoken-natural.\n\n"
+        f"{items_txt}\n\n"
+        'Return strictly a JSON object mapping string line numbers to translated strings, e.g. {"0": "...", "1": "..."}.'
+    )
+    res = ai.run_prompt(prompt, cfg=cfg, timeout=120)
+    parsed = ai.extract_json_block(res["text"])
+    if not isinstance(parsed, dict):
+        raise CutError("字幕翻译返回格式无法解析为 JSON，请重试")
+
+    cues: list[str] = []
+    idx_out = 1
+    for pos, ln in enumerate(valid):
+        orig = str(ln.get("text") or "").strip()
+        tr = str(parsed.get(str(ln.get("i"))) or parsed.get(ln.get("i")) or orig).strip()
+        start = float(ln.get("start") if ln.get("start") is not None else pos * 3.0)
+        end = float(ln.get("end") if ln.get("end") is not None else start + 2.8)
+        if end <= start:
+            end = start + 1.5
+        body = f"{tr}\n{orig}" if bilingual and tr != orig else tr
+        cues.append(f"{idx_out}\n{_fmt_srt_ts(start)} --> {_fmt_srt_ts(end)}\n{body}")
+        idx_out += 1
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    srt_text = "\n\n".join(cues) + "\n"
+    out_path.write_text(srt_text, encoding="utf-8")
+    return {
+        "ok": True,
+        "path": str(out_path),
+        "cues": len(cues),
+        "targetLang": target_lang,
+        "bilingual": bilingual,
+        "preview": "\n\n".join(cues[:6]),
+        "backend": res["backend"],
+        "model": res["model"],
+    }
+
+
 JOBS = CutJobManager()

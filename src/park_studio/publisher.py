@@ -13,7 +13,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from . import cdp, config, db, platforms, projects
+from . import ai, cdp, config, db, platforms, projects
 
 UPLOAD_URLS: dict[str, str] = {
     "douyin": "https://creator.douyin.com/creator-micro/content/upload",
@@ -248,6 +248,116 @@ def _copy_for_platform(ep: dict[str, Any], pid: str) -> tuple[str, str, list[str
     desc = str(p_over.get("text") or p_over.get("description") or pj.get("description") or title).strip()
     tags = [str(t).lstrip("#").strip() for t in (p_over.get("tags") or pj.get("tags") or []) if str(t).strip()]
     return title, desc, tags
+
+
+PLATFORM_LOCALIZE_PROFILES: dict[str, dict[str, str]] = {
+    "douyin": {"lang": "zh", "style": "抖音短视频：标题≤28字强钩子反差，正文简短口语带互动提问，3-5个中文话题"},
+    "xhs": {"lang": "zh", "style": "小红书：标题≤20字带痛点/数字，正文分点易扫读+收藏引导，4-6个精准中文标签"},
+    "bilibili": {"lang": "zh", "style": "B站：信息密度高的清晰标题≤45字，简介含核心看点与时间/工具说明，3-5个中文标签"},
+    "channels": {"lang": "zh", "style": "微信视频号：克制真诚的转发友好口吻，标题≤30字，正文1-3句干货总结，3-4个标签"},
+    "wechat": {"lang": "zh", "style": "微信公众号：标题有判断力与点击欲，导语清晰概括价值，适合图文/视频号联动"},
+    "youtube": {"lang": "en", "style": "YouTube (idiomatic English): searchable punchy title <=90 chars, structured description with key takeaways & CTA, 4-6 English tags"},
+    "x": {"lang": "en", "style": "X / Twitter (idiomatic English): sharp 1-line hook + concise punchy post <=260 chars total, max 1-2 natural hashtags"},
+    "tiktok": {"lang": "en", "style": "TikTok (idiomatic English): curiosity-gap short caption <=150 chars, casual creator tone, 4-5 trending English hashtags"},
+    "instagram": {"lang": "en", "style": "Instagram Reels (idiomatic English): strong opening line + scannable 2-3 line value caption + save/comment CTA, 5-6 English hashtags"},
+    "threads": {"lang": "en", "style": "Threads (idiomatic English): conversational builder-to-builder hot take <=300 chars, zero corporate fluff, 0-2 tags"},
+    "linkedin": {"lang": "en", "style": "LinkedIn (idiomatic English): clear insight hook + 3-4 crisp bullet takeaways + thoughtful closing question for builders/founders, 3-4 professional hashtags"},
+    "meta": {"lang": "en", "style": "Meta Business Suite / Facebook & IG (idiomatic English): engaging accessible hook + 2-3 sentence summary, 3-5 English hashtags"},
+}
+
+
+def localize_episode_copy(
+    conn: sqlite3.Connection,
+    episode_id: int,
+    *,
+    target_platforms: list[str] | None = None,
+    lang_overrides: dict[str, str] | None = None,
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """用本机 AI 一次把原稿标题与正文按各平台语言（中/英）与口吻做本地化改写，写入 publish.json.platforms。"""
+    ep = get_episode(conn, episode_id)
+    if not ep:
+        raise ValueError("找不到该发布期次")
+    cfg = cfg or config.load_config()
+    pj = dict(ep.get("publishJson") or {})
+    src_title = str(pj.get("title") or ep.get("title") or "").strip()
+    src_desc = str(pj.get("description") or src_title).strip()
+    src_tags = pj.get("tags") or []
+
+    if target_platforms:
+        plats = [p for p in target_platforms if p in platforms.PLAT_ORDER]
+    else:
+        ps = platforms.get_platform_status_map(conn)
+        plats = [p for p in platforms.PLAT_ORDER if not ps.get(p, {}).get("disabled")]
+    if not plats:
+        raise ValueError("当前没有已启用的平台，请先在「系统」勾选至少 1 个平台")
+
+    overrides = lang_overrides or {}
+    plat_lines = []
+    target_langs: dict[str, str] = {}
+    for pid in plats:
+        prof = PLATFORM_LOCALIZE_PROFILES.get(pid, {"lang": "en", "style": "Natural creator style"})
+        lang = str(overrides.get(pid) or prof["lang"]).lower()
+        if lang not in ("zh", "en"):
+            lang = prof["lang"]
+        target_langs[pid] = lang
+        lang_hint = "English (native, idiomatic transcreation — NEVER literal word-for-word translation)" if lang == "en" else "简体中文（地道创作者口吻，自然不生硬）"
+        plat_lines.append(f'- "{pid}": 语言={lang_hint}；风格要求={prof["style"]}')
+
+    prompt = (
+        "你是一位精通中英文跨平台内容分发的资深创作者与本地化编辑。\n"
+        f"原始标题：{src_title}\n"
+        f"原始正文/简介：\n{src_desc[:3000]}\n"
+        f"原始标签：{', '.join(str(t) for t in src_tags[:10]) or '无'}\n\n"
+        "请为下面每个目标平台生成专属本地化版本（注意：英文平台必须改写成地道英文表达，不要直译腔，不要夹杂中文）：\n"
+        + "\n".join(plat_lines)
+        + "\n\n严格只返回一个 JSON 对象，key 必须为上面列出的平台 ID，每个 value 格式为：\n"
+        '{"lang":"en|zh","title":"平台标题","description":"平台正文/简介","tags":["不带#号的标签1","标签2"]}'
+    )
+    res = ai.run_prompt(prompt, cfg=cfg, timeout=120)
+    parsed = ai.extract_json_block(res["text"])
+    if not isinstance(parsed, dict):
+        raise ai.AIError("AI 返回的跨平台适配结果无法解析为 JSON，请重试")
+
+    plat_map = dict(pj.get("platforms") or {})
+    localized_count = 0
+    for pid in plats:
+        item = parsed.get(pid)
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        desc = str(item.get("description") or item.get("text") or "").strip()
+        raw_tags = item.get("tags") or []
+        if isinstance(raw_tags, str):
+            raw_tags = [x.strip() for x in raw_tags.replace("，", ",").split(",") if x.strip()]
+        tags = [str(t).lstrip("#").strip() for t in raw_tags if str(t).strip()][:8]
+        if title or desc:
+            eff_lang = str(item.get("lang") or target_langs[pid]).lower()
+            fallback_title = (desc.splitlines()[0][:84] if eff_lang == "en" and desc else src_title)
+            plat_map[pid] = {
+                **(plat_map.get(pid) or {}),
+                "lang": eff_lang,
+                "title": title or fallback_title,
+                "description": desc or title or src_desc,
+                "tags": tags,
+            }
+            localized_count += 1
+
+    if localized_count == 0:
+        raise ai.AIError("未能解析出任何平台的适配文案，请重试")
+
+    pj["platforms"] = plat_map
+    packed = pack_episode(conn, episode_id, publish_json=pj)
+    db.log_event(conn, f"EP{ep['episode']}", f"{res['backend']}/{res['model']}", "AI 分平台本地化适配", f"已生成 {localized_count} 个平台文案")
+    return {
+        "ok": True,
+        "localized": localized_count,
+        "platforms": plat_map,
+        "episode": packed["episode"],
+        "path": packed["path"],
+        "backend": res["backend"],
+        "model": res["model"],
+    }
 
 
 _DEEP_QUERY_FN = """

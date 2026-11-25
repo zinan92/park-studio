@@ -170,6 +170,16 @@ class OnboardingCompleteReq(BaseModel):
     aiModel: str | None = None
 
 
+class LocalizePublishReq(BaseModel):
+    platforms: list[str] | None = None
+    lang_overrides: dict[str, str] | None = None
+
+
+class TranslateSrtReq(BaseModel):
+    target_lang: str = "en"
+    bilingual: bool = False
+
+
 class KbFoldersReq(BaseModel):
     enabled: list[str]
 
@@ -841,6 +851,31 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         db.log_event(conn, f"EP{cut['episode']}", "剪辑台", "导出 worktable.json", str(out_path))
         return {"ok": True, "path": str(out_path), "payload": payload}
 
+    @app.post("/api/cut/{cut_id}/translate-srt")
+    def api_cut_translate_srt(cut_id: int, req: TranslateSrtReq | None = None) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM cut_projects WHERE id=?", (cut_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "剪辑工程不存在")
+        cfg = config.load_config()
+        cut = _full_cut(cut_id)
+        target_lang = (req.target_lang if req else "en") or "en"
+        bilingual = bool(req.bilingual) if req else False
+        ep_dir = config.projects_dir() / f"EP{cut['episode']}" / "subtitles"
+        fname = f"{target_lang}{'_bilingual' if bilingual else ''}.srt"
+        try:
+            res = cutter.translate_srt(
+                cut.get("lines") or [],
+                ep_dir / fname,
+                target_lang=target_lang,
+                bilingual=bilingual,
+                cfg=cfg,
+            )
+        except (cutter.CutError, ai.AIError) as exc:
+            raise HTTPException(502, str(exc)) from exc
+        _save_cut_meta(conn, cut_id, {"enSrtPath": res["path"]})
+        db.log_event(conn, f"EP{cut['episode']}", f"{res['backend']}/{res['model']}", "生成英文/双语字幕", res["path"])
+        return {**res, "cutProject": _full_cut(cut_id)}
+
     # ---------- 本地 Coding Agent AI 动作（默认 Gemini CLI / Neon） ----------
     def _positioning_text() -> str:
         sp = studiopos.load_studio_positioning(conn)
@@ -1204,6 +1239,23 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(404, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/publish/{episode_id}/localize")
+    def api_publish_localize(episode_id: int, req: LocalizePublishReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            res = publisher.localize_episode_copy(
+                conn,
+                episode_id,
+                target_platforms=req.platforms if req else None,
+                lang_overrides=req.lang_overrides if req else None,
+                cfg=cfg,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
         return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
 
     @app.post("/api/publish/{episode_id}/fill")

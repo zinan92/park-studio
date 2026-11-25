@@ -22,6 +22,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "teardownModules": ["mainline", "opening", "segments", "angles7"],
     "teardownCustomPrompt": "",
     "onboardingDone": False,
+    "uiLang": "auto",               # auto | zh | en
     "obsidianPath": "~/Documents/Obsidian",
     "newsletterItemsPath": "",
     "obsidianFolders": {

@@ -103,7 +103,8 @@
         </div>
         <div class="acts">
           <button class="btn" id="rescanProj">${PS.icon('refresh', 'sm')}重新扫描目录</button>
-          <a class="btn primary" href="#pub-confirm">去确认 · Chrome 填表 ›</a>
+          <button class="btn primary" id="localizeCopyBtn">${PS.icon('spark', 'sm')}一键分平台适配文案（含中译英）</button>
+          <a class="btn" href="#pub-confirm">去确认 · Chrome 填表 ›</a>
         </div>
       </div>
 
@@ -145,11 +146,58 @@
             <div><button class="btn primary s" id="pkSaveBtn">${PS.icon('check', 'sm')}保存并导出 publish.json</button></div>
           </div>
         </details>
-        <pre class="codebox">${PS.esc(JSON.stringify(ep.publishJson || {}, null, 2))}</pre>
+
+        <div style="border-top:1px solid var(--line-soft);padding-top:12px" class="stack tight">
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <b style="font-size:13.5px">分平台文案与中→英本地化预览（当前已启用 ${PS.activePlats().length} 个平台）</b>
+            <span class="sub" style="font-size:12px">国内平台默认简体中文，YouTube / X / TikTok / IG / Threads / LinkedIn / Meta 默认改写为地道英文</span>
+            <span class="grow"></span>
+            <button class="btn s" id="localizeCopyBtn2">${PS.icon('spark', 'sm')}AI 一键生成各平台专属文案</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+            ${PS.activePlats().map(pid => {
+              const p = PS.PLATFORMS[pid];
+              const pCopy = (ep.publishJson?.platforms || {})[pid];
+              const defLang = ['douyin', 'xhs', 'bilibili', 'channels', 'wechat'].includes(pid) ? 'zh' : 'en';
+              const curLang = pCopy?.lang || defLang;
+              return `<div class="card stack tight" style="padding:11px 13px;background:var(--sunk);border:0">
+                <div class="row" style="gap:6px">
+                  ${PS.plogo(pid, 18)}<b style="font-size:13px">${p.name}</b>
+                  <span class="pill ${curLang === 'en' ? 'accent' : 'info'}" style="font-size:10.5px;padding:1px 6px">${curLang === 'en' ? 'EN 英文' : 'ZH 中文'}</span>
+                  <span class="grow"></span>
+                  ${pCopy ? '<span class="pill good" style="font-size:10.5px;padding:1px 6px">已适配</span>' : '<span class="sub" style="font-size:11px">沿用原稿</span>'}
+                </div>
+                <div style="font-size:12.5px;font-weight:600;line-height:1.4">${PS.esc(pCopy?.title || ep.publishJson?.title || ep.title || '')}</div>
+                <div class="sub clip2" style="font-size:12px;line-height:1.5">${PS.esc(pCopy?.description || ep.publishJson?.description || '点击上方「AI 一键生成各平台专属文案」自动改写')}</div>
+                ${(pCopy?.tags || []).length ? `<div class="sub mono clip1" style="font-size:11px;color:var(--accent)">${pCopy.tags.map(t => `#${PS.esc(t)}`).join(' ')}</div>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+
+        <details class="sub">
+          <summary>查看完整 publish.json 原始数据</summary>
+          <pre class="codebox" style="margin-top:8px">${PS.esc(JSON.stringify(ep.publishJson || {}, null, 2))}</pre>
+        </details>
       </div>
     `, 'mid');
 
     main.querySelector('#pkSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-pack'](); };
+    const runLocalize = async btn => {
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'AI 正在按平台本地化改写（含中→英）…';
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/localize`, { platforms: PS.activePlats() });
+        applyPubRes(res);
+        PS.toast(`已由 ${res.backend}/${res.model} 为 ${res.localized} 个平台生成专属文案并写入 publish.json ✓`, 'good');
+        PS.pages['pub-pack']();
+      } catch (err) {
+        PS.toast(err.message || '本地化适配失败', 'warn');
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    };
+    main.querySelector('#localizeCopyBtn')?.addEventListener('click', e => runLocalize(e.currentTarget));
+    main.querySelector('#localizeCopyBtn2')?.addEventListener('click', e => runLocalize(e.currentTarget));
     main.querySelector('#rescanProj').onclick = async e => {
       const btn = e.currentTarget; btn.disabled = true;
       try {
@@ -207,6 +255,7 @@
         </div>
         <div class="acts">
           <select id="cfSel" style="width:230px">${list.map(e => `<option value="${e.id}" ${e.id === ep.id ? 'selected' : ''}>EP${e.episode} · ${PS.esc(e.nick)}</option>`).join('')}</select>
+          <button class="btn" id="cfLocalizeBtn">${PS.icon('spark', 'sm')}分平台适配文案（中→英）</button>
           <button class="btn primary" id="fillAll">${PS.icon('chrome', 'sm')}分批启动 Chrome 填表</button>
         </div>
       </div>
@@ -251,6 +300,20 @@
     `);
 
     main.querySelector('#cfSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-confirm'](); };
+    main.querySelector('#cfLocalizeBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'AI 本地化适配中…';
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/localize`, { platforms: active });
+        applyPubRes(res);
+        PS.toast(`已为 ${res.localized} 个平台生成本地化文案（含英文平台改写）✓`, 'good');
+        PS.pages['pub-confirm']();
+      } catch (err) {
+        PS.toast(err.message || '本地化适配失败', 'warn');
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    });
 
     async function fillOne(pid, btnEl) {
       const p = PS.PLATFORMS[pid];

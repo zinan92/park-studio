@@ -1445,6 +1445,7 @@
             <div class="seg">
               ${[0.5, 0.8, 1.2].map(v => `<button class="${pauseS === v ? 'on' : ''}" data-pause="${v}">${v}s</button>`).join('')}
             </div>
+            <button class="btn s" id="translateSrtBtn">${PS.icon('spark', 'sm')}生成英文 .srt 字幕</button>
             <button class="btn s" id="aiPlanBtn">${PS.icon('spark', 'sm')}独立剪辑 Agent 挑 Hook</button>
             <button class="btn primary s" id="toRenderBtn">下一步：一键渲染成片 ›</button>
           </div>
@@ -1683,6 +1684,29 @@
       cp.density = b.dataset.den;
       await syncCutPatch({ density: cp.density });
       PS.pages.cut();
+    });
+    main.querySelector('#translateSrtBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'AI 翻译英文 .srt 中…';
+      try {
+        const res = await PS.api('POST', `/api/cut/${cutId}/translate-srt`, { target_lang: 'en', bilingual: false });
+        if (res.cutProject) PS.S.cutProject = { ...PS.S.cutProject, ...res.cutProject };
+        PS.toast(`已生成英文外挂字幕（${res.cues} 句）→ ${res.path}`, 'good');
+        PS.modal({
+          title: `英文 .srt 字幕已导出（${res.cues} 句）`,
+          wide: true,
+          body: `<div class="stack tight">
+            <div class="sub mono" style="font-size:12px">文件路径：${PS.esc(res.path)}</div>
+            <pre class="codebox">${PS.esc(res.preview || '')}</pre>
+          </div>`,
+          foot: `<button class="btn primary" data-close>关闭</button>`,
+        });
+      } catch (err) {
+        PS.toast(err.message || '英文字幕生成失败', 'warn');
+      } finally {
+        btn.disabled = false; btn.innerHTML = old;
+      }
     });
     main.querySelector('#aiPlanBtn')?.addEventListener('click', async e => {
       e.currentTarget.disabled = true;

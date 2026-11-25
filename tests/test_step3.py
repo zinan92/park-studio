@@ -548,6 +548,88 @@ def test_v030_onboarding_subset_platforms(tmp_path: Path, monkeypatch) -> None:
     assert boot2["config"]["onboardingDone"] is True
 
 
+def test_v031_localize_copy_12_platforms_and_translate_srt(tmp_path: Path, monkeypatch) -> None:
+    from park_studio import ai
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    config.save_config({"obsidianPath": str(tmp_path / "empty")})
+
+    # 1. parse_copy_txt 覆盖海外 5 平台
+    parsed_copy = projects.parse_copy_txt(
+        "本地开源工作台实测\n\n"
+        "话题 · 抖音：#AI工具 #一人公司\n"
+        "话题 · TikTok：#AIWorkflow #SoloFounder\n"
+        "话题 · LinkedIn：#OpenSource #CreatorOS\n"
+        "话题 · Instagram：#ReelsAI\n"
+        "话题 · Threads：#BuildInPublic\n"
+        "话题 · Meta：#CreatorTools\n"
+    )
+    for pid in ("douyin", "tiktok", "linkedin", "instagram", "threads", "meta"):
+        assert pid in parsed_copy["platforms"]
+        assert len(parsed_copy["platforms"][pid]["tags"]) >= 1
+
+    # 2. Mock AI 测试分平台中→英本地化适配 + 英文 SRT 导出
+    def fake_run_prompt(prompt: str, **kwargs):
+        if "subtitle translator" in prompt:
+            return {
+                "text": json.dumps({"0": "Welcome to Park Studio.", "1": "One local hub for 12 platforms."}, ensure_ascii=False),
+                "backend": "gemini-api",
+                "model": "gemini-2.5-flash",
+            }
+        return {
+            "text": json.dumps({
+                "douyin": {"lang": "zh", "title": "我把 4 个内容工具合并成 1 个开源中控", "description": "零 API 费本地剪辑加发布", "tags": ["AI工作流", "开源"]},
+                "youtube": {"lang": "en", "title": "I Merged 4 Creator Tools Into 1 Local Open-Source OS", "description": "Local-first editing and multi-platform publishing with zero SaaS fees.", "tags": ["CreatorOS", "OpenSource"]},
+                "linkedin": {"lang": "en", "title": "Why I built a local-first Creator OS", "description": "Key takeaways for solo builders shipping across 12 platforms.", "tags": ["BuildInPublic", "OpenSource"]},
+                "tiktok": {"lang": "en", "title": "One local app for 12 platforms", "description": "Stop paying monthly for video workflows.", "tags": ["AIWorkflow", "SoloCreator"]},
+            }, ensure_ascii=False),
+            "backend": "gemini-api",
+            "model": "gemini-2.5-flash",
+        }
+
+    monkeypatch.setattr(ai, "run_prompt", fake_run_prompt)
+
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+    eps = client.get("/api/publish/episodes").json()["episodes"]
+    ep_id = eps[0]["id"]
+
+    loc = client.post(
+        f"/api/publish/{ep_id}/localize",
+        json={"platforms": ["douyin", "youtube", "linkedin", "tiktok"]},
+    )
+    assert loc.status_code == 200
+    ld = loc.json()
+    assert ld["ok"] is True
+    assert ld["localized"] == 4
+    assert ld["platforms"]["youtube"]["lang"] == "en"
+    assert "Local Open-Source OS" in ld["platforms"]["youtube"]["title"]
+    assert ld["platforms"]["douyin"]["lang"] == "zh"
+    # 验证 _copy_for_platform 自动读到英文版本
+    li_title, li_desc, li_tags = publisher._copy_for_platform(ld["episode"], "linkedin")
+    assert "local-first Creator OS" in li_title
+    assert "BuildInPublic" in li_tags
+
+    # 3. 英文 .srt 字幕生成
+    cut_id = client.get("/api/bootstrap").json()["cutProject"]["id"]
+    srt_res = client.post(f"/api/cut/{cut_id}/translate-srt", json={"target_lang": "en", "bilingual": False})
+    assert srt_res.status_code == 200
+    sd = srt_res.json()
+    assert sd["ok"] is True
+    assert sd["cues"] >= 2
+    srt_file = Path(sd["path"])
+    assert srt_file.is_file()
+    srt_txt = srt_file.read_text(encoding="utf-8")
+    assert "-->" in srt_txt
+    assert "Welcome to Park Studio." in srt_txt
+
+    # 4. i18n.js 静态资源与 uiLang 配置持久化
+    assert client.get("/js/i18n.js").status_code == 200
+    saved_lang = client.put("/api/settings", json={"uiLang": "en"})
+    assert saved_lang.status_code == 200
+    assert saved_lang.json()["config"]["uiLang"] == "en"
+
+
+
 
 
 

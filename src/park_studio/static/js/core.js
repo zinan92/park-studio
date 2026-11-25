@@ -91,7 +91,7 @@
     const host = document.getElementById('toasts');
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
-    el.textContent = msg;
+    el.textContent = PS.tr ? PS.tr(msg) : msg;
     host.appendChild(el);
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 220); }, 2800);
   };
@@ -104,10 +104,23 @@
       <div class="modal-b">${body}</div>
       ${foot ? `<div class="modal-f">${foot}</div>` : ''}
     </div>`;
-    const close = () => bg.remove();
+    let obs = null;
+    const close = () => { if (obs) obs.disconnect(); bg.remove(); };
     bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('[data-x],[data-close]')) close(); });
     document.body.appendChild(bg);
+    PS.localizeDom?.(bg);
     if (onOpen) onOpen(bg, close);
+    PS.localizeDom?.(bg);
+    if (PS.lang === 'en' && window.MutationObserver) {
+      let busy = false;
+      obs = new MutationObserver(() => {
+        if (busy) return;
+        busy = true;
+        PS.localizeDom?.(bg);
+        busy = false;
+      });
+      obs.observe(bg, { childList: true, subtree: true, characterData: true });
+    }
     return close;
   };
 
@@ -211,9 +224,10 @@
     let list = items, idx = 0;
     const draw = () => {
       const q = inp.value.trim().toLowerCase();
-      list = items.filter(x => !q || x.label.toLowerCase().includes(q) || x.kind.toLowerCase().includes(q)).slice(0, 14);
+      const mapped = items.map(x => ({ ...x, _label: PS.tr ? PS.tr(x.label) : x.label, _kind: PS.tr ? PS.tr(x.kind) : x.kind }));
+      list = mapped.filter(x => !q || x._label.toLowerCase().includes(q) || x._kind.toLowerCase().includes(q) || x.label.toLowerCase().includes(q)).slice(0, 14);
       idx = Math.min(idx, Math.max(0, list.length - 1));
-      ul.innerHTML = list.length ? list.map((x, i) => `<li class="${i === idx ? 'on' : ''}" data-i="${i}"><span>${PS.esc(x.label)}</span><small class="sub">${PS.esc(x.kind)}</small></li>`).join('') : '<li class="sub">没有匹配的页面</li>';
+      ul.innerHTML = list.length ? list.map((x, i) => `<li class="${i === idx ? 'on' : ''}" data-i="${i}"><span>${PS.esc(x._label)}</span><small class="sub">${PS.esc(x._kind)}</small></li>`).join('') : `<li class="sub">${PS.esc(PS.tr ? PS.tr('没有匹配的页面') : '没有匹配的页面')}</li>`;
     };
     const pick = i => { const x = list[i]; if (!x) return; bg.remove(); location.hash = x.hash; };
     inp.oninput = () => { idx = 0; draw(); };
@@ -226,6 +240,7 @@
     ul.onclick = e => { const li = e.target.closest('[data-i]'); if (li) pick(+li.dataset.i); };
     bg.onclick = e => { if (e.target === bg) bg.remove(); };
     document.body.appendChild(bg);
+    PS.localizeDom?.(bg);
     draw();
     inp.focus();
   };
@@ -272,6 +287,11 @@
   let chromeMounted = false;
   let lastWsKey = '';
 
+  PS.rebuildChrome = function () {
+    chromeMounted = false;
+    lastWsKey = '';
+  };
+
   function ensureChrome() {
     if (chromeMounted && document.getElementById('chromeTop')) return;
     chromeMounted = true;
@@ -280,7 +300,7 @@
         <header class="top-dock" id="chromeTop">
           <div class="top-dock-row">
             <div class="top-left">
-              <a class="lg-brand lg-island" href="#dashboard" title="Park Studio · 开源内容中控">
+              <a class="lg-brand lg-island" href="#dashboard" title="Park Studio · Open-Source Creator OS">
                 <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
                   <rect x="2" y="2" width="28" height="28" rx="8" fill="var(--cta-bg)"/>
                   <rect x="8.5" y="8.5" width="6" height="6" rx="1.8" fill="var(--cta-ink)"/>
@@ -303,8 +323,9 @@
 
             <div class="top-right">
               <button type="button" class="lg-btn lg-island circ" id="cmdkBtn" title="搜索页面和选题 (⌘K)" aria-label="搜索">${PS.icon('search')}</button>
+              <button type="button" class="lg-btn lg-island" id="langQuickBtn" title="切换界面语言 (中 / EN)" aria-label="切换界面语言 (中 / EN)" style="font-size:12px;font-weight:700;padding:0 11px;min-width:38px;justify-content:center">${PS.lang === 'en' ? '中文' : 'EN'}</button>
               <button type="button" class="lg-btn lg-island circ" id="themeQuickBtn" title="切换深浅色外观" aria-label="切换深浅色"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32 1.41-1.41"/></svg></button>
-              <a class="lg-btn lg-island" id="sysNavBtn" href="#settings" title="系统 · 守护进程 / 7 平台体检 / 集成">
+              <a class="lg-btn lg-island" id="sysNavBtn" href="#settings" title="系统 · 守护进程 / 12 平台体检 / 集成">
                 <span class="dot live" id="sysDot"></span><span class="lbl">系统</span>
               </a>
               <div class="rel" id="moreHost">
@@ -334,6 +355,7 @@
       };
     });
     document.getElementById('cmdkBtn').onclick = () => PS.cmdk();
+    document.getElementById('langQuickBtn').onclick = () => PS.toggleLang?.();
     document.getElementById('themeQuickBtn').onclick = () => PS.toggleTheme();
     document.getElementById('moreMenuBtn').onclick = e => {
       e.stopPropagation();
@@ -349,11 +371,14 @@
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
         <a href="#kb">${PS.icon('book', 'sm')}知识库（Obsidian）</a>
         <a href="#materials">${PS.icon('layers', 'sm')}视觉素材库</a>
-        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.2.0</span></a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.3.0</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
+        <button type="button" id="langToggleMenu">🌐 ${PS.lang === 'en' ? '切换为简体中文' : 'Switch to English'}</button>
         <button type="button" id="themeToggleMenu">◐ 切换深浅外观</button>
       </div>`);
+      PS.localizeDom?.(host);
+      host.querySelector('#langToggleMenu').onclick = () => { host.querySelector('.lg-menu')?.remove(); PS.toggleLang?.(); };
       host.querySelector('#themeToggleMenu').onclick = () => { host.querySelector('.lg-menu')?.remove(); PS.toggleTheme(); };
       host.querySelector('#openNotifBtn').onclick = () => {
         host.querySelector('.lg-menu')?.remove();
@@ -437,21 +462,36 @@
           <span>${PS.esc(s.label)}</span>${s.count ? `<span class="scnt ${s.hot ? 'hot' : ''}">${PS.esc(s.count)}</span>` : ''}
         </a>`).join('')}
       </div>`;
+      PS.localizeDom?.(subDock);
       requestAnimationFrame(() => moveThumb(document.getElementById('subBar'), document.getElementById('subThumb'), '.lg-subtab.on', true));
     }
     lastWsKey = ws;
   }
 
   // 主外框 Shell（widthMode: '' | 'mid' | 'narrow'）
+  let mainObs = null;
   PS.shell = function (active, crumbs, inner, widthMode = '') {
     ensureChrome();
+    PS.localizeDom?.(document.getElementById('chromeTop'));
     const ws = wsOf(active);
     PS._lastWs = ws;
     syncTopNav(ws, active);
     document.querySelectorAll('.lg-menu,.pop').forEach(p => p.remove());
     const main = document.getElementById('main');
+    if (mainObs) { mainObs.disconnect(); mainObs = null; }
     main.className = `page ${widthMode}`.trim();
     main.innerHTML = inner;
+    PS.localizeDom?.(main);
+    if (PS.lang === 'en' && window.MutationObserver) {
+      let busy = false;
+      mainObs = new MutationObserver(() => {
+        if (busy || PS.lang !== 'en') return;
+        busy = true;
+        PS.localizeDom?.(main);
+        busy = false;
+      });
+      mainObs.observe(main, { childList: true, subtree: true });
+    }
     return main;
   };
 
