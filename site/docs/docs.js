@@ -183,10 +183,10 @@ open "dist/Park Studio.app"`,
     {
       id: 'publish',
       group: { zh: '五个视图', en: 'Five Views' },
-      title: { zh: '7 平台 CDP 安全发布', en: '7-Platform Safe CDP Publishing' },
+      title: { zh: '12 平台 CDP 安全发布', en: '12-Platform Safe CDP Publishing' },
       lead: {
-        zh: '100% MIT 自研专用 Chrome CDP 填表引擎，零闭源插件依赖，国内 4 平台严格「只填不点发」。',
-        en: '100% MIT Chrome CDP autofill engine with strict human-in-the-loop guardrails on domestic Chinese platforms.',
+        zh: '100% MIT 自研专用 Chrome CDP 填表引擎，支持 12 个海内外平台按需勾选，国内 4 平台严格「只填不点发」。',
+        en: '100% MIT Chrome CDP autofill engine across 12 opt-in platforms with strict human-in-the-loop guardrails on domestic Chinese platforms.',
       },
       sections: [
         {
@@ -199,19 +199,21 @@ open "dist/Park Studio.app"`,
         },
         {
           id: 'plat-matrix',
-          h: { zh: '7 平台支持矩阵', en: '7-Platform Matrix' },
+          h: { zh: '12 平台按需支持矩阵', en: '12-Platform Opt-In Matrix' },
           body: {
-            zh: `<table class="d-tbl"><thead><tr><th>平台</th><th>自动化策略</th><th>发后采数</th></tr></thead><tbody>
-              <tr><td>抖音 / 小红书 / B站 / 视频号</td><td>自动填表 + 提交前截图，人工点发</td><td>自动回填链接、播放、互动与粉丝</td></tr>
+            zh: `<table class="d-tbl"><thead><tr><th>平台</th><th>自动化策略</th><th>说明</th></tr></thead><tbody>
+              <tr><td>抖音 / 小红书 / B站 / 视频号</td><td>自动填表 + 提交前截图，人工点发</td><td>国内 4 平台严格只填不点发保安全</td></tr>
+              <tr><td>微信公众号</td><td>自动排版存入草稿箱</td><td>支持长文同步与粉丝采数</td></tr>
               <tr><td>YouTube Studio</td><td>填表并回读校验一致后可自动定时</td><td>自动同步播放与订阅增量</td></tr>
-              <tr><td>X (Twitter)</td><td>自动发帖并附 UTM 追踪参数</td><td>自动同步曝光与互动</td></tr>
-              <tr><td>微信公众号</td><td>自动排版存入草稿箱</td><td>自动同步阅读与粉丝</td></tr>
+              <tr><td>X / Threads / LinkedIn</td><td>自动发帖并附 UTM 追踪参数</td><td>海外短帖与 B 端分发</td></tr>
+              <tr><td>TikTok / Instagram / Meta</td><td>按需启用 · 竖版成片自动填表</td><td>首次引导可自由开关，没勾的不打扰</td></tr>
             </tbody></table>`,
-            en: `<table class="d-tbl"><thead><tr><th>Platform</th><th>Automation Mode</th><th>Post-Publish Sync</th></tr></thead><tbody>
-              <tr><td>Douyin / XHS / Bilibili / Channels</td><td>Autofill + JPEG proof; human final click</td><td>Syncs URLs, views, engagement, followers</td></tr>
-              <tr><td>YouTube Studio</td><td>Autofill + read-back verification schedule</td><td>Syncs views & subscriber deltas</td></tr>
-              <tr><td>X (Twitter)</td><td>Auto-post with UTM campaign tags</td><td>Syncs impressions & engagement</td></tr>
-              <tr><td>WeChat Official</td><td>Formatted draft saved to Draft Box</td><td>Syncs reads & followers</td></tr>
+            en: `<table class="d-tbl"><thead><tr><th>Platform</th><th>Automation Mode</th><th>Notes</th></tr></thead><tbody>
+              <tr><td>Douyin / XHS / Bilibili / Channels</td><td>Autofill + JPEG proof; human final click</td><td>Strict domestic safety guardrail</td></tr>
+              <tr><td>WeChat Official</td><td>Formatted draft saved to Draft Box</td><td>Long-form sync & follower stats</td></tr>
+              <tr><td>YouTube Studio</td><td>Autofill + read-back verification schedule</td><td>Views & subscriber deltas</td></tr>
+              <tr><td>X / Threads / LinkedIn</td><td>Auto-post with UTM campaign tags</td><td>Global short-form & B2B reach</td></tr>
+              <tr><td>TikTok / Instagram / Meta</td><td>Opt-in Reels / vertical autofill</td><td>Hidden cleanly if unchecked in onboarding</td></tr>
             </tbody></table>`,
           },
         },

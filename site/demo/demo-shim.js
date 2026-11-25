@@ -10,9 +10,15 @@
 
   function buildDemoData() {
     const d0 = dayStr(0), d1 = dayStr(-1), d3 = dayStr(-3), d10 = dayStr(-10), d17 = dayStr(-17);
-    const platOrder = ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'x', 'wechat'];
-    const base = { douyin: 41200, xhs: 14800, bilibili: 22900, channels: 11200, youtube: 8650, x: 16400, wechat: 18500 };
-    const mean = { douyin: 62, xhs: 46, bilibili: 38, channels: 24, youtube: 20, x: 34, wechat: 18 };
+    const platOrder = ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'x', 'wechat', 'tiktok', 'instagram', 'threads', 'linkedin', 'meta'];
+    const base = {
+      douyin: 41200, xhs: 14800, bilibili: 22900, channels: 11200, youtube: 8650, x: 16400, wechat: 18500,
+      tiktok: 12400, instagram: 7800, threads: 4600, linkedin: 6200, meta: 3900,
+    };
+    const mean = {
+      douyin: 62, xhs: 46, bilibili: 38, channels: 24, youtube: 20, x: 34, wechat: 18,
+      tiktok: 36, instagram: 22, threads: 15, linkedin: 18, meta: 12,
+    };
     const boost = { [-24]: 2.8, [-17]: 3.2, [-10]: 2.6, [-3]: 4.1, [-1]: 2.4 };
     const followersLive = {};
     for (const p of platOrder) followersLive[p] = {};
@@ -27,26 +33,45 @@
       }
     }
 
+    const platformStatus = {
+      douyin:    { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 创作者后台正常', disabled: false },
+      xhs:       { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 保守滚动模式', disabled: false },
+      bilibili:  { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 投稿与采数正常', disabled: false },
+      channels:  { state: 'warn', checkedAt: '09:30', detail: '视频号登录将过期，建议保活或重扫', disabled: false },
+      youtube:   { state: 'ok',   checkedAt: '09:30', detail: 'Studio 正常 · 支持校验后自动定时', disabled: false },
+      x:         { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 支持自动发布', disabled: false },
+      wechat:    { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 自动存草稿箱', disabled: false },
+      tiktok:    { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 支持自动上传草稿', disabled: false },
+      instagram: { state: 'ok',   checkedAt: '09:30', detail: '已登录 · Reels 竖版同步', disabled: false },
+      threads:   { state: 'ok',   checkedAt: '09:30', detail: '已登录 · 图文短帖同步', disabled: false },
+      linkedin:  { state: 'ok',   checkedAt: '09:30', detail: '已登录 · B 端海外专业分发', disabled: false },
+      meta:      { state: 'ok',   checkedAt: '09:30', detail: '已登录 · Meta Business Suite', disabled: false },
+    };
+
     const episodes = [
       {
         index: 41,
-        nick: 'EP41 · 7平台填表闭环',
-        title: '一期视频发 7 个平台太折磨？我用本地专用 Chrome + Agent 做成了半自动发布闭环',
+        nick: 'EP41 · 12 平台填表闭环',
+        title: '一期视频发 12 个平台太折磨？我用本地专用 Chrome + Agent 做成了按需半自动发布闭环',
         published_at: d1,
         coverGrad: 'linear-gradient(145deg,#3E63DD 0%,#1E2235 65%,#0F0F10 100%)',
-        coverTitle: '7 平台发布\n彻底闭环',
-        platformCount: 5,
-        views: 114060,
-        inter: 7165,
-        likes: 4562,
-        favorites: 3775,
-        comments: 595,
-        interRate: '6.3',
+        coverTitle: '12 平台发布\n彻底闭环',
+        platformCount: 9,
+        views: 168420,
+        inter: 10840,
+        likes: 6912,
+        favorites: 4895,
+        comments: 825,
+        interRate: '6.4',
         platforms: {
-          douyin:   { title: '一期视频发 7 个平台太折磨？本地专用 Chrome 彻底闭环', views: 38420, likes: 1640, favorites: 1290, comments: 218, url: 'https://github.com/zinan92/park-studio' },
-          bilibili: { title: '【开源】一人内容生产线：从选题写稿到 7 平台自动填表与数据大屏', views: 21680, likes: 1490, favorites: 1840, comments: 196, url: 'https://github.com/zinan92/park-studio' },
-          youtube:  { title: 'Open-Source Local Content Studio: 1 Script -> 7 Platforms', views: 9840, likes: 620, favorites: 0, comments: 84, url: 'https://github.com/zinan92/park-studio' },
-          x:        { title: '刚把 7 平台自动填表 + 运营大屏接进 Park Studio（MIT 开源）', views: 44120, likes: 812, favorites: 645, comments: 97, url: 'https://github.com/zinan92/park-studio' },
+          douyin:    { title: '一期视频发 12 个平台太折磨？本地专用 Chrome 彻底闭环', views: 38420, likes: 1640, favorites: 1290, comments: 218, url: 'https://github.com/zinan92/park-studio' },
+          bilibili:  { title: '【开源】一人内容生产线：从选题写稿到 12 平台按需填表与复盘', views: 21680, likes: 1490, favorites: 1840, comments: 196, url: 'https://github.com/zinan92/park-studio' },
+          youtube:   { title: 'Open-Source Local Content Studio: 1 Topic -> 12 Platforms', views: 12840, likes: 740, favorites: 0, comments: 94, url: 'https://github.com/zinan92/park-studio' },
+          x:         { title: '刚把 12 平台按需填表 + 运营大屏接进 Park Studio（MIT 开源）', views: 44120, likes: 812, favorites: 645, comments: 97, url: 'https://github.com/zinan92/park-studio' },
+          tiktok:    { title: '1 Script to 12 Platforms with Local AI Agents (MIT Open Source)', views: 26800, likes: 1120, favorites: 640, comments: 110, url: 'https://github.com/zinan92/park-studio' },
+          instagram: { title: 'My 1-Person Content Factory Running 100% Locally', views: 11200, likes: 560, favorites: 310, comments: 48, url: 'https://github.com/zinan92/park-studio' },
+          threads:   { title: 'Open-sourced my 12-platform local content studio today', views: 5400, likes: 210, favorites: 60, comments: 24, url: 'https://github.com/zinan92/park-studio' },
+          linkedin:  { title: 'How a 1-person studio replaces a 4-person content team locally', views: 7960, likes: 340, favorites: 110, comments: 38, url: 'https://github.com/zinan92/park-studio' },
         },
       },
       {
@@ -102,10 +127,10 @@
     ];
 
     const analytics = {
-      totalWorks: 42,
+      totalWorks: 68,
       totalEpisodes: 18,
       lastMetricsAt: '今天 09:32 · 在线演示数据',
-      platformCounts: { douyin: 18, xhs: 14, bilibili: 16, channels: 12, youtube: 10, x: 18, wechat: 9 },
+      platformCounts: { douyin: 18, xhs: 14, bilibili: 16, channels: 12, youtube: 12, x: 18, wechat: 9, tiktok: 14, instagram: 11, threads: 10, linkedin: 9, meta: 8 },
       episodes,
       douyin: {
         count: douyinScatter.length,
@@ -279,6 +304,7 @@
 
     return {
       followersLive,
+      platformStatus,
       analytics,
       newsletterIssue,
       savedDaily,
@@ -333,6 +359,9 @@
       return jsonRes({
         ok: true,
         demoMode: true,
+        needsOnboarding: false,
+        config: { onboardingDone: true, aiBackend: 'gemini' },
+        platformStatus: DB.platformStatus,
         vaultStatus: DB.vaultStatus,
         chromeStatus: DB.chromeStatus,
         agents: DB.agents,
@@ -464,9 +493,20 @@
     if (path.startsWith('/api/collect/metrics')) {
       return jsonRes({ ok: true, collected: 42, last_metrics_at: '刚刚（在线演示）', analytics: DB.analytics, chromeStatus: DB.chromeStatus, daemonLogs: DB.daemonLogs });
     }
-    if (path === '/api/platforms/check') return jsonRes({ ok: true, checked: 7, chromeStatus: DB.chromeStatus });
+    if (path === '/api/onboarding/complete' && method === 'POST') {
+      const enabled = new Set(Array.isArray(body.platforms) ? body.platforms : []);
+      Object.keys(DB.platformStatus).forEach(pid => {
+        DB.platformStatus[pid].disabled = !enabled.has(pid);
+      });
+      return jsonRes({ ok: true, platformStatus: DB.platformStatus, config: { onboardingDone: true, aiBackend: body.aiBackend || 'gemini' } });
+    }
+    if (path === '/api/platforms/check') return jsonRes({ ok: true, checked: 12, chromeStatus: DB.chromeStatus });
     if (path === '/api/platforms/login') return jsonRes({ ok: true, message: '在线演示模式：本地部署后会拉起专用 Chrome (:9333) 打开对应创作者后台登录页。' });
-    if (path.startsWith('/api/platforms/') && method === 'PATCH') return jsonRes({ ok: true });
+    if (path.startsWith('/api/platforms/') && method === 'PATCH') {
+      const pid = path.split('/').pop();
+      if (DB.platformStatus[pid] && typeof body.disabled === 'boolean') DB.platformStatus[pid].disabled = body.disabled;
+      return jsonRes({ ok: true, platformStatus: DB.platformStatus });
+    }
     if (path === '/api/projects') return jsonRes(DB.projects);
     if (path.startsWith('/api/publish/')) {
       return jsonRes({ ok: true, demo: true, message: '在线演示模式：本地部署后将调用专用 Chrome CDP 自动填表并存档提交前截图。', publishEpisodes: DB.publishEpisodes });

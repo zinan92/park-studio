@@ -1,81 +1,136 @@
-/* Park Studio Landing — Bilingual (ZH/EN), Live 5-View Interactive Previews, Real SVG Bento Charts */
+/* Park Studio Official Site — Selling-Point-First Kinetic Visuals (12 Platforms) + Open-Source / ¥199 Community / Custom Builds + 6-Case Lightbox */
 (function () {
   'use strict';
 
   const GITHUB_REPO = 'zinan92/park-studio';
   const GITHUB_URL = `https://github.com/${GITHUB_REPO}`;
 
+  const PLATFORMS_12 = [
+    { id: 'douyin',    zh: '抖音',   en: 'Douyin',    group: 'cn', guard: true,  color: '#EDEDED' },
+    { id: 'xhs',       zh: '小红书', en: 'XHS',       group: 'cn', guard: true,  color: '#F87171' },
+    { id: 'bilibili',  zh: 'B站',    en: 'Bilibili',  group: 'cn', guard: true,  color: '#38BDF8' },
+    { id: 'channels',  zh: '视频号', en: 'Channels',  group: 'cn', guard: true,  color: '#F5A524' },
+    { id: 'wechat',    zh: '公众号', en: 'WeChat OA', group: 'cn', guard: false, color: '#3DD68C' },
+    { id: 'youtube',   zh: 'YouTube',en: 'YouTube',   group: 'gl', guard: false, color: '#FF5A5F' },
+    { id: 'x',         zh: 'X',      en: 'X',         group: 'gl', guard: false, color: '#A78BFA' },
+    { id: 'tiktok',    zh: 'TikTok', en: 'TikTok',    group: 'gl', guard: false, color: '#2DD4BF' },
+    { id: 'instagram', zh: 'Instagram', en: 'Instagram', group: 'gl', guard: false, color: '#EC4899' },
+    { id: 'threads',   zh: 'Threads',en: 'Threads',   group: 'gl', guard: false, color: '#C4B5FD' },
+    { id: 'linkedin',  zh: 'LinkedIn', en: 'LinkedIn',group: 'gl', guard: false, color: '#60A5FA' },
+    { id: 'meta',      zh: 'Meta',   en: 'Meta',      group: 'gl', guard: false, color: '#7C9BF5' },
+  ];
+
+  const CASES = [
+    {
+      id: 'paile',
+      name: { zh: '拍了个卖', en: 'Pailegemai (E-Commerce Studio)' },
+      tag: { zh: '电商工作流', en: 'E-Commerce' },
+      desc: { zh: '电商商品图 AI 出图与短视频自动化生成工作台，支持多模型路由与客户工作区管理。', en: 'Automated e-commerce product photo & short-video generation workbench with multi-provider routing.' },
+      shots: [
+        { src: 'assets/cases/paile-1.png', cap: { zh: '拍了个卖 · 工作台首屏', en: 'Workspace home' } },
+        { src: 'assets/cases/paile-2.png', cap: { zh: '拍了个卖 · 电商商品出图与视频案例', en: 'Product image & video examples' } },
+        { src: 'assets/cases/paile-3.png', cap: { zh: '拍了个卖 · 客户账号与历史任务台', en: 'Client workspace & history' } },
+      ],
+    },
+    {
+      id: 'getfit',
+      name: { zh: '轻练', en: 'Get-Fit (Coach & Member CRM)' },
+      tag: { zh: '会员管理系统', en: 'Member CRM' },
+      desc: { zh: '面向健身私教的 30 天训练与饮食计划、会员跟进与续费管理全套系统。', en: '30-day workout & nutrition planning, client review, and membership management for personal trainers.' },
+      shots: [
+        { src: 'assets/cases/getfit-1.png', cap: { zh: '轻练 · 产品总览与小程序界面', en: 'Product overview' } },
+        { src: 'assets/cases/getfit-2.png', cap: { zh: '轻练 · 教练端学员进度复盘', en: 'Coach client review' } },
+        { src: 'assets/cases/getfit-3.png', cap: { zh: '轻练 · 教练端训练计划编辑', en: 'Coach plan editor' } },
+      ],
+    },
+    {
+      id: 'tianji',
+      name: { zh: '天机', en: 'Tianji (AI Metaphysics App)' },
+      tag: { zh: '垂类 AI 应用', en: 'Vertical AI App' },
+      desc: { zh: '传统命理排盘引擎结合 AI 深度结构化解读，覆盖桌面端与移动端 PWA。', en: 'Traditional charting engine paired with structured AI interpretation across desktop & mobile.' },
+      shots: [
+        { src: 'assets/cases/tianji-1.png', cap: { zh: '天机 · 桌面端盘面与可信度分析', en: 'Desktop charting & analysis' } },
+        { src: 'assets/cases/tianji-2.png', cap: { zh: '天机 · 移动端流年与大运视图', en: 'Mobile decadal view' } },
+        { src: 'assets/cases/tianji-3.png', cap: { zh: '天机 · 产品界面展示', en: 'Product interface' } },
+      ],
+    },
+    {
+      id: 'trading',
+      name: { zh: '交易系统（Trading System）', en: 'Trading System (DCA & Grid Bot)' },
+      tag: { zh: 'DCA / Grid Bot', en: 'Quant Bots' },
+      desc: { zh: '自动化 DCA Bot 与 Grid Bot 量化交易台，含多交易所策略配置、风控确认与实时运行监控。', en: 'Automated DCA & Grid Bot workbench with venue/strategy controls, risk confirmation, and live execution.' },
+      shots: [
+        { src: 'assets/cases/trading-1.png', cap: { zh: '交易系统 · 策略实时运行监控', en: 'Live strategy monitor' } },
+        { src: 'assets/cases/trading-2.png', cap: { zh: '交易系统 · 交易所、标的与策略配置', en: 'Venue, instrument & strategy setup' } },
+        { src: 'assets/cases/trading-3.png', cap: { zh: '交易系统 · 风控与历史执行追踪', en: 'Supervisor & execution history' } },
+      ],
+    },
+    {
+      id: 'journal',
+      name: { zh: 'Trade Journal', en: 'Trade Journal (K-Line Review)' },
+      tag: { zh: '交易复盘系统', en: 'Trading Review' },
+      desc: { zh: '命令行秒调 K 线复盘日记台，支持 4 类交易锚点标注、AI 纪律复盘与实时波动率雷达。', en: 'Slash-command K-line review journal with 4-type trade anchors, AI discipline coaching, and volatility radar.' },
+      shots: [
+        { src: 'assets/cases/journal-1.png', cap: { zh: 'Trade Journal · 市场快照与复盘工作台', en: 'Market snapshot & review workbench' } },
+        { src: 'assets/cases/journal-2.png', cap: { zh: 'Trade Journal · 交互式 K 线与锚点复盘', en: 'Interactive K-line & trade anchors' } },
+        { src: 'assets/cases/journal-3.png', cap: { zh: 'Trade Journal · 主动波动教练与 VIX 雷达', en: 'Proactive volatility coach & radar' } },
+      ],
+    },
+    {
+      id: 'ashare',
+      name: { zh: 'A 股看盘看板', en: 'A-Share Timing Panel' },
+      tag: { zh: '独立看盘看板', en: 'Market Dashboard' },
+      desc: { zh: '独立收盘三段式 A 股择时看板：大盘位置硬门 → 攻防倾向判断 → 板块与个股定量漏斗。', en: 'Standalone 3-stage post-close A-share timing dashboard: market regime, offense/defense bias, and stock funnel.' },
+      shots: [
+        { src: 'assets/cases/ashare-1.png', cap: { zh: 'A 股看板 · ① 大盘位置与趋势门控', en: 'Stage 1: Market regime gate' } },
+        { src: 'assets/cases/ashare-2.png', cap: { zh: 'A 股看板 · ② 攻防倾向与强势板块', en: 'Stage 2: Bias & sector strength' } },
+        { src: 'assets/cases/ashare-3.png', cap: { zh: 'A 股看板 · ③ 个股定量筛选漏斗', en: 'Stage 3: Candidate stock funnel' } },
+      ],
+    },
+  ];
+
   const I18N = {
     zh: {
-      title: 'Park Studio · 开源本地内容生产线与多平台运营中控',
-      desc: '100% MIT 开源本地内容工作台：找选题、拆爆款、写口播稿、双模式剪辑、7 平台 CDP 安全自动填表发布与全网运营大屏。零强制 API 费。',
-      nav: { features: '功能', charts: '图表', ai: 'AI 协作', deploy: '本地部署', community: '社群与定制', docs: '文档', demo: '在线演示', langLabel: 'EN' },
+      title: 'Park Studio · 开源本地内容生产线（12 平台按需分发 · 零 API 费）',
+      desc: '100% MIT 开源本地内容工作台：一个人顶 4 人内容团队，每天只挑 1 条好题穿透 12 个平台，数据 100% 留在硬盘。附 ¥199 实战微信群与企业定制开发案例。',
+      nav: { features: '五个视图', charts: '核心卖点', ai: 'AI 协作', deploy: '本地部署', community: '社群与定制', docs: '文档', demo: '在线演示', langLabel: 'EN' },
       hero: {
-        eyebrow: '开源 · MIT 协议 · 本地运行 · 零 API 费',
-        h1a: '把一人内容工厂，',
-        h1b: '收进一个工作台。',
-        lead: '选题散在日报、对标和 Obsidian 里，发布散在 7 个创作者后台。Park Studio 把它们收拢成一条本地流水线：找题、写稿、剪辑、填表、复盘，数据 100% 留在你的硬盘。',
+        eyebrow: '100% MIT 开源 · GitHub 免费获取 · 12 平台按需分发 · 零 API 费',
+        h1a: '一个人，',
+        h1b: '顶一个 4 人内容团队。',
+        lead: '每天只从日报和 Obsidian 里挑 1 条最值得讲的选题，在本地完成写稿、离线粗剪与 12 平台按需安全填表。代码全部开源，数据永远留在你的硬盘。',
         ctaDemo: '在线演示',
-        ctaDeploy: '部署你自己的',
-        subJoin: '需要安装兜底、最新工作流或团队定制？',
-        subLink: '加入 ¥199 实战微信群 / 聊 ¥10,000+ 定制 →',
+        ctaDeploy: '免费开源部署',
+        subJoin: '不想折腾终端？',
+        subLink: '¥199 预约 Mac 桌面签名版 · 加入实战群 / 聊团队定制 →',
       },
       features: {
-        eyebrow: '功能',
+        eyebrow: '五个视图',
         h2: '一套工作台，五个视图',
-        lead: '中控、选题、剪辑、发布、复盘，同一条内容从灵感到复盘，换个视角接着干。',
+        lead: '中控、选题、剪辑、发布、复盘，同一条内容从早上定题到发后复盘不切软件。',
         tabs: [
-          {
-            key: 'hub', label: '中控',
-            h3: '打开第一屏，就知道今天停在哪一步',
-            p: '顶部「正在做」推进条直达当前剪到一半的集数、待确认发布的平台和今日 AI 日报头条；下方实时呈现全平台总粉丝堆叠走势、7 平台最新一期进度与 AI 一句话人话结论。',
-            linkText: '了解中控与运营大屏 →', linkHref: 'docs/#hub',
-          },
-          {
-            key: 'topic', label: '选题',
-            h3: '只读接入 Obsidian，每天早上排好今天拍什么',
-            p: '按期解析 AI 日报、搞钱日报与开发日报，同步对标爆款库（按「比平时火几倍」排序并一键 AI 拆解）。写稿调用本机 Coding Agent 生成开头钩子与「价值 / 共鸣 / 节奏」三路审稿诊断。',
-            linkText: 'Obsidian 只读与选题流程 →', linkHref: 'docs/#topic',
-          },
-          {
-            key: 'cut', label: '剪辑',
-            h3: '一键粗剪 + 高级镜头表，双模式本地出片',
-            p: '离线 mlx-whisper / faster-whisper 转写，自动标出口误与气口，ffmpeg 两遍 -16 LUFS 响度与 ASS 字幕烧录；高级模式生成 Spec Table 镜头表并导出 worktable.json 交给独立剪辑 Agent 渲染。',
-            linkText: '双模式本地剪辑说明 →', linkHref: 'docs/#cut',
-          },
-          {
-            key: 'publish', label: '发布',
-            h3: '自研 CDP 7 平台填表，国内严格只填不点发',
-            p: '独立专用 Chrome（:9333），不碰你的日常浏览器，一次扫码长期保活。自动传成片、封面、标题与话题并截提交前 JPEG 存档；国内 4 平台停在发布按钮前由你亲自确认，发完自动取链接采数。',
-            linkText: '7 平台安全护栏说明 →', linkHref: 'docs/#publish',
-          },
-          {
-            key: 'review', label: '复盘',
-            h3: '1 / 3 / 7 天同龄对比，每一期都能越做越好',
-            p: '自动采集抖音、小红书、B站、视频号、YouTube、X、公众号实测播放与涨粉，按发布后同龄天数横向对照历史中位数，附抖音时长 × 播放散点图一眼定位黄金时长。',
-            linkText: '多平台采数与复盘算法 →', linkHref: 'docs/#review',
-          },
+          { key: 'hub', label: '中控', h3: '打开第一屏，就知道今天停在哪一步', p: '顶部「正在做」推进条直达当前剪辑进度、待点发平台与今日 AI 日报；下方呈现已勾选平台的真实粉丝增长与 AI 一句话人话结论。', linkText: '了解中控与运营大屏 →', linkHref: 'docs/#hub' },
+          { key: 'topic', label: '选题', h3: '只读接入 Obsidian，每天早上只挑 1 条最好的题', p: '按期解析 AI 日报、搞钱日报与开发日报，同步对标爆款库（按「比平时火几倍」排序并一键 AI 拆解）。直连本机 Agent 生成钩子与三路审稿诊断。', linkText: 'Obsidian 只读与选题流程 →', linkHref: 'docs/#topic' },
+          { key: 'cut', label: '剪辑', h3: '一键粗剪 + 高级镜头表，双模式本地出片', p: '离线 mlx-whisper / faster-whisper 转写，自动标出口误与气口，ffmpeg 两遍 -16 LUFS 与 ASS 字幕烧录；高级模式导出 worktable.json 交给独立剪辑 Agent。', linkText: '双模式本地剪辑说明 →', linkHref: 'docs/#cut' },
+          { key: 'publish', label: '发布', h3: '12 平台按需勾选，国内 4 家严格只填不点发', p: '首次引导自由勾选你常用的平台（没勾的彻底隐藏）。独立专用 Chrome（:9333）自动传视频、封面与话题并存档截图，国内 4 平台停在发布按钮前由你亲自点发。', linkText: '12 平台安全护栏说明 →', linkHref: 'docs/#publish' },
+          { key: 'review', label: '复盘', h3: '1 / 3 / 7 天同龄对比，每一期都能越做越好', p: '自动采集已启用平台的实测播放与涨粉，按发布后同龄天数横向对照历史中位数，附抖音时长 × 播放散点图一眼定位 3× 爆款黄金时长。', linkText: '多平台采数与复盘算法 →', linkHref: 'docs/#review' },
         ],
       },
-      charts: {
-        eyebrow: '图表',
-        h2: '全网数据，画给你看',
-        lead: '每张图都由你本机 SQLite 采集的真实数据实时算出。下面就是内置演示工作台的样子。',
-        link: '查看数据采集与隐私承诺 →',
-        streamTitle: '7 平台每月新增粉丝',
-        streamSub: '按平台堆叠走势，右侧浅色虚线为按当前发片频率推算的未来 3 个月预期。点击图例可高亮单平台。',
-        sankeyTitle: '选题来源 → 成片形态 → 流量去向',
-        sankeySub: '看清哪类信源贡献了最高效的爆款产出。',
-        radarTitle: '12 个月发布与播放节律',
-        radarSub: '实线为近 12 个月，虚线为去年同期。',
-        bubbleTitle: '全网粉丝分布',
-        bubbleSub: '7 平台矩阵占比，一眼看清主力阵地。',
-        waterfallTitle: 'EP42 播放变动归因',
-        waterfallSub: '相对账号中位数，Hook、完播与跨平台分发分别贡献了多少增量。',
-        baselineTitle: '近 10 期实测 vs 中位数',
-        baselineSub: '柱子为单期全网播放，虚线为近 30 天账号中位数基线。',
-        heatTitle: '逐日创作与发布热力图',
-        heatSub: '今年每一天的写稿、剪辑与发片活跃度，颜色越深产出越密。',
+      selling: {
+        eyebrow: '核心卖点演示',
+        h2: '为什么创作者和小团队都在切回本地工作台',
+        lead: '每一张动态演示图都直接对应 Park Studio 最硬核的一个卖点：省掉 3 个人力、1 条好题穿透 12 平台、粉丝从 0 轴稳步累积、以及本地隐私安全闭环。',
+        link: '去在线演示亲自操作 →',
+        orgTitle: '卖点 01 · 组织架构对比：原来需要 4 个人，现在你一个人就够',
+        orgSub: '过去做全网内容要养编导、文案、剪辑、运营 4 个岗位；Park Studio 把所有机械流程收拢进本机 AI 中枢，你只需要专注思考与出镜。',
+        fanTitle: '卖点 02 · 每天只选 1 条好题，自动穿透 12 个平台',
+        fanSub: '从日报、对标榜和 Obsidian 中精选唯一 1 条当日主线，打包成统一工程目录，按需分发至最多 12 个海内外平台。点击下方任意平台标签可实时开关光流。',
+        growthTitle: '卖点 03 · 粉丝从 0 轴稳步堆叠增长（而非空洞波动）',
+        growthSub: '严格以 0 为底轴，随着每周稳定发片（标注 EP 节点）一层层向上累积全网真实粉丝，右侧虚线按当前发片频次推演未来 3 个月走势。',
+        scatterTitle: '卖点 04 · 3× 爆款时长甜点区',
+        scatterSub: '自动归并实测数据，一眼锁定你的高完播黄金时长带。',
+        guardTitle: '100% 本地开源安全闭环',
+        guardSub: '零云端 Cookie 上传、零强制 API 抽成、国内平台绝不误发。',
       },
       ai: {
         eyebrow: 'AI 协作',
@@ -84,33 +139,34 @@
         leftEyebrow: '本机 Coding Agent',
         leftH3: '拆解、写稿、三路审稿，直接跑在你本机',
         leftList: [
-          '支持 Gemini CLI、Claude Code、Codex、Antigravity CLI 与自定义 API',
+          '支持 Gemini CLI、Claude Code、Codex、Antigravity CLI (agy) 与自定义 API',
           'Obsidian 笔记库严格只读，结合「我说过的话」写稿不洗稿、不编造',
           '独立配置剪辑 Agent，后台实时查看切镜头表与渲染日志',
         ],
         leftLink: '查看 Agent 配置指南 →',
         leftFoot: '零云端中转 · 你的稿件与 API Key 只存在 ~/.park-studio/',
         rightEyebrow: '统一工程目录 + 本地 REST API',
-        rightH3: '让你的 AI 直接交付成片，一句触发发布',
-        rightP: '从定稿自动按统一规范建目录。任何外部 AI Agent 只要把成片、三套封面和文案写进 final/上传/，Park Studio 就会自动识别并可通过本机 REST API 直接触发 7 平台填表。',
-        rightBubble: '帮我把 EP42 粗剪渲染成片，并按规范落盘填好 7 个平台草稿',
+        rightH3: '让你的 AI 直接交付成片，一句触发 12 平台填表',
+        rightP: '从定稿自动按统一规范建目录。任何外部 AI Agent 只要把成片、三套封面和文案写进 final/上传/，Park Studio 就会自动识别并可通过本机 REST API 直接触发你勾选的平台填表。',
+        rightBubble: '帮我把 EP42 粗剪渲染成片，并按规范落盘填好我启用的 12 个平台草稿',
         rightLink: '工程目录规范与 REST API →',
       },
       deploy: {
-        eyebrow: '本地部署',
-        h2: '部署你自己的 Park Studio',
-        lead: '没有注册，没有订阅费，没有云端抽成。代码 100% MIT 开源，数据只留在你自己的电脑里。',
+        eyebrow: '开源免费部署',
+        h2: 'GitHub 100% 开源，5 分钟装到自己电脑上',
+        lead: '全部源码 MIT 协议开源，没有注册，没有订阅费，没有云端抽成。你也可以直接预约开箱即用的签名 Mac 桌面版。',
         docsLink: '完整的部署说明 →',
-        ghCta: '前往 GitHub',
+        ghCta: '前往 GitHub 获取源码',
         copy: '复制',
         copied: '已复制',
-        bridgeText: '自己部署遇到环境问题，或者想给你的团队直接定制一套多账号/私有信源版本？',
-        bridgeLink: '加入 ¥199 实战群 / 聊定制 →',
+        desktopTitle: '不想碰终端和自己编译？¥199 预约开箱即用 Mac 桌面签名版',
+        desktopDesc: '开源代码可随时免费自己编译。若你需要免终端双击即用的 Apple 官方公证签名 `.dmg`（或由 Park 帮你打包配好本地 App），欢迎 ¥199 预约——满 5 人即上架正式签名版。',
+        desktopBtn: '¥199 预约桌面版 / 找 Park',
         tabs: [
           {
-            key: 'ai', label: '交给你的 AI 助手', rec: '推荐',
-            note: '把这段话发给 Gemini CLI、Claude Code、Codex 或 Cursor，它会自动完成安装、配置和启动。',
-            foot: '安装完成后打开 http://127.0.0.1:8792/ 即可开始使用。',
+            key: 'ai', label: '交给你的 AI 助手（免费）', rec: '推荐 · 开源免费',
+            note: '把这段话发给 Gemini CLI、Claude Code、Codex 或 Cursor，它会自动克隆 GitHub 仓库并完成安装启动。',
+            foot: '安装完成后打开 http://127.0.0.1:8792/ 即可进入 12 平台按需勾选引导。',
             code: `请帮我在本机安装并启动开源项目 Park Studio（本地内容中控）：
 1. 克隆仓库到 ~/work/park-studio（如果还没有）：
    git clone https://github.com/zinan92/park-studio.git ~/work/park-studio
@@ -123,7 +179,7 @@
 5. 如果我是 macOS 且希望开机自启，帮我调用 POST /api/daemon/install-launchd。`,
           },
           {
-            key: 'script', label: '本地一键脚本', rec: '5 分钟',
+            key: 'script', label: '本地一键脚本（免费）', rec: '5 分钟 · 开源免费',
             note: 'macOS / Linux 终端直接运行，自动创建虚拟环境并启动本地工作台。',
             foot: '启动后浏览器打开 http://127.0.0.1:8792/，所有数据保存在 ~/.park-studio/。',
             code: `git clone https://github.com/zinan92/park-studio.git
@@ -131,9 +187,9 @@ cd park-studio
 bash scripts/install.sh`,
           },
           {
-            key: 'mac', label: 'Mac 原生桌面 App', rec: '纯 Swift · 无 Electron',
-            note: '无需安装 Rust 或 Electron，直接用 macOS 系统自带 Swift 编译透明标题栏原生桌面 App。',
-            foot: '产物生成在 dist/Park Studio.app，拖进「应用程序」即可像原生软件一样使用。',
+            key: 'mac', label: 'Mac 桌面 App', rec: '源码自编免费 · 签名直装版 ¥199',
+            note: '会用终端可以直接用 macOS 自带 Swift 免费编译；不想折腾环境可在下方 ¥199 预约开箱即用签名版。',
+            foot: '自编产物在 dist/Park Studio.app；不想折腾编译可直接预约下方签名版。',
             code: `git clone https://github.com/zinan92/park-studio.git
 cd park-studio
 bash scripts/build-macos-app.sh
@@ -142,178 +198,150 @@ open "dist/Park Studio.app"`,
         ],
       },
       community: {
-        eyebrow: '社群与定制',
-        h2a: '开源代码 100% 免费，',
-        h2b: '想跑得更快，可以直接找 Park。',
-        lead: 'Park Studio 的全部核心代码按 MIT 协议永久开源，自己动手一分钱不用花。如果你希望有人兜底排障、跟着实战工作流迭代，或者想为你的团队定制私有版本，欢迎直接加我微信。',
-        c1Tag: '个人创作者 · 独立开发者',
+        eyebrow: '社群 · 培训 · 定制开发',
+        h2a: '开源免费自用，',
+        h2b: '也可以直接连接 Park。',
+        lead: 'Park Studio 的源码在 GitHub 100% 开源免费。如果你想进群同步实时信息差、获取开箱即用桌面版，或者为公司打造专属 AI 工作流与交易系统，都可以直接加我微信。',
+        c1Tag: '个人连接 · 实时信息差',
         c1Title: 'Park 实战微信群',
         c1Price: '¥199',
-        c1Unit: '/ 一次性入群 · 无续费',
-        c1Desc: '一道极轻的认真度门槛，把真正跑通本地 AI 内容生产线的创作者聚在一起，高频交流排障与变现。',
+        c1Unit: '/ 一次性入群（永久有效）',
+        c1Desc: '主要给你一个直接加到我的沟通渠道，群内持续分享我的最新实战观察与一线信息差。',
         c1List: [
-          '<b>安装与使用答疑：</b>本地环境、Coding Agent 与专用 Chrome CDP 遇到问题直接群里问',
-          '<b>持续工作流同步：</b>同步 Park 每天自用的最新 Prompt、剪辑镜头表配置与版本内测',
-          '<b>实战信息差交流：</b>群友共创一人内容工厂、爆款拆解案例与 AI 变现实战复盘',
-          '<b>直达作者本人：</b>有共性需求或产品建议，第一时间反馈并进入开源迭代',
+          '<b>直连作者渠道：</b>最起码拥有一个能直接联系到 Park 本人的微信入口',
+          '<b>每日实时信息差：</b>实时同步 AI 工具动态、实战踩坑与高价值机会交流',
+          '<b>金融市场观察：</b>分享我对美股、加密与宏观金融市场的实时看法与复盘思考',
+          '<b>新产品优先同步：</b>第一时间看到 Park 正在打磨的开源项目与工作流演进',
         ],
-        c1Note: '适合个人使用与日常交流；如果你有明确的企业/团队定制开发需求，请直接看右侧方案。',
-        c1Cta: '扫码加 Park 微信（备注 199）',
-        c2Tag: 'MCN · 企业 IP 团队 · 工作室定制',
-        c2Title: '小 B / 团队定制开发',
-        c2Price: '¥10,000',
-        c2Unit: '起 / 按项目范围评估',
-        c2Desc: '由 Park 亲自架构与交付，把开源版 Park Studio 深度改造成完全贴合你公司业务的私有内容生产与分发系统。',
+        c1Rule: '<b>单独咨询收费说明：</b>¥199 为一次性入群费用；进群后如果针对你个人的具体问题需要私聊 1v1 单独解答或排障，按单个问题（per case）<b>¥199 / 次</b> 单独收费。',
+        c1Cta: '扫码加 Park 微信（备注 199进群）',
+        c2Tag: '企业团队 · 个人定制 · AI 培训',
+        c2Title: '定制开发与企业 AI 培训',
+        c2Price: '按需求评估',
+        c2Unit: '由 Park 亲自架构与交付',
+        c2Desc: '面向有明确业务目标的企业团队与个人，把经过真实跑通的 AI 自动化系统直接落地到你的业务里：',
         c2List: [
-          '<b>多账号矩阵与审批流：</b>多达人隔离 Chrome Profile、排期看板、飞书 / 企微通知与数据日报',
-          '<b>私有信源与知识库：</b>对接内部飞书文档、Notion、业务数据库或行业专属爆款监控脚本',
-          '<b>品牌专属剪辑流水线：</b>定制企业 VI 字幕动效、专属镜头表规则与封面自动生成模板',
-          '<b>私有化落地与培训：</b>帮团队全员装好本地 Agent 工作流并完成 1v1 交付陪跑',
+          '<b>电商工作流：</b>商品图 AI 出图、短视频批量生成与电商内容流水线',
+          '<b>公司级自媒体工作流：</b>多账号矩阵隔离、12 平台按需分发与数据复盘闭环',
+          '<b>公司私有知识库：</b>打通企业内部文档沉淀与专属 AI 检索问答系统',
+          '<b>品牌专属剪辑流水线：</b>定制企业 VI 字幕动效、镜头表规范与封面自动生成',
+          '<b>企业 AI 培训：</b>教团队打通数据孤岛，系统识别业务中可自动化、AI 化的环节',
+          '<b>交易系统打造：</b>自动化 DCA / Grid Bot、交易复盘日记与独立行情看盘看板',
         ],
-        c2Note: '明确门槛：定制开发单项目 ¥10,000 起（支持有预算的个人 IP 按同标准定制）；轻量答疑欢迎先入 ¥199 实战群。',
-        c2Cta: '加微信聊定制需求（备注 定制）',
-        qrTitle: '手机在手边？直接微信扫码找 Park（新加坡）',
-        qrDesc: '开源答疑与实战交流请备注「199进群」；团队私有化与定制开发（¥10,000 起）请备注「定制」并简单说明你的团队规模与目标。',
+        c2Note: '不写死模板报价，加微信说明你的业务场景与目标，直接评估可行性与排期。',
+        c2Cta: '加微信聊定制 / 培训需求',
+        casesTitle: '过往真实交付案例',
+        casesSub: '以下均为 Park 亲手架构并实际跑通的系统（仅放界面缩略图，不附外链）。点击任意缩略图可放大浏览详情。',
+        qrTitle: '直接微信扫码找 Park（新加坡）',
+        qrDesc: '入群交流请备注「199进群」；预约 Mac 桌面签名版请备注「Mac桌面版199」；企业定制开发或 AI 培训请备注「定制」并简述你的需求。',
         qrBtn: '放大二维码 / 复制备注',
       },
       foot: {
-        desc: '100% MIT 开源的本地内容生产线与多平台运营中控。零强制 API 费，数据永远留在你本机。',
+        desc: '100% MIT 开源的本地内容生产线（12 平台按需分发）。零强制 API 费，数据永远留在你本机。',
         cols: [
-          { h: '产品', links: [['在线演示', 'demo/'], ['五个视图', '#features'], ['数据图表', '#charts'], ['本地部署', '#deploy']] },
-          { h: '社群与服务', links: [['¥199 实战微信群', '#community'], ['¥10,000+ 团队定制', '#community'], ['快速开始文档', 'docs/#quickstart'], ['7 平台安全护栏', 'docs/#publish']] },
-          { h: '开源与安全', links: [['GitHub 仓库', GITHUB_URL], ['MIT 开源协议', `${GITHUB_URL}/blob/main/LICENSE`], ['隐私与本地承诺', 'docs/#privacy'], ['常见问题 FAQ', 'docs/#faq']] },
+          { h: '开源产品', links: [['GitHub 源码仓库', GITHUB_URL], ['在线演示 (12 平台)', 'demo/'], ['核心卖点', '#charts'], ['本地部署', '#deploy']] },
+          { h: '社群与定制', links: [['¥199 实战微信群', '#community'], ['Mac 桌面版 ¥199', '#deploy'], ['定制开发与培训', '#community'], ['过往交付案例', '#cases']] },
+          { h: '文档与安全', links: [['快速开始', 'docs/#quickstart'], ['12 平台安全护栏', 'docs/#publish'], ['隐私与本地承诺', 'docs/#privacy'], ['常见问题 FAQ', 'docs/#faq']] },
         ],
-        colophon: 'Park Studio · 开源免费用，社群陪跑，小 B 定制交付。',
+        colophon: 'Park Studio · 开源免费用，社群连信息差，定制与培训落地真实业务。',
         license: 'MIT License · Made by Park (@Park的AI世界 · 新加坡)',
       },
     },
     en: {
-      title: 'Park Studio · Open-Source Local Content Studio & 7-Platform Command Center',
-      desc: '100% MIT open-source local content pipeline: topic sourcing, script drafting, dual-mode video cutting, 7-platform safe CDP autofill publishing, and analytics. Zero forced API fees.',
-      nav: { features: 'Features', charts: 'Charts', ai: 'AI Agents', deploy: 'Self-host', community: 'Community & Custom', docs: 'Docs', demo: 'Live demo', langLabel: '中文' },
+      title: 'Park Studio · Open-Source Local Content Pipeline (12 Platforms · Zero API Fees)',
+      desc: '100% MIT open-source local content studio: replace a 4-person content team, turn 1 daily topic into 12-platform distribution, 100% local.',
+      nav: { features: 'Five Views', charts: 'Why Local', ai: 'AI Agents', deploy: 'Self-host', community: 'Community & Custom', docs: 'Docs', demo: 'Live demo', langLabel: '中文' },
       hero: {
-        eyebrow: 'Open source · MIT · Local-first · Zero API fees',
-        h1a: 'One local studio for your',
-        h1b: 'entire content pipeline.',
-        lead: 'Topics live in newsletters and Obsidian; publishing lives across 7 creator studios. Park Studio unifies sourcing, scripting, cutting, safe autofill publishing, and analytics — 100% local on your machine.',
+        eyebrow: '100% MIT Open Source · Free on GitHub · 12 Opt-In Platforms · Zero API Fees',
+        h1a: 'One creator,',
+        h1b: 'a 4-person content team.',
+        lead: 'Pick 1 winning topic each morning from daily briefs and Obsidian — script, offline rough-cut, and safely autofill up to 12 platforms locally. Fully open source on GitHub.',
         ctaDemo: 'Live demo',
-        ctaDeploy: 'Self-host it',
-        subJoin: 'Want setup support, Park\'s live workflows, or a tailored team build?',
-        subLink: 'Join Creator Group (¥199) / Custom Dev ($1,500+) →',
+        ctaDeploy: 'Self-host free',
+        subJoin: 'Skip the terminal?',
+        subLink: 'Pre-order Signed Mac App (¥199) · Join Group / Custom Builds →',
       },
       features: {
-        eyebrow: 'Features',
+        eyebrow: 'Five Views',
         h2: 'One studio, five views',
-        lead: 'Command Hub, Topics, Cut, Publish, Review — follow every episode end to end without switching tools.',
+        lead: 'Overview, Topics, Cut, Publish, Review — follow every episode end to end without switching tools.',
         tabs: [
-          {
-            key: 'hub', label: 'Overview',
-            h3: 'Open the first screen and know exactly where you left off',
-            p: 'The top "In Progress" strip jumps straight to your active cut, pending publish confirmations, and today\'s AI brief — paired with live 7-platform stacked follower curves and plain-English takeaways.',
-            linkText: 'Explore the Command Hub →', linkHref: 'docs/#hub',
-          },
-          {
-            key: 'topic', label: 'Topics',
-            h3: 'Read-only Obsidian vault plus daily breakout benchmarks',
-            p: 'Parses daily AI & builder briefings alongside breakout benchmark videos ranked by multiplier over channel median. Drafts hooks and runs a 3-axis audit (Value / Resonance / Pacing) via your local Coding Agent.',
-            linkText: 'Read-only Obsidian & sourcing →', linkHref: 'docs/#topic',
-          },
-          {
-            key: 'cut', label: 'Cut',
-            h3: 'One-click rough cut or Spec Table motion workflow',
-            p: 'Offline mlx-whisper / faster-whisper transcription automatically flags retakes and pauses before two-pass -16 LUFS & ASS subtitle rendering — or export worktable.json to a dedicated Cut Agent.',
-            linkText: 'Dual-mode local cutting →', linkHref: 'docs/#cut',
-          },
-          {
-            key: 'publish', label: 'Publish',
-            h3: 'Dedicated Chrome CDP autofill with strict human guardrails',
-            p: 'An isolated Chrome profile (:9333) keeps logins alive without touching your personal browser. Uploads video, covers, copy, and tags with pre-submit JPEG proof — pausing before the final publish click on domestic platforms.',
-            linkText: '7-platform safety guardrails →', linkHref: 'docs/#publish',
-          },
-          {
-            key: 'review', label: 'Review',
-            h3: 'Day-1 / Day-3 / Day-7 cohort comparisons that compound',
-            p: 'Syncs real views, likes, and follower deltas across Douyin, Xiaohongshu, Bilibili, Channels, YouTube, X, and WeChat — comparing same-age performance against your historical median.',
-            linkText: 'Analytics & cohort methodology →', linkHref: 'docs/#review',
-          },
+          { key: 'hub', label: 'Overview', h3: 'Open the first screen and know exactly where you left off', p: 'Jump straight to your active cut, pending publish confirmations, and today\'s brief alongside live growth across your selected platforms.', linkText: 'Explore Command Hub →', linkHref: 'docs/#hub' },
+          { key: 'topic', label: 'Topics', h3: 'Read-only Obsidian briefs — pick 1 great topic each morning', p: 'Parses daily briefings and breakout benchmark videos ranked by channel multiplier, then runs hooks and 3-axis audits on your local Coding Agent.', linkText: 'Obsidian & Sourcing →', linkHref: 'docs/#topic' },
+          { key: 'cut', label: 'Cut', h3: 'One-click rough cut or Spec Table motion workflow', p: 'Offline mlx-whisper transcription flags retakes and pauses before two-pass -16 LUFS & ASS subtitle rendering, or hands off worktable.json to a Cut Agent.', linkText: 'Dual-mode local cutting →', linkHref: 'docs/#cut' },
+          { key: 'publish', label: 'Publish', h3: '12 opt-in platforms with strict human guardrails', p: 'Pick only the platforms you publish to. Isolated Chrome (:9333) uploads video, covers, and tags with JPEG proof while pausing before final publish on CN platforms.', linkText: '12-platform guardrails →', linkHref: 'docs/#publish' },
+          { key: 'review', label: 'Review', h3: 'Day-1 / Day-3 / Day-7 same-age cohort comparisons', p: 'Syncs real views and follower gains across all enabled platforms and locates your 3× breakout duration sweet spot.', linkText: 'Analytics methodology →', linkHref: 'docs/#review' },
         ],
       },
-      charts: {
-        eyebrow: 'Charts',
-        h2: 'Where your reach grows, drawn',
-        lead: 'Every visualization is computed live from your local SQLite database. Nothing is uploaded to any third-party cloud.',
-        link: 'Privacy & local data model →',
-        streamTitle: 'Monthly follower growth across 7 platforms',
-        streamSub: 'Stacked monthly net followers; translucent dashed zone projects the next 3 months at current cadence. Click legend to isolate.',
-        sankeyTitle: 'Source → Format → Platform reach',
-        sankeySub: 'See which intelligence sources produce your highest-leverage episodes.',
-        radarTitle: '12-month publishing cadence',
-        radarSub: 'Solid indigo: trailing 12 months · Dashed: prior year.',
-        bubbleTitle: 'Audience share by platform',
-        bubbleSub: 'Total followers across all 7 connected channels.',
-        waterfallTitle: 'EP42 view gain attribution',
-        waterfallSub: 'How hook retention, completion rate, and cross-posting lifted views over median.',
-        baselineTitle: 'Last 10 episodes vs. median baseline',
-        baselineSub: 'Bars show actual cross-platform views; dashed line marks your 30-day median.',
-        heatTitle: 'Daily creation & publishing heatmap',
-        heatSub: 'Drafts, cuts, and published episodes across the year — darker indigo means higher output.',
+      selling: {
+        eyebrow: 'Core Value Props',
+        h2: 'Built around what actually matters for solo creators & teams',
+        lead: 'Every animated diagram proves one concrete advantage: replacing a 4-person org chart, fanning 1 daily topic out to 12 platforms, compounding followers from a true 0 baseline, and local-first safety.',
+        link: 'Try the 12-platform Live Demo →',
+        orgTitle: '01 · Org Chart Collapse: 4-person content team → Just you + Park Studio',
+        orgSub: 'Normally multi-platform ops require a researcher, scriptwriter, video editor, and ops manager. Park Studio collapses the repetitive layers into one local AI core.',
+        fanTitle: '02 · Pick 1 topic a day → Fan out to all 12 platforms',
+        fanSub: 'Converge briefs, breakouts, and Obsidian into ONE daily episode, then fan that single master out to up to 12 opt-in platforms. Click any platform chip to toggle its live flow.',
+        growthTitle: '03 · Cumulative follower growth anchored cleanly at 0',
+        growthSub: 'Anchored to a true 0 baseline, showing steady cumulative compounding across every episode release (EP markers) plus dashed 3-month projection.',
+        scatterTitle: '04 · 3× Breakout Duration Sweet Spot',
+        scatterSub: 'Pinpoints your highest-retention length window from real local metrics.',
+        guardTitle: '100% Local & Open-Source Guardrails',
+        guardSub: 'Zero cloud cookies, zero forced token fees, zero accidental auto-posts.',
       },
       ai: {
         eyebrow: 'AI Native',
         h2: 'Use the AI agents already on your machine',
-        lead: 'No bundled token markups or SaaS credit packs. Park Studio orchestrates your local Coding Agent CLIs and lets you assign a separate Cut Agent.',
+        lead: 'Zero forced API fees. Park Studio runs directly on your local Coding Agent CLIs and supports an independent Cut Agent.',
         leftEyebrow: 'Local Coding Agents',
         leftH3: 'Teardown, draft, and 3-axis audit — zero API fees',
         leftList: [
-          'First-class support for Gemini CLI, Claude Code, Codex, Antigravity CLI, or custom APIs',
-          'Strict read-only Obsidian access — drafts stay faithful to your own stories and voice',
-          'Independent Cut Agent configuration with live background render logs',
+          'First-class Gemini CLI, Claude Code, Codex, Antigravity CLI (agy), or custom APIs',
+          'Read-only Obsidian access keeps scripts faithful to your real stories',
+          'Split a dedicated Cut Agent with live background render logs',
         ],
         leftLink: 'Configure local AI backends →',
         leftFoot: 'Zero cloud relay · Notes, drafts, and keys stay inside ~/.park-studio/',
-        rightEyebrow: 'Standard Project Spec + Local REST API',
-        rightH3: 'Let your agent drop finals and trigger 7-platform autofill',
-        rightP: 'Finalizing a script scaffolds one clean directory convention. Any AI agent writes the rendered video, three cover ratios, and copy into final/上传/ and drives autofill via localhost REST API.',
-        rightBubble: 'Rough-cut EP42, export all three covers, and pre-fill all 7 platform drafts',
-        rightLink: 'Directory spec & REST API →',
+        rightEyebrow: 'Unified Project Spec + Local REST API',
+        rightH3: 'Drop finals once, autofill all enabled platforms',
+        rightP: 'Any external AI agent writes video, three covers, and copy into final/上传/ and drives 12-platform opt-in autofill over localhost REST API.',
+        rightBubble: 'Rough-cut EP42, export all covers, and pre-fill all 12 enabled platform drafts',
+        rightLink: 'Project spec & REST API →',
       },
       deploy: {
-        eyebrow: 'Self-host',
-        h2: 'Run your own Park Studio',
-        lead: 'No signup, no subscription, no lock-in. 100% MIT open source — your notes, scripts, and browser cookies never leave your machine.',
+        eyebrow: 'Open-Source Self-Host',
+        h2: '100% MIT Open Source on GitHub — run locally in 5 min',
+        lead: 'Clone freely from GitHub with zero subscriptions, or reserve the signed plug-and-play macOS Desktop build for ¥199.',
         docsLink: 'Full deployment guide →',
-        ghCta: 'View on GitHub',
+        ghCta: 'Get Source on GitHub',
         copy: 'Copy',
         copied: 'Copied',
-        bridgeText: 'Need setup help, ongoing workflows, or a custom team build tailored to your studio?',
-        bridgeLink: 'Join Creator Group / Custom Dev →',
+        desktopTitle: 'Prefer a signed plug-and-play macOS App? Pre-order for ¥199 (~$29)',
+        desktopDesc: 'Building from source is always free. To skip terminal setup and get an Apple-notarized .dmg (or hands-on local packaging by Park), reserve for ¥199 — launches notarized signing as soon as 5 creators reserve.',
+        desktopBtn: 'Reserve Mac App (¥199)',
         tabs: [
           {
-            key: 'ai', label: 'Give it to your AI assistant', rec: 'Recommended',
-            note: 'Send this prompt to Gemini CLI, Claude Code, Codex, or Cursor — it installs, configures, and launches Park Studio automatically.',
-            foot: 'Once running, open http://127.0.0.1:8792/ in your browser.',
+            key: 'ai', label: 'Give to AI Assistant (Free)', rec: 'Recommended · Free OSS',
+            note: 'Send this prompt to Gemini CLI, Claude Code, Codex, or Cursor to install automatically.',
+            foot: 'Opens http://127.0.0.1:8792/ with the 12-platform opt-in picker.',
             code: `Install and launch the open-source Park Studio local content workbench on my machine:
-1. Clone https://github.com/zinan92/park-studio.git to ~/work/park-studio if not present.
-2. Verify python3 (>=3.11) and install dependencies (fastapi uvicorn pyyaml httpx websockets pydantic).
-3. Ask me for three local preferences and save to ~/.park-studio/config.yaml:
-   - My Obsidian vault path (optional, read-only)
-   - My video projects root (default ~/Movies/ParkStudio)
-   - My preferred local Coding Agent CLI (gemini / claude / codex / agy)
-4. Start the local server on http://127.0.0.1:8792/ or build the native macOS app via bash scripts/build-macos-app.sh.
-5. On macOS, optionally enable auto-start via POST /api/daemon/install-launchd.`,
+1. Clone https://github.com/zinan92/park-studio.git to ~/work/park-studio.
+2. Check python3 (>=3.11) and install dependencies (fastapi uvicorn pyyaml httpx websockets pydantic).
+3. Ask me for my Obsidian path (optional, read-only), projects root, and preferred local Coding Agent CLI.
+4. Start http://127.0.0.1:8792/ or compile dist/Park Studio.app via bash scripts/build-macos-app.sh.`,
           },
           {
-            key: 'script', label: 'One-line Local Script', rec: '5 min',
-            note: 'Run in macOS or Linux terminal to set up a clean environment and launch localhost:8792.',
-            foot: 'All config and SQLite data stay inside ~/.park-studio/.',
+            key: 'script', label: 'Local Script (Free)', rec: '5 min · Free OSS',
+            note: 'Runs cleanly on macOS or Linux with zero external database setup.',
+            foot: 'All config and SQLite data stay in ~/.park-studio/.',
             code: `git clone https://github.com/zinan92/park-studio.git
 cd park-studio
 bash scripts/install.sh`,
           },
           {
-            key: 'mac', label: 'Native macOS App', rec: 'Pure Swift · No Electron',
-            note: 'Compiles a lightweight transparent-titlebar native Mac app using Apple\'s built-in Swift compiler — zero Electron bloat.',
-            foot: 'Outputs dist/Park Studio.app ready for your Applications folder.',
+            key: 'mac', label: 'macOS Desktop App', rec: 'Build Free · Signed DMG ¥199',
+            note: 'Compile yourself for free via Swift, or reserve the notarized plug-and-play build below for ¥199.',
+            foot: 'Outputs dist/Park Studio.app ready for Applications.',
             code: `git clone https://github.com/zinan92/park-studio.git
 cd park-studio
 bash scripts/build-macos-app.sh
@@ -322,48 +350,52 @@ open "dist/Park Studio.app"`,
         ],
       },
       community: {
-        eyebrow: 'Community & Custom Builds',
-        h2a: '100% free & MIT open source —',
-        h2b: 'work directly with Park when you want speed.',
-        lead: 'Every core feature is open source forever. Join Park\'s private WeChat builder group for setup support & live workflows, or engage Park directly for custom studio/team builds.',
-        c1Tag: 'Solo Creators · Indie Builders',
-        c1Title: 'Park Creator WeChat Group',
+        eyebrow: 'Community · Training · Custom Builds',
+        h2a: 'Free & open source forever —',
+        h2b: 'connect directly with Park when you need more.',
+        lead: 'Grab the code free on GitHub. Join Park\'s WeChat group for direct access & real-time market/AI insights, or engage Park for custom workflows, training, and trading systems.',
+        c1Tag: 'Direct Access · Real-Time Insights',
+        c1Title: 'Park WeChat Group',
         c1Price: '¥199',
-        c1Unit: 'one-time (~$29) · No renewal',
-        c1Desc: 'A curated, high-signal WeChat group for creators actually running local AI content pipelines.',
+        c1Unit: 'one-time (~$29 · Lifetime)',
+        c1Desc: 'Your direct channel to Park plus daily real-time sharing on AI workflows, financial markets, and new shipped products.',
         c1List: [
-          '<b>Setup & Troubleshooting:</b> Direct help on local installs, Coding Agents, and Chrome CDP profiles',
-          '<b>Live Workflow Drops:</b> Park\'s latest prompts, cutting presets, and early release previews',
-          '<b>Creator Playbooks:</b> Peer teardowns, solo-studio ops, and real AI monetization discussions',
-          '<b>Direct Access to Park:</b> Share feature ideas straight into the open-source roadmap',
+          '<b>Direct Line to Park:</b> A direct WeChat channel to stay connected with the builder',
+          '<b>Daily Real-Time Edge:</b> Ongoing AI tooling notes, workflow experiments, and field takeaways',
+          '<b>Financial Market Views:</b> Real-time macro, US equity, and crypto market observations',
+          '<b>Early Product Drops:</b> First look at new open-source tools Park is building',
         ],
-        c1Note: 'Best for individual creators & general Q&A. For bespoke team development, see Custom Studio Builds.',
+        c1Rule: '<b>1-on-1 Consultation Policy:</b> ¥199 covers one-time group admission only. Any private 1-on-1 troubleshooting or personal Q&A after joining is billed separately at <b>¥199 per case</b>.',
         c1Cta: 'Scan WeChat QR (Note: 199)',
-        c2Tag: 'MCNs · Brand Studios · Teams',
-        c2Title: 'Custom Studio & B2B Development',
-        c2Price: '¥10,000+',
-        c2Unit: 'per project (~$1,500+)',
-        c2Desc: 'Architected and delivered directly by Park to adapt Park Studio into your team\'s private content factory.',
+        c2Tag: 'Custom Development · Enterprise AI Training',
+        c2Title: 'Custom Builds & Enterprise AI Training',
+        c2Price: 'Custom Scope',
+        c2Unit: 'Architected & delivered by Park',
+        c2Desc: 'Bespoke production systems and hands-on team training tailored to your business:',
         c2List: [
-          '<b>Multi-Account Matrix & Approvals:</b> Isolated creator profiles, shared calendars, Feishu/WeCom alerts',
-          '<b>Private Intelligence & Knowledge Bases:</b> Integrate internal Feishu Docs, Notion, or industry scrapers',
-          '<b>Brand-Specific Cutting & Covers:</b> Custom motion templates, subtitle branding, and cover pipelines',
-          '<b>Team Rollout & 1-on-1 Handover:</b> Full local agent onboarding and training for your content team',
+          '<b>E-Commerce Workflows:</b> Automated AI product imagery & short-video pipelines',
+          '<b>Company-Grade Media Ops:</b> Multi-account matrices & 12-platform distribution pipelines',
+          '<b>Private Knowledge Bases:</b> Unified internal docs & company-wide AI retrieval',
+          '<b>Brand Cutting Pipelines:</b> Custom VI motion templates, subtitles, and cover generators',
+          '<b>Enterprise AI Training:</b> Break data silos and map which business steps to automate with AI',
+          '<b>Trading Systems:</b> Automated DCA / Grid Bots, K-line trade journals & market panels',
         ],
-        c2Note: 'Minimum engagement starts at ¥10,000 (~$1,500). Individual creators with commercial budgets are welcome on the same terms.',
-        c2Cta: 'Connect on WeChat (Note: Custom)',
-        qrTitle: 'Ready to connect? Scan WeChat to reach Park (Singapore)',
-        qrDesc: 'Note "199" to join the creator group, or "Custom" with your team size and workflow goals for ¥10,000+ bespoke builds.',
+        c2Note: 'Scoped per engagement — message on WeChat with your workflow goals for a direct assessment.',
+        c2Cta: 'Connect on WeChat for Custom / Training',
+        casesTitle: 'Selected Systems Built by Park',
+        casesSub: 'Real shipped products — thumbnails only, no external links. Click any thumbnail to inspect in fullscreen.',
+        qrTitle: 'Scan WeChat to reach Park (Singapore)',
+        qrDesc: 'Note "199" to join the WeChat group, "MacApp199" to reserve the signed Mac Desktop app, or "Custom" with your project scope.',
         qrBtn: 'Enlarge QR / Copy Note',
       },
       foot: {
-        desc: '100% MIT open-source local content pipeline & 7-platform command center. Zero forced API fees; your data stays on disk.',
+        desc: '100% MIT open-source local content pipeline (12 opt-in platforms). Zero forced API fees; your data stays on disk.',
         cols: [
-          { h: 'Product', links: [['Live demo', 'demo/'], ['Five views', '#features'], ['Charts', '#charts'], ['Self-host', '#deploy']] },
-          { h: 'Community & Custom', links: [['¥199 Creator Group', '#community'], ['¥10,000+ Custom Dev', '#community'], ['Quick start', 'docs/#quickstart'], ['7-platform guardrails', 'docs/#publish']] },
-          { h: 'Open Source', links: [['GitHub', GITHUB_URL], ['MIT License', `${GITHUB_URL}/blob/main/LICENSE`], ['Privacy pledge', 'docs/#privacy'], ['FAQ', 'docs/#faq']] },
+          { h: 'Open Source', links: [['GitHub Repository', GITHUB_URL], ['Live Demo (12 Plats)', 'demo/'], ['Core Value Props', '#charts'], ['Self-Host', '#deploy']] },
+          { h: 'Community & Custom', links: [['¥199 WeChat Group', '#community'], ['Signed Mac App ¥199', '#deploy'], ['Custom & AI Training', '#community'], ['Shipped Portfolio', '#cases']] },
+          { h: 'Docs & Safety', links: [['Quick Start', 'docs/#quickstart'], ['12-Platform Guardrails', 'docs/#publish'], ['Privacy Pledge', 'docs/#privacy'], ['FAQ', 'docs/#faq']] },
         ],
-        colophon: 'Park Studio · MIT Open Source · Community-backed · Custom-built for Studios.',
+        colophon: 'Park Studio · MIT Open Source · Direct Community · Bespoke Systems & Training.',
         license: 'MIT License · Made by Park (@Park的AI世界 · Singapore)',
       },
     },
@@ -383,42 +415,12 @@ open "dist/Park Studio.app"`,
   let lang = detectLang();
   let activeFeat = 'hub';
   let activeDeploy = 'ai';
-  let activeStreamFilter = null;
   let activeTopicFilter = 'all';
   let activeCutMode = 'spec';
-  let wxModalMode = null;
-
-  function renderWeChatModal() {
-    if (!wxModalMode) return '';
-    const isEn = lang === 'en';
-    const isCustom = wxModalMode === 'custom';
-    const title = isCustom
-      ? (isEn ? 'Custom Studio Build (¥10,000+)' : '加 Park 微信 · 聊团队定制（¥10,000 起）')
-      : (isEn ? 'Join Park Creator Group (¥199)' : '加 Park 微信 · ¥199 实战群');
-    const remark = isCustom
-      ? (isEn ? 'Hi Park, I want to discuss a custom Park Studio build (¥10,000+ budget). Our team/workflow goal is: ' : '你好 Park，我想咨询 Park Studio 定制开发（预算 ¥10,000+），我们的团队与需求是：')
-      : (isEn ? '199 Group' : '199进群');
-    const hint = isCustom
-      ? (isEn ? 'Scan with WeChat to connect with Park (Singapore). Copy the template below as your friend note:' : '用微信扫一扫添加 Park（新加坡），复制下方备注发送即可直接沟通需求：')
-      : (isEn ? 'Scan with WeChat to add Park (Singapore) and send note "199 Group":' : '用微信扫一扫添加 Park（新加坡），备注「199进群」即可拉你入群：');
-
-    return `<div class="wx-modal-bg" id="wxModalBg">
-      <div class="wx-modal" role="dialog" aria-modal="true" aria-label="${title}">
-        <div class="wx-modal-h">
-          <h3>${title}</h3>
-          <button type="button" class="wx-close" id="wxClose" aria-label="Close">✕</button>
-        </div>
-        <p style="margin:0;font-size:13.5px;color:var(--label-2);line-height:1.6">${hint}</p>
-        <div class="wx-qr-frame">
-          <img src="${rel('assets/park-wechat-qr.jpg')}" alt="Park WeChat QR Code">
-        </div>
-        <div class="wx-remark-box">
-          <div>${isEn ? 'Suggested Note:' : '建议备注暗号：'}<br><b id="wxRemarkTxt">${remark}</b></div>
-          <button type="button" class="copy-btn" id="copyWxRemark">${isEn ? 'Copy' : '复制'}</button>
-        </div>
-      </div>
-    </div>`;
-  }
+  let activeGrowthFilter = 'all'; // all | cn | gl
+  let enabledPlats = new Set(PLATFORMS_12.map(p => p.id));
+  let wxModalMode = null; // null | 'group' | 'desktop' | 'custom'
+  let lightbox = null; // null | { caseId, idx }
 
   const basePrefix = document.documentElement.dataset.base || '';
   const rel = p => (p.startsWith('#') || p.startsWith('http') ? p : `${basePrefix}${p}`);
@@ -433,24 +435,25 @@ open "dist/Park Studio.app"`,
 
   const GH_SVG = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.16 1.18a10.95 10.95 0 0 1 5.76 0c2.19-1.49 3.16-1.18 3.16-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.39-5.26 5.67.42.36.79 1.07.79 2.15 0 1.55-.01 2.8-.01 3.18 0 .31.21.66.79.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>`;
 
-  function buildHeroBubbles() {
-    const items = [
-      { id: 'DY', name: '抖音', val: '43.4k', x: 118, y: 88, r: 34, c: '#EDEDED', tc: '#0F0F10' },
-      { id: 'BL', name: 'B站', val: '24.2k', x: 184, y: 74, r: 27, c: '#00A1D6', tc: '#fff' },
-      { id: 'WX', name: '公众号', val: '19.1k', x: 174, y: 132, r: 24, c: '#30A46C', tc: '#fff' },
-      { id: 'X',  name: 'X',     val: '17.4k', x: 64,  y: 62,  r: 23, c: '#2D2D32', tc: '#fff' },
-      { id: 'XH', name: '小红书', val: '16.2k', x: 64,  y: 122, r: 22, c: '#E5484D', tc: '#fff' },
-      { id: 'SP', name: '视频号', val: '11.9k', x: 118, y: 148, r: 20, c: '#F59E0B', tc: '#0F0F10' },
-      { id: 'YT', name: 'YT',    val: '9.2k',  x: 118, y: 34,  r: 18, c: '#E52D27', tc: '#fff' },
-    ];
-    return `<svg viewBox="0 0 240 184" class="chart-svg" aria-label="Platform cluster">
-      ${items.map(b => `
-        <g data-tip="${b.name} · ${b.val}">
-          <circle cx="${b.x}" cy="${b.y}" r="${b.r + 5}" fill="${b.c}" fill-opacity=".10"/>
-          <circle cx="${b.x}" cy="${b.y}" r="${b.r}" fill="${b.c}" fill-opacity=".92"/>
-          <text x="${b.x}" y="${b.y - 2}" text-anchor="middle" style="fill:${b.tc};font-weight:700;font-size:${b.r > 25 ? 11.5 : 10}px">${b.id}</text>
-          <text x="${b.x}" y="${b.y + 11}" text-anchor="middle" style="fill:${b.tc};opacity:.85;font-size:9px">${b.val}</text>
-        </g>`).join('')}
+  function buildHeroMiniChart() {
+    // Clean zero-baseline upward growth curve inside Hero Mac window
+    return `<svg viewBox="0 0 230 164" class="chart-svg" aria-label="12-platform cumulative growth">
+      <defs>
+        <linearGradient id="hg1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7C9BF5" stop-opacity=".34"/>
+          <stop offset="1" stop-color="#7C9BF5" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <line x1="8" y1="142" x2="222" y2="142" stroke="rgba(255,255,255,.12)"/>
+      <line x1="8" y1="96" x2="222" y2="96" stroke="rgba(255,255,255,.05)" stroke-dasharray="3 3"/>
+      <line x1="8" y1="50" x2="222" y2="50" stroke="rgba(255,255,255,.05)" stroke-dasharray="3 3"/>
+      <path d="M 10 140 C 44 134, 72 118, 108 98 C 142 79, 174 52, 214 26 L 214 142 L 10 142 Z" fill="url(#hg1)"/>
+      <path d="M 10 140 C 44 134, 72 118, 108 98 C 142 79, 174 52, 214 26" fill="none" stroke="#7C9BF5" stroke-width="2.4" stroke-linecap="round" class="anim-sweep"/>
+      <circle cx="214" cy="26" r="7" fill="#7C9BF5" fill-opacity=".22"/>
+      <circle cx="214" cy="26" r="3.8" fill="#EDEDED" stroke="#7C9BF5" stroke-width="2"/>
+      <text x="10" y="156">0</text>
+      <text x="112" y="156" text-anchor="middle">EP30</text>
+      <text x="218" y="156" text-anchor="end">174.8k</text>
     </svg>`;
   }
 
@@ -459,54 +462,21 @@ open "dist/Park Studio.app"`,
     if (key === 'hub') {
       return `
         <div class="pv-bar">
-          <div class="pv-title">${isEn ? 'Command Hub · In Progress & Multi-Platform Overview' : '中控大屏 · 正在做与全网总览'}</div>
-          <div class="pv-chips">
-            <span class="pv-chip on">${isEn ? '7 platforms live' : '7 平台在线'}</span>
-            <span class="pv-chip">${isEn ? '141,420 followers' : '全网 141,420 粉'}</span>
-          </div>
+          <div class="pv-title">${isEn ? 'Command Hub · In Progress & 12-Platform Overview' : '中控大屏 · 正在做与 12 平台总览'}</div>
+          <div class="pv-chips"><span class="pv-chip on">${isEn ? '12 opt-in platforms' : '12 平台按需启用'}</span><span class="pv-chip">174,820 ${isEn ? 'followers' : '总粉'}</span></div>
         </div>
         <div class="pv-grid-3" style="margin-bottom:12px">
-          <div class="pv-card">
-            <div class="pv-card-top"><span class="pv-tag">${isEn ? 'Cutting' : '剪辑中'}</span><span class="pv-meta">EP42</span></div>
-            <h4>${isEn ? 'One Local Studio Replacing 4 Workflows' : '把 4 个内容工作台合并成 1 个开源本地中控'}</h4>
-            <div class="pv-meta">${isEn ? 'Spec Table · 14 shots · -16 LUFS' : '停在镜头表 · 14 镜 · 待渲染'}</div>
-          </div>
-          <div class="pv-card">
-            <div class="pv-card-top"><span class="pv-tag amber">${isEn ? '2 awaiting click' : '2 平台待点发'}</span><span class="pv-meta">EP41</span></div>
-            <h4>${isEn ? 'Local Chrome Autofill Across 7 Platforms' : '本地专用 Chrome 半自动填表闭环'}</h4>
-            <div class="pv-meta">${isEn ? 'XHS & Channels filled · JPEG proof saved' : '小红书 / 视频号已填表 · 已存档截图'}</div>
-          </div>
-          <div class="pv-card">
-            <div class="pv-card-top"><span class="pv-tag good">${isEn ? 'Today Brief' : '今日 AI 日报'}</span><span class="pv-meta">28 items</span></div>
-            <h4>${isEn ? 'Local Coding Agents & Video Cut Automation' : '本地 Agent 零 API 费接管内容生产'}</h4>
-            <div class="pv-meta">${isEn ? 'Obsidian read-only synced · 09:30' : 'Obsidian 只读已同步 · 09:30'}</div>
-          </div>
-        </div>
-        <div class="pv-grid-2">
-          <div class="pv-card">
-            <div class="pv-card-top"><b style="font-size:13px">${isEn ? 'Total Audience Growth' : '全平台总粉丝'}</b><span class="pv-tag good">+2,840 / 30d</span></div>
-            <div style="font-size:26px;font-weight:700;font-family:var(--mono);letter-spacing:-.02em;margin:4px 0 10px">141,420</div>
-            <svg viewBox="0 0 360 66" class="chart-svg">
-              <defs><linearGradient id="pvG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E63DD" stop-opacity=".28"/><stop offset="1" stop-color="#3E63DD" stop-opacity="0"/></linearGradient></defs>
-              <path d="M0 54 L42 50 L85 45 L128 42 L170 33 L212 31 L255 21 L298 15 L360 8 L360 66 L0 66 Z" fill="url(#pvG)"/>
-              <path d="M0 54 L42 50 L85 45 L128 42 L170 33 L212 31 L255 21 L298 15 L360 8" fill="none" stroke="#3E63DD" stroke-width="2.2" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="pv-card">
-            <div class="pv-card-top"><b style="font-size:13px">${isEn ? 'Plain-English Takeaways' : 'AI 一句话人话结论'}</b><span class="pv-meta">EP41</span></div>
-            <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:#3F3F46;line-height:1.5">
-              <div><span class="pv-tag good">${isEn ? 'Reach' : '播放'}</span> ${isEn ? 'Day-1 views hit 114k (+66% vs EP40); Bilibili favorites ratio leads at 8.5%.' : '发布 24 小时全网破 11.4 万（较上期 +66%），B站收藏率 8.5% 领先。'}</div>
-              <div><span class="pv-tag">${isEn ? 'Hook' : '开头'}</span> ${isEn ? 'Direct workflow demo in first 6s lifted Douyin completion rate to 34.2%.' : '前 6 秒直接演示自动填表画面，抖音完播率拉升至 34.2%。'}</div>
-            </div>
-          </div>
+          <div class="pv-card"><div class="pv-card-top"><span class="pv-tag">${isEn ? 'Cutting' : '剪辑中'}</span><span class="pv-meta">EP42</span></div><h4>${isEn ? 'One Local Studio Replacing a 4-Person Team' : '一个人顶 4 人团队的本地内容中控'}</h4><div class="pv-meta">${isEn ? 'Spec Table · 14 shots · -16 LUFS' : '停在镜头表 · 14 镜 · 待渲染'}</div></div>
+          <div class="pv-card"><div class="pv-card-top"><span class="pv-tag amber">${isEn ? '2 awaiting click' : '2 平台待点发'}</span><span class="pv-meta">EP41</span></div><h4>${isEn ? '1 Daily Topic Fanned Out to 12 Platforms' : '1 条好题穿透 12 平台按需填表'}</h4><div class="pv-meta">${isEn ? 'XHS & Channels filled · JPEG proof saved' : '小红书 / 视频号已填表 · 已存档截图'}</div></div>
+          <div class="pv-card"><div class="pv-card-top"><span class="pv-tag good">${isEn ? 'Today Brief' : '今日 AI 日报'}</span><span class="pv-meta">28 items</span></div><h4>${isEn ? 'Obsidian Read-Only Briefs + Breakout Radar' : 'Obsidian 只读日报 + 3× 对标爆款'}</h4><div class="pv-meta">${isEn ? 'Pick 1 winning topic each morning' : '每天早上只挑 1 条最值得讲的题'}</div></div>
         </div>`;
     }
     if (key === 'topic') {
       const items = [
-        { cat: 'bench', tag: '4.6×', title: isEn ? 'Why Solo Creators Are Moving From SaaS Back to Local Agents' : '为什么一人博主正在放弃 SaaS 回到本地 Agent 工作流', meta: 'YouTube · 182k views · 4.6× median', score: isEn ? 'Value 9.4 · Resonance 9.1 · Pace 8.8' : '价值 9.4 · 共鸣 9.1 · 节奏 8.8' },
-        { cat: 'daily', tag: isEn ? 'AI Brief' : 'AI 日报', title: isEn ? 'Open-Source Local Whisper + FFmpeg Rough-Cut Pipelines' : '开源离线转写 + 自动删口误粗剪成为创作者标配', meta: 'Obsidian · 2026-11-24 · Read-only', score: isEn ? 'Value 9.1 · Resonance 8.4 · Pace 8.9' : '价值 9.1 · 共鸣 8.4 · 节奏 8.9' },
-        { cat: 'bench', tag: '3.8×', title: isEn ? 'Zero-API-Cost Content Factory Using Gemini CLI + Obsidian' : '零 API 费内容工厂：Gemini CLI 直读 Obsidian 写口播稿', meta: 'Bilibili · 94k views · 3.8× median', score: isEn ? 'Value 9.3 · Resonance 8.9 · Pace 8.5' : '价值 9.3 · 共鸣 8.9 · 节奏 8.5' },
-        { cat: 'daily', tag: isEn ? 'Builder' : '搞钱日报', title: isEn ? 'Open-Source Tools Winning Distribution With Live Interactive Demos' : '开源工具怎么靠「免注册在线 Demo + AI 一键部署」拿 Star', meta: 'Saved · Deep Read attached', score: isEn ? 'Value 8.9 · Resonance 9.2 · Pace 8.7' : '价值 8.9 · 共鸣 9.2 · 节奏 8.7' },
+        { cat: 'bench', tag: '4.6×', title: isEn ? 'Why Solo Creators Are Replacing 4-Person Teams With Local Agents' : '为什么一人博主正在用本地 Agent 替代 4 人内容团队', meta: 'YouTube · 182k · 4.6×', score: isEn ? 'Value 9.4 · Resonance 9.1 · Pace 8.8' : '价值 9.4 · 共鸣 9.1 · 节奏 8.8' },
+        { cat: 'daily', tag: isEn ? 'AI Brief' : 'AI 日报', title: isEn ? 'Apple Silicon Offline Rough Cut: 18s Transcription for 10-Min Video' : 'Apple Silicon 离线转写实测：10 分钟口播 18 秒标完口误', meta: 'Obsidian · Read-only', score: isEn ? 'Value 9.1 · Resonance 8.4 · Pace 8.9' : '价值 9.1 · 共鸣 8.4 · 节奏 8.9' },
+        { cat: 'bench', tag: '3.8×', title: isEn ? '1 Topic → 12 Opt-In Platforms With Zero Forced API Fees' : '1 条选题穿透 12 个海内外平台，零强制 API 费闭环', meta: 'Bilibili · 94k · 3.8×', score: isEn ? 'Value 9.3 · Resonance 8.9 · Pace 8.5' : '价值 9.3 · 共鸣 8.9 · 节奏 8.5' },
+        { cat: 'daily', tag: isEn ? 'Builder' : '搞钱日报', title: isEn ? 'Open-Source Product → Paid Community → Bespoke B2B Systems' : '开源产品 + 实战社群 + 企业定制开发的真实商业闭环', meta: 'Saved · Deep Read', score: isEn ? 'Value 9.0 · Resonance 9.3 · Pace 8.7' : '价值 9.0 · 共鸣 9.3 · 节奏 8.7' },
       ].filter(x => activeTopicFilter === 'all' || x.cat === activeTopicFilter);
       return `
         <div class="pv-bar">
@@ -514,19 +484,11 @@ open "dist/Park Studio.app"`,
           <div class="pv-chips">
             <button type="button" class="pv-chip ${activeTopicFilter === 'all' ? 'on' : ''}" data-tf="all">${isEn ? 'All (4)' : '全部 (4)'}</button>
             <button type="button" class="pv-chip ${activeTopicFilter === 'bench' ? 'on' : ''}" data-tf="bench">${isEn ? 'Breakouts 3×+' : '对标爆款 3×+'}</button>
-            <button type="button" class="pv-chip ${activeTopicFilter === 'daily' ? 'on' : ''}" data-tf="daily">${isEn ? 'Daily Briefs' : 'Obsidian 日报'}</button>
+            <button type="button" class="pv-chip ${activeTopicFilter === 'daily' ? 'on' : ''}" data-tf="daily">${isEn ? 'Obsidian Briefs' : 'Obsidian 日报'}</button>
           </div>
         </div>
         <div class="pv-grid-2">
-          ${items.map(it => `
-            <div class="pv-card">
-              <div class="pv-card-top"><span class="pv-tag">${it.tag}</span><span class="pv-meta">${it.meta}</span></div>
-              <h4>${it.title}</h4>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
-                <span class="pv-meta">${it.score}</span>
-                <span class="pv-tag good">+ ${isEn ? 'Add to Pool' : '加入选题'}</span>
-              </div>
-            </div>`).join('')}
+          ${items.map(it => `<div class="pv-card"><div class="pv-card-top"><span class="pv-tag">${it.tag}</span><span class="pv-meta">${it.meta}</span></div><h4>${it.title}</h4><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="pv-meta">${it.score}</span><span class="pv-tag good">+ ${isEn ? 'Pick Today\'s 1 Topic' : '选为今日主线'}</span></div></div>`).join('')}
         </div>`;
     }
     if (key === 'cut') {
@@ -538,252 +500,329 @@ open "dist/Park Studio.app"`,
             <button type="button" class="pv-chip ${activeCutMode === 'spec' ? 'on' : ''}" data-cm="spec">${isEn ? 'Spec Table & Motion' : '镜头表 · 高级动效'}</button>
           </div>
         </div>
-        ${activeCutMode === 'rough' ? `
-          <div class="pv-card">
-            <div class="pv-card-top"><b style="font-size:13px">${isEn ? 'mlx-whisper Transcript · Auto Retake & Pause Removal' : 'mlx-whisper 离线转写 · 自动标口误与长停顿'}</b><span class="pv-tag good">-16 LUFS · faststart</span></div>
-            <div style="font-size:13px;line-height:1.9;color:#1F1F24">
-              <span class="pv-meta">[00:00.4]</span> ${isEn ? 'If you publish to 7 platforms every week, ' : '如果你每周都要把一条视频发到 7 个平台，'}
-              <span class="pv-strike">${isEn ? 'uhh wait let me rephrase that (1.8s pause) ' : '呃等一下我重新说这句（停顿 1.8s）'}</span>
-              <b>${isEn ? 'you already know the real bottleneck is never filming.' : '你一定知道真正的瓶颈从来不是拍摄。'}</b><br>
-              <span class="pv-meta">[00:09.2]</span> ${isEn ? 'Today I open-sourced my local studio that runs the whole pipeline with zero API fees.' : '今天我把自己每天用的本地内容中控完全开源了，零 API 费跑通找写剪发盘。'}
-            </div>
-          </div>` : `
-          <table class="pv-table">
-            <thead><tr><th>${isEn ? 'Timecode' : '时间段'}</th><th>${isEn ? 'Voiceover' : '口播原句'}</th><th>${isEn ? 'Motion / Visual' : '画面与动效指令'}</th><th>${isEn ? 'Density' : '节奏'}</th></tr></thead>
-            <tbody>
-              <tr><td class="pv-meta">00:00–00:07</td><td><b>${isEn ? 'Hook: 7 platforms autofilled in 60s' : 'Hook：一期视频 60 秒填完 7 个平台'}</b></td><td><span class="pv-tag">Zoom-in Screen</span> Chrome CDP live fill</td><td><span class="pv-tag amber">High</span></td></tr>
-              <tr><td class="pv-meta">00:07–00:22</td><td>${isEn ? 'Why local agents beat cloud SaaS credits' : '为什么本机 Coding Agent 比云端积分更省心'}</td><td><span class="pv-tag">Split Card</span> Obsidian → SQLite</td><td><span class="pv-tag">Medium</span></td></tr>
-              <tr><td class="pv-meta">00:22–00:41</td><td>${isEn ? 'One unified directory spec for every agent' : '一套统一工程目录，所有 Agent 共用'}</td><td><span class="pv-tag good">Tree Reveal</span> final/上传/</td><td><span class="pv-tag">Medium</span></td></tr>
-            </tbody>
-          </table>`}`;
+        ${activeCutMode === 'rough' ? `<div class="pv-card"><div class="pv-card-top"><b style="font-size:13px">${isEn ? 'mlx-whisper Offline Transcript · Auto Retake & Pause Removal' : 'mlx-whisper 离线转写 · 自动标口误与长停顿'}</b><span class="pv-tag good">-16 LUFS · faststart</span></div><div style="font-size:13px;line-height:1.9;color:#1F1F24"><span class="pv-meta">[00:00.4]</span> ${isEn ? 'If you publish to multiple platforms every week, ' : '如果你每周都要把一条视频发到多个平台，'}<span class="pv-strike">${isEn ? 'uhh wait let me rephrase that (1.8s pause) ' : '呃等一下我重新说这句（停顿 1.8s）'}</span><b>${isEn ? 'the real bottleneck is never filming.' : '真正的瓶颈从来不是拍摄。'}</b></div></div>` : `
+        <table class="pv-table"><thead><tr><th>${isEn ? 'Timecode' : '时间段'}</th><th>${isEn ? 'Voiceover' : '口播原句'}</th><th>${isEn ? 'Motion / Visual' : '画面与动效指令'}</th><th>${isEn ? 'Density' : '节奏'}</th></tr></thead><tbody>
+          <tr><td class="pv-meta">00:00–00:07</td><td><b>${isEn ? 'Hook: 1 topic → 12 platforms locally' : 'Hook：1 条选题 60 秒填完 12 平台'}</b></td><td><span class="pv-tag">Zoom Screen</span> Chrome CDP live fill</td><td><span class="pv-tag amber">High</span></td></tr>
+          <tr><td class="pv-meta">00:07–00:22</td><td>${isEn ? 'Why 1 creator replaces a 4-person content team' : '为什么一个人就能干完 4 个人的活'}</td><td><span class="pv-tag">Org Collapse</span> 4 Roles → 1 Studio</td><td><span class="pv-tag">Medium</span></td></tr>
+          <tr><td class="pv-meta">00:22–00:41</td><td>${isEn ? 'One unified directory spec for every agent' : '一套统一工程目录，所有 Agent 共用'}</td><td><span class="pv-tag good">Tree Reveal</span> final/上传/</td><td><span class="pv-tag">Medium</span></td></tr>
+        </tbody></table>`}`;
     }
     if (key === 'publish') {
       const plats = [
-        { n: isEn ? 'Douyin' : '抖音', st: 'wait', txt: isEn ? 'Filled · Awaiting click' : '已填表 · 待你点发', note: 'JPEG proof saved' },
-        { n: isEn ? 'Xiaohongshu' : '小红书', st: 'wait', txt: isEn ? 'Filled · Awaiting click' : '已填表 · 待你点发', note: '5 topics attached' },
+        { n: isEn ? 'Douyin' : '抖音', st: 'wait', txt: isEn ? 'Filled · Click to publish' : '已填表 · 待你点发', note: 'JPEG proof saved' },
+        { n: isEn ? 'Xiaohongshu' : '小红书', st: 'wait', txt: isEn ? 'Filled · Click to publish' : '已填表 · 待你点发', note: '5 topics attached' },
         { n: 'Bilibili', st: 'good', txt: isEn ? 'Published · Synced' : '已发布 · 已回填链接', note: '21.6k views' },
-        { n: isEn ? 'Channels' : '视频号', st: 'wait', txt: isEn ? 'Filled · Awaiting click' : '已填表 · 待你点发', note: 'Schedule verified' },
         { n: 'YouTube', st: 'good', txt: isEn ? 'Scheduled · Verified' : '已定时 · 回读一致', note: '16:9 cover ok' },
-        { n: 'X', st: 'good', txt: isEn ? 'Published · UTM' : '已发布 · 带 UTM', note: '44.1k views' },
+        { n: 'TikTok / IG', st: 'good', txt: isEn ? 'Opt-In Enabled' : '按需已启用', note: '9:16 Reels synced' },
+        { n: 'X / LinkedIn', st: 'good', txt: isEn ? 'Published · UTM' : '已发布 · 带 UTM', note: '52.0k combined' },
       ];
-      return `
-        <div class="pv-bar">
-          <div class="pv-title">${isEn ? 'Dedicated Chrome CDP (:9333) · Safe 7-Platform Autofill' : '专用 Chrome CDP (:9333) · 7 平台安全填表闭环'}</div>
-          <div class="pv-chips"><span class="pv-chip on">${isEn ? 'Guardrail: Never auto-click Publish on CN platforms' : '安全护栏：国内 4 平台严格只填不点发'}</span></div>
-        </div>
-        <div class="pv-grid-3">
-          ${plats.map(p => `
-            <div class="pv-card">
-              <div class="pv-card-top"><b>${p.n}</b><span class="pv-tag ${p.st === 'good' ? 'good' : 'amber'}">${p.txt}</span></div>
-              <div class="pv-meta">${p.note}</div>
-            </div>`).join('')}
-        </div>`;
+      return `<div class="pv-bar"><div class="pv-title">Chrome CDP (:9333) · ${isEn ? '12 Opt-In Platforms' : '12 平台按需安全填表闭环'}</div><div class="pv-chips"><span class="pv-chip on">${isEn ? 'Pick only what you use · CN guardrails enforced' : '只勾常用平台 · 国内 4 家严格只填不点发'}</span></div></div><div class="pv-grid-3">${plats.map(p => `<div class="pv-card"><div class="pv-card-top"><b>${p.n}</b><span class="pv-tag ${p.st === 'good' ? 'good' : 'amber'}">${p.txt}</span></div><div class="pv-meta">${p.note}</div></div>`).join('')}</div>`;
     }
-    // review
+    return `<div class="pv-bar"><div class="pv-title">${isEn ? 'Day-1 / Day-3 / Day-7 Cohort Comparison' : '1 / 3 / 7 天同龄复盘与抖音时长分析'}</div><div class="pv-chips"><span class="pv-chip on">EP41 · 168.4k Day-1 (+66.8%)</span></div></div><div class="pv-grid-2"><div class="pv-card"><div class="pv-card-top"><b>${isEn ? 'EP41 Same-Age Cohort' : 'EP41 发布 24h 全网同龄对比'}</b><span class="pv-tag good">+66.8%</span></div><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;font-size:12px"><div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>EP41</span><b>168,420</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:94%;height:100%;background:#3E63DD;border-radius:99px"></div></div></div><div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>${isEn ? '30d Median' : '近 30 天中位数'}</span><b>101,000</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:56%;height:100%;background:#A1A1AA;border-radius:99px"></div></div></div></div></div><div class="pv-card"><div class="pv-card-top"><b>${isEn ? 'Zero-Fabrication Rule' : '零伪造数据原则'}</b><span class="pv-tag good">SQLite</span></div><div class="pv-meta">${isEn ? 'Every chart reads strictly from locally synced real creator studio stats.' : '所有大屏与复盘图表严格读取你本机采集的真实作品数据，绝不造假充数。'}</div></div></div>`;
+  }
+
+  // ===== SELLING POINT 1: Animated Org Chart (4-Person Team -> 1 Person + Park Studio) =====
+  function renderOrgChart() {
+    const isEn = lang === 'en';
+    const roles = [
+      { x: 46,  n: isEn ? 'Researcher' : '编导 · 找爆款', sub: isEn ? '$2.5k/mo' : '¥12k/月' },
+      { x: 142, n: isEn ? 'Scriptwriter' : '文案 · 写口播', sub: isEn ? '$2.2k/mo' : '¥10k/月' },
+      { x: 238, n: isEn ? 'Video Editor' : '剪辑 · 粗剪',  sub: isEn ? '$2.5k/mo' : '¥12k/月' },
+      { x: 334, n: isEn ? 'Ops / Data' : '运营 · 分发盘', sub: isEn ? '$1.8k/mo' : '¥9k/月' },
+    ];
+    const modules = [
+      { x: 52,  n: isEn ? 'Sourcing' : '找题拆解', c: '#7C9BF5' },
+      { x: 146, n: isEn ? 'Scripting' : '写稿审稿', c: '#A78BFA' },
+      { x: 240, n: isEn ? 'Rough Cut' : '离线粗剪', c: '#38BDF8' },
+      { x: 334, n: isEn ? '12-Plat Ops' : '12平台复盘', c: '#3DD68C' },
+    ];
     return `
-      <div class="pv-bar">
-        <div class="pv-title">${isEn ? 'Day-1 / Day-3 / Day-7 Same-Age Cohort Review' : '1 / 3 / 7 天同龄复盘与抖音时长分析'}</div>
-        <div class="pv-chips"><span class="pv-chip on">EP41 · +66% vs median</span></div>
-      </div>
-      <div class="pv-grid-2">
-        <div class="pv-card">
-          <div class="pv-card-top"><b>${isEn ? 'Day-1 Cross-Platform Cohort' : '发布 24h 全网同龄对比'}</b><span class="pv-tag good">+66.8%</span></div>
-          <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;font-size:12px">
-            <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>EP41 (${isEn ? 'Current' : '本期'})</span><b>114,060</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:92%;height:100%;background:#3E63DD;border-radius:99px"></div></div></div>
-            <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>EP40 (${isEn ? 'Previous' : '上期'})</span><b>68,400</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:55%;height:100%;background:#A1A1AA;border-radius:99px"></div></div></div>
-            <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>${isEn ? '30d Median' : '近 30 天中位数'}</span><b>61,200</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:49%;height:100%;background:#D4D4D8;border-radius:99px"></div></div></div>
+      <div class="org-compare">
+        <div class="org-pane">
+          <div class="org-pane-head">
+            <b>${isEn ? 'Before · Traditional Content Team' : '过去 · 传统 4 人内容团队'}</b>
+            <span class="org-badge bad">${isEn ? '5 people · $9k+/mo' : '5 人协同 · ¥43k+/月'}</span>
           </div>
-        </div>
-        <div class="pv-card">
-          <div class="pv-card-top"><b>${isEn ? 'Douyin Duration × Views Sweet Spot' : '抖音时长 × 播放黄金区间'}</b><span class="pv-meta">5–8 min</span></div>
-          <svg viewBox="0 0 320 110" class="chart-svg">
-            <line x1="20" y1="68" x2="305" y2="68" stroke="#D4D4D8" stroke-dasharray="4 3"/>
-            <text x="305" y="62" text-anchor="end" style="fill:#71717A;font-size:9.5px">${isEn ? 'Median 24k' : '中位数 2.4万'}</text>
-            ${[[48,84,5,'#3E63DD'],[86,74,5,'#3E63DD'],[134,58,6,'#3E63DD'],[168,32,8,'#D97706'],[195,22,9,'#D97706'],[228,44,6,'#3E63DD'],[272,78,5,'#3E63DD']].map(([x,y,r,c]) =>
-              `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}" fill-opacity=".86" stroke="#fff" stroke-width="1.5"/>`).join('')}
+          <svg viewBox="0 0 384 186" class="chart-svg">
+            ${roles.map(r => `<path d="M 192 52 C 192 86, ${r.x} 80, ${r.x} 118" fill="none" stroke="rgba(255,90,95,.34)" stroke-width="1.5" stroke-dasharray="4 4"/>`).join('')}
+            <rect x="116" y="14" width="152" height="38" rx="10" fill="#1E1E22" stroke="rgba(255,255,255,.16)"/>
+            <text x="192" y="37" text-anchor="middle" style="fill:#EDEDED;font-size:12px;font-weight:600">${isEn ? 'You (Founder / Host)' : '你（创始人 / 出镜）'}</text>
+            ${roles.map(r => `
+              <g>
+                <rect x="${r.x - 42}" y="118" width="84" height="54" rx="10" fill="#18181B" stroke="rgba(255,90,95,.28)"/>
+                <text x="${r.x}" y="141" text-anchor="middle" style="fill:#D4D4D8;font-size:10px;font-weight:600">${r.n}</text>
+                <text x="${r.x}" y="159" text-anchor="middle" style="fill:#FF8E92;font-size:10px">${r.sub}</text>
+              </g>`).join('')}
           </svg>
         </div>
+
+        <div class="org-arrow" aria-hidden="true">→</div>
+
+        <div class="org-pane after">
+          <div class="org-pane-head">
+            <b>${isEn ? 'Now · Just You + Park Studio' : '现在 · 你一个人 + Park Studio'}</b>
+            <span class="org-badge good">${isEn ? '1 person · $0 SaaS fee' : '1 人闭环 · ¥0 订阅费'}</span>
+          </div>
+          <svg viewBox="0 0 384 186" class="chart-svg">
+            <path d="M 192 48 L 192 78" fill="none" stroke="#7C9BF5" stroke-width="2" class="anim-flow"/>
+            ${modules.map(m => `<path d="M 192 114 C 192 128, ${m.x} 122, ${m.x} 142" fill="none" stroke="${m.c}" stroke-width="1.8" class="anim-flow"/>`).join('')}
+            <rect x="110" y="10" width="164" height="38" rx="10" fill="#EDEDED"/>
+            <text x="192" y="33" text-anchor="middle" style="fill:#0D0D0D;font-size:12px;font-weight:700">${isEn ? 'You (Ideas & Camera)' : '你（只管思考与出镜）'}</text>
+            <rect x="92" y="76" width="200" height="38" rx="12" fill="rgba(124,155,245,.18)" stroke="#7C9BF5" stroke-width="1.5"/>
+            <text x="192" y="99" text-anchor="middle" style="fill:#EDEDED;font-size:12px;font-weight:700">Park Studio · Local AI Core</text>
+            ${modules.map(m => `
+              <g>
+                <rect x="${m.x - 42}" y="142" width="84" height="34" rx="9" fill="#18181C" stroke="${m.c}" stroke-opacity=".45"/>
+                <text x="${m.x}" y="163" text-anchor="middle" style="fill:#EDEDED;font-size:10.5px;font-weight:600">${m.n}</text>
+              </g>`).join('')}
+          </svg>
+        </div>
+      </div>
+      <div class="org-summary-bar">
+        <div class="org-stat"><span>${isEn ? 'Headcount' : '团队人力'}</span><b>${isEn ? '4 roles → 1 person' : '4 岗位 → 1 个人'}</b></div>
+        <div class="org-stat"><span>${isEn ? 'Monthly Software Cost' : '软件与 API 成本'}</span><b style="color:var(--green)">${isEn ? '$0 (MIT + Local CLI)' : '¥0（MIT + 本机 CLI）'}</b></div>
+        <div class="org-stat"><span>${isEn ? 'Handoff Friction' : '跨人沟通损耗'}</span><b style="color:var(--accent)">0</b></div>
       </div>`;
   }
 
-  function renderStreamgraph() {
-    const series = [
-      { key: 'douyin',   label: lang === 'en' ? 'Douyin' : '抖音',     color: '#7C9BF5', vals: [18,22,20,28,26,34,39,32,36,41,38,44,42,46] },
-      { key: 'bilibili', label: 'Bilibili',                            color: '#38BDF8', vals: [11,13,12,15,17,22,24,18,21,25,22,26,25,28] },
-      { key: 'xhs',      label: lang === 'en' ? 'XHS' : '小红书',       color: '#F87171', vals: [9,10,13,12,16,19,17,15,18,20,19,22,21,23] },
-      { key: 'x',        label: 'X',                                   color: '#A78BFA', vals: [7,9,8,11,12,14,16,13,15,17,16,19,18,20] },
-      { key: 'wechat',   label: lang === 'en' ? 'WeChat' : '公众号',    color: '#3DD68C', vals: [6,7,8,8,10,11,12,10,11,13,12,14,13,15] },
-      { key: 'channels', label: lang === 'en' ? 'Channels' : '视频号',  color: '#F5A524', vals: [5,6,6,7,9,10,11,9,10,12,11,13,12,14] },
+  // ===== SELLING POINT 2: Animated 1-Daily-Topic -> 12-Platform Fan-Out =====
+  function renderFanOut12() {
+    const isEn = lang === 'en';
+    const W = 900, H = 316;
+    const sources = [
+      { y: 66,  lbl: isEn ? 'Daily AI Briefs' : 'AI / 搞钱日报', c: '#7C9BF5' },
+      { y: 158, lbl: isEn ? '3× Breakouts' : '对标爆款榜', c: '#A78BFA' },
+      { y: 250, lbl: 'Obsidian (RO)', c: '#3DD68C' },
     ];
-    const W = 880, H = 220, n = 14, splitX = W * (9.5 / (n - 1));
-    const totals = Array.from({ length: n }, (_, i) => series.reduce((s, sr) => s + sr.vals[i], 0));
-    const maxT = Math.max(...totals) * 1.12;
-    const X = i => 14 + (i / (n - 1)) * (W - 28);
-    const scaleY = v => (v / maxT) * (H - 48);
+    const cx = 372, cy = 158;
+    const rightX = 720;
+    const activeCount = enabledPlats.size;
 
-    const smoothPath = pts => {
+    const platLines = PLATFORMS_12.map((p, i) => {
+      const py = 20 + i * 25.2;
+      const on = enabledPlats.has(p.id);
+      const stroke = on ? (p.guard ? '#F5A524' : p.color) : 'rgba(255,255,255,.07)';
+      const badge = p.guard ? (isEn ? 'Guard' : '只填不点发') : (p.id === 'wechat' ? (isEn ? 'Draft' : '草稿箱') : (isEn ? 'Auto' : '自动/定时'));
+      return `
+        <path d="M ${cx + 96} ${cy} C ${cx + 205} ${cy}, ${rightX - 115} ${py}, ${rightX - 6} ${py}" fill="none" stroke="${stroke}" stroke-width="${on ? 1.8 : 1}" stroke-opacity="${on ? 0.72 : 0.25}" class="${on ? 'anim-flow-slow' : ''}"/>
+        <g opacity="${on ? 1 : 0.28}" style="cursor:pointer;transition:opacity .2s" data-ptog="${p.id}" data-tip="${isEn ? p.en : p.zh} · ${badge}">
+          <rect x="${rightX}" y="${py - 10}" width="174" height="20" rx="6" fill="${on ? '#1E1E22' : '#141416'}" stroke="${on ? stroke : 'rgba(255,255,255,.08)'}" stroke-opacity="${on ? .48 : .4}"/>
+          <circle cx="${rightX + 11}" cy="${py}" r="3.5" fill="${p.color}"/>
+          <text x="${rightX + 21}" y="${py + 3.5}" style="fill:#EDEDED;font-size:10.5px;font-weight:600">${isEn ? p.en : p.zh}</text>
+          <text x="${rightX + 166}" y="${py + 3.5}" text-anchor="end" style="fill:${p.guard ? '#F5A524' : '#76767B'};font-size:9.5px">${badge}</text>
+        </g>`;
+    }).join('');
+
+    return `
+      <svg viewBox="0 0 ${W} ${H}" class="chart-svg">
+        ${sources.map(s => `
+          <path d="M 150 ${s.y} C 218 ${s.y}, 218 ${cy}, ${cx - 98} ${cy}" fill="none" stroke="${s.c}" stroke-width="1.9" stroke-opacity=".68" class="anim-flow"/>
+          <rect x="8" y="${s.y - 19}" width="142" height="38" rx="11" fill="#151518" stroke="${s.c}" stroke-opacity=".42"/>
+          <circle cx="24" cy="${s.y}" r="4" fill="${s.c}"/>
+          <text x="36" y="${s.y + 4}" style="fill:#EDEDED;font-size:11.5px;font-weight:600">${s.lbl}</text>
+        `).join('')}
+
+        <g>
+          <rect x="${cx - 96}" y="${cy - 44}" width="192" height="88" rx="18" fill="rgba(124,155,245,.15)" stroke="#7C9BF5" stroke-width="1.6"/>
+          <text x="${cx}" y="${cy - 18}" text-anchor="middle" style="fill:#7C9BF5;font-size:10px;font-weight:700">${isEn ? '1 DAILY TOPIC → 1 MASTER PACK' : '每天只选 1 条好题 · 统一成片包'}</text>
+          <text x="${cx}" y="${cy + 5}" text-anchor="middle" style="fill:#EDEDED;font-size:13.5px;font-weight:700">${isEn ? 'EP42 · Local Studio' : 'EP42 · 口播稿 + 粗剪'}</text>
+          <text x="${cx}" y="${cy + 26}" text-anchor="middle" style="fill:#3DD68C;font-size:10.5px">${isEn ? `Fanning out to ${activeCount}/12 platforms` : `正在穿透已选 ${activeCount}/12 个平台`}</text>
+        </g>
+
+        ${platLines}
+      </svg>
+      <div class="fanout-chips">
+        ${PLATFORMS_12.map(p => `<button type="button" class="plat-toggle ${enabledPlats.has(p.id) ? 'on' : ''} ${p.guard ? 'guard' : ''}" data-ptog="${p.id}"><i></i>${isEn ? p.en : p.zh}</button>`).join('')}
+      </div>`;
+  }
+
+  // ===== SELLING POINT 3: Zero-Baseline Cumulative Follower Growth Area Chart =====
+  function renderZeroGrowthChart() {
+    const isEn = lang === 'en';
+    const W = 880, H = 240, L = 52, R = 24, T = 22, B = 32;
+    const months = isEn
+      ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec*', 'Jan*', 'Feb*']
+      : ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月*', '1月*', '2月*'];
+    const cnVals = [12, 22, 31, 44, 56, 70, 82, 94, 106, 118, 128, 139, 151, 164];
+    const glVals = [4,  7,  11, 15, 20, 25, 30, 35, 40,  44,  47,  52,  58,  65];
+    const totVals = cnVals.map((v, i) => v + glVals[i]);
+    const maxY = 240;
+    const n = months.length;
+    const X = i => L + (i / (n - 1)) * (W - L - R);
+    const Y = v => T + (1 - v / maxY) * (H - T - B);
+    const y0 = Y(0);
+    const splitX = X(10); // Nov is current
+
+    const smoothLine = arr => {
+      const pts = arr.map((v, i) => [X(i), Y(v)]);
       let d = `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
       for (let i = 0; i < pts.length - 1; i++) {
-        const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
-        const mx = ((x0 + x1) / 2).toFixed(1);
-        d += ` C ${mx} ${y0.toFixed(1)}, ${mx} ${y1.toFixed(1)}, ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+        const mx = ((pts[i][0] + pts[i + 1][0]) / 2).toFixed(1);
+        d += ` C ${mx} ${pts[i][1].toFixed(1)}, ${mx} ${pts[i + 1][1].toFixed(1)}, ${pts[i + 1][0].toFixed(1)} ${pts[i + 1][1].toFixed(1)}`;
       }
       return d;
     };
+    const areaFromZero = arr => `${smoothLine(arr)} L ${X(n - 1).toFixed(1)} ${y0.toFixed(1)} L ${X(0).toFixed(1)} ${y0.toFixed(1)} Z`;
 
-    const cumBottom = Array.from({ length: n }, (_, i) => (H - 22) / 2 + scaleY(totals[i]) / 2);
-    const paths = series.map(sr => {
-      const topPts = [];
-      const botPts = [];
-      for (let i = 0; i < n; i++) {
-        const b = cumBottom[i];
-        const t = b - scaleY(sr.vals[i]);
-        botPts.push([X(i), b]);
-        topPts.push([X(i), t]);
-        cumBottom[i] = t;
-      }
-      const d = `${smoothPath(topPts)} L ${botPts[n - 1][0].toFixed(1)} ${botPts[n - 1][1].toFixed(1)} ${smoothPath([...botPts].reverse()).replace(/^M/, 'L')} Z`;
-      const dim = activeStreamFilter && activeStreamFilter !== sr.key;
-      return `<path d="${d}" fill="${sr.color}" fill-opacity="${dim ? 0.16 : 0.88}" data-tip="${sr.label} · ${lang === 'en' ? 'Peak' : '峰值'} +${Math.max(...sr.vals) * 40}/mo" style="transition:fill-opacity .2s"/>`;
-    }).join('');
+    const showCN = activeGrowthFilter === 'all' || activeGrowthFilter === 'cn';
+    const showGL = activeGrowthFilter === 'all' || activeGrowthFilter === 'gl';
+    const topArr = activeGrowthFilter === 'cn' ? cnVals : activeGrowthFilter === 'gl' ? glVals : totVals;
 
-    const months = lang === 'en'
-      ? ['Feb', 'May', 'Aug', 'Nov', 'Feb', 'May']
-      : ['2月', '5月', '8月', '11月', '2月', '5月'];
-    const mXs = [90, 240, 390, 560, 710, 830];
-
-    return {
-      legend: series.map(sr => `<button type="button" class="legend-btn ${activeStreamFilter && activeStreamFilter !== sr.key ? 'dim' : ''}" data-sf="${sr.key}"><i class="ldot" style="background:${sr.color}"></i>${sr.label}</button>`).join(''),
-      svg: `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">
-        <defs>
-          <clipPath id="stPast"><rect x="0" y="0" width="${splitX.toFixed(1)}" height="${H}"/></clipPath>
-          <clipPath id="stFut"><rect x="${splitX.toFixed(1)}" y="0" width="${(W - splitX).toFixed(1)}" height="${H}"/></clipPath>
-        </defs>
-        <g clip-path="url(#stPast)">${paths}</g>
-        <g clip-path="url(#stFut)" opacity="0.42">${paths}</g>
-        <line x1="${splitX.toFixed(1)}" x2="${splitX.toFixed(1)}" y1="10" y2="${H - 26}" stroke="rgba(255,255,255,.32)" stroke-dasharray="4 4"/>
-        ${months.map((m, idx) => `<text x="${mXs[idx]}" y="${H - 4}" text-anchor="middle">${m}</text>`).join('')}
-      </svg>`,
-    };
-  }
-
-  function renderSankey() {
-    const isEn = lang === 'en';
-    const L = [
-      { y: 18, h: 48, lbl: isEn ? 'AI Briefs' : 'AI 日报', c: '#7C9BF5' },
-      { y: 78, h: 42, lbl: isEn ? 'Breakouts' : '对标拆解', c: '#A78BFA' },
-      { y: 132, h: 36, lbl: 'Obsidian', c: '#3DD68C' },
+    const epMarks = [
+      { i: 3,  ep: 'EP18' },
+      { i: 6,  ep: 'EP29' },
+      { i: 8,  ep: 'EP36' },
+      { i: 10, ep: 'EP41' },
     ];
-    const R = [
-      { y: 14, h: 44, lbl: isEn ? 'Douyin' : '抖音', c: '#EDEDED' },
-      { y: 66, h: 34, lbl: 'Bilibili', c: '#38BDF8' },
-      { y: 108, h: 28, lbl: isEn ? 'XHS' : '小红书', c: '#F87171' },
-      { y: 144, h: 28, lbl: 'YouTube / X', c: '#F5A524' },
-    ];
-    const flows = [
-      [0, 0, 22], [0, 1, 14], [0, 3, 12],
-      [1, 0, 16], [1, 2, 16], [1, 1, 10],
-      [2, 1, 10], [2, 2, 12], [2, 3, 14],
-    ];
-    const lOff = L.map(x => x.y), rOff = R.map(x => x.y);
-    const bands = flows.map(([li, ri, w]) => {
-      const y1 = lOff[li] + w / 2; lOff[li] += w;
-      const y2 = rOff[ri] + w / 2; rOff[ri] += w;
-      return `<path d="M 96 ${y1} C 190 ${y1}, 210 ${y2}, 304 ${y2}" fill="none" stroke="${L[li].c}" stroke-width="${w * 0.72}" stroke-opacity=".28" data-tip="${L[li].lbl} → ${R[ri].lbl}"/>`;
-    }).join('');
-    return `<svg viewBox="0 0 420 186" class="chart-svg">
-      ${bands}
-      ${L.map(n => `<rect x="84" y="${n.y}" width="10" height="${n.h}" rx="3" fill="${n.c}"/><text x="76" y="${n.y + n.h / 2 + 4}" text-anchor="end">${n.lbl}</text>`).join('')}
-      ${R.map(n => `<rect x="306" y="${n.y}" width="10" height="${n.h}" rx="3" fill="${n.c}"/><text x="324" y="${n.y + n.h / 2 + 4}">${n.lbl}</text>`).join('')}
+
+    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">
+      <defs>
+        <linearGradient id="gTot" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7C9BF5" stop-opacity=".34"/><stop offset="1" stop-color="#7C9BF5" stop-opacity=".02"/></linearGradient>
+        <linearGradient id="gCn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3DD68C" stop-opacity=".28"/><stop offset="1" stop-color="#3DD68C" stop-opacity=".02"/></linearGradient>
+        <clipPath id="grPast"><rect x="0" y="0" width="${splitX.toFixed(1)}" height="${H}"/></clipPath>
+        <clipPath id="grFut"><rect x="${splitX.toFixed(1)}" y="0" width="${(W - splitX).toFixed(1)}" height="${H}"/></clipPath>
+      </defs>
+
+      ${[0, 60, 120, 180, 240].map(v => `
+        <line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="${v === 0 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.06)'}" stroke-dasharray="${v === 0 ? '' : '3 3'}"/>
+        <text x="${L - 10}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${v === 0 ? '0' : v + 'k'}</text>
+      `).join('')}
+
+      <g clip-path="url(#grPast)">
+        ${showGL ? `<path d="${areaFromZero(topArr)}" fill="url(#gTot)"/><path d="${smoothLine(topArr)}" fill="none" stroke="#7C9BF5" stroke-width="2.4" class="anim-sweep"/>` : ''}
+        ${showCN ? `<path d="${areaFromZero(cnVals)}" fill="url(#gCn)"/><path d="${smoothLine(cnVals)}" fill="none" stroke="#3DD68C" stroke-width="${activeGrowthFilter === 'cn' ? 2.4 : 1.6}" stroke-opacity="${activeGrowthFilter === 'cn' ? 1 : .85}"/>` : ''}
+      </g>
+
+      <g clip-path="url(#grFut)" opacity="0.55">
+        <path d="${areaFromZero(topArr)}" fill="url(#gTot)"/>
+        <path d="${smoothLine(topArr)}" fill="none" stroke="#7C9BF5" stroke-width="2" stroke-dasharray="5 5"/>
+      </g>
+
+      <line x1="${splitX.toFixed(1)}" x2="${splitX.toFixed(1)}" y1="${T}" y2="${y0.toFixed(1)}" stroke="rgba(255,255,255,.28)" stroke-dasharray="4 4"/>
+      <text x="${(splitX + 8).toFixed(1)}" y="${T + 11}" style="fill:#7C9BF5;font-size:10px">${isEn ? 'Projected →' : '按当前频次推演 →'}</text>
+
+      ${epMarks.map(m => {
+        const px = X(m.i), py = Y(topArr[m.i]);
+        return `<g data-tip="${m.ep} · ${months[m.i]} · ${topArr[m.i]}k ${isEn ? 'total followers' : '累计粉丝'}">
+          <line x1="${px.toFixed(1)}" x2="${px.toFixed(1)}" y1="${(py + 6).toFixed(1)}" y2="${y0.toFixed(1)}" stroke="rgba(124,155,245,.22)" stroke-dasharray="2 3"/>
+          <circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${m.i === 10 ? 5.5 : 3.8}" fill="${m.i === 10 ? '#EDEDED' : '#7C9BF5'}" stroke="#7C9BF5" stroke-width="2"/>
+          <text x="${px.toFixed(1)}" y="${(py - 10).toFixed(1)}" text-anchor="middle" style="fill:${m.i === 10 ? '#EDEDED' : '#A8A8AD'};font-size:10px">${m.ep}</text>
+        </g>`;
+      }).join('')}
+
+      ${months.map((m, i) => (i % 2 === 0 || i === n - 1) ? `<text x="${X(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${m}</text>` : '').join('')}
     </svg>`;
   }
 
-  function renderRadar() {
-    const cx = 150, cy = 96, R = 68;
-    const cur = [0.65, 0.72, 0.68, 0.78, 0.84, 0.80, 0.92, 0.88, 0.86, 0.94, 0.90, 0.96];
-    const prv = [0.44, 0.50, 0.48, 0.54, 0.58, 0.62, 0.60, 0.65, 0.61, 0.68, 0.64, 0.70];
-    const poly = arr => arr.map((v, i) => {
-      const a = -Math.PI / 2 + (i / 12) * Math.PI * 2;
-      return `${(cx + Math.cos(a) * R * v).toFixed(1)},${(cy + Math.sin(a) * R * v).toFixed(1)}`;
-    }).join(' ');
-    const rings = [0.33, 0.66, 1].map(r => `<circle cx="${cx}" cy="${cy}" r="${(R * r).toFixed(1)}" fill="none" stroke="rgba(255,255,255,.08)"/>`).join('');
-    const labels = [1, 4, 7, 10].map((m, idx) => {
-      const a = -Math.PI / 2 + (idx / 4) * Math.PI * 2;
-      const x = cx + Math.cos(a) * (R + 14), y = cy + Math.sin(a) * (R + 14) + 3;
-      return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle">${lang === 'en' ? ['Jan','Apr','Jul','Oct'][idx] : m + '月'}</text>`;
-    }).join('');
-    return `<svg viewBox="0 0 300 192" class="chart-svg">
-      ${rings}
-      <polygon points="${poly(prv)}" fill="rgba(255,255,255,.04)" stroke="rgba(255,255,255,.35)" stroke-dasharray="3 3" stroke-width="1.3"/>
-      <polygon points="${poly(cur)}" fill="rgba(124,155,245,.20)" stroke="#7C9BF5" stroke-width="2"/>
-      ${labels}
-    </svg>`;
-  }
-
-  function renderWaterfall() {
+  // ===== SELLING POINT 4L: Breakout Multiplier × Duration Sweet Spot =====
+  function renderMultiplierScatter() {
     const isEn = lang === 'en';
-    const bars = [
-      { lbl: isEn ? 'Median' : '中位数', y: 90, h: 66, val: '68.4k', c: '#C8C8CE' },
-      { lbl: 'Hook', y: 66, h: 24, val: '+18.2k', c: '#3DD68C' },
-      { lbl: isEn ? 'Pace' : '完播', y: 46, h: 20, val: '+14.8k', c: '#3DD68C' },
-      { lbl: isEn ? '7-Plat' : '矩阵', y: 30, h: 16, val: '+12.6k', c: '#7C9BF5' },
-      { lbl: 'EP41', y: 30, h: 126, val: '114.0k', c: '#EDEDED' },
+    const W = 440, H = 224, L = 40, R = 18, T = 18, B = 28;
+    const X = min => L + ((min - 1) / 9) * (W - L - R);
+    const Y = mult => T + (1 - mult / 5) * (H - T - B);
+    const pts = [
+      { ep: 'EP36', min: 3.2, mult: 0.7, views: '18.9k' },
+      { ep: 'EP35', min: 2.5, mult: 0.9, views: '24.6k' },
+      { ep: 'EP37', min: 8.5, mult: 1.1, views: '31.2k' },
+      { ep: 'EP41', min: 7.4, mult: 1.8, views: '51.4k' },
+      { ep: 'EP40', min: 6.9, mult: 2.4, views: '68.4k' },
+      { ep: 'EP39', min: 5.9, mult: 3.4, views: '96.8k' },
+      { ep: 'EP38', min: 6.5, mult: 4.2, views: '118.2k' },
+      { ep: 'EP34', min: 5.4, mult: 3.1, views: '88.1k' },
     ];
-    return `<svg viewBox="0 0 280 184" class="chart-svg">
-      ${bars.map((b, i) => {
-        const x = 14 + i * 52;
-        return `<g data-tip="${b.lbl}: ${b.val}">
-          <rect x="${x}" y="${b.y}" width="34" height="${b.h}" rx="5" fill="${b.c}" fill-opacity=".9"/>
-          <text x="${x + 17}" y="${b.y - 6}" text-anchor="middle" style="fill:${b.c};font-size:10px">${b.val}</text>
-          <text x="${x + 17}" y="174" text-anchor="middle">${b.lbl}</text>
+    const gx1 = X(5), gx2 = X(7.2);
+    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">
+      <rect x="${gx1.toFixed(1)}" y="${T}" width="${(gx2 - gx1).toFixed(1)}" height="${H - T - B}" rx="8" fill="rgba(124,155,245,.10)" stroke="rgba(124,155,245,.25)" stroke-dasharray="3 3"/>
+      <text x="${((gx1 + gx2) / 2).toFixed(1)}" y="${T + 14}" text-anchor="middle" style="fill:#7C9BF5;font-size:10px">${isEn ? 'Golden Zone 5–7m' : '爆款黄金带 5–7m'}</text>
+      ${[1, 2, 3, 4].map(m => `<line x1="${L}" x2="${W - R}" y1="${Y(m).toFixed(1)}" y2="${Y(m).toFixed(1)}" stroke="${m === 1 ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,.06)'}" stroke-dasharray="3 3"/><text x="${L - 8}" y="${(Y(m) + 4).toFixed(1)}" text-anchor="end">${m}×</text>`).join('')}
+      ${[2, 4, 6, 8, 10].map(m => `<text x="${X(m).toFixed(1)}" y="${H - 6}" text-anchor="middle">${m}m</text>`).join('')}
+      ${pts.map(p => {
+        const hit = p.mult >= 3;
+        return `<g data-tip="${p.ep} · ${p.min}m · ${p.mult}× (${p.views})">
+          ${hit ? `<circle cx="${X(p.min).toFixed(1)}" cy="${Y(p.mult).toFixed(1)}" r="12" fill="#F5A524" fill-opacity=".16"/>` : ''}
+          <circle cx="${X(p.min).toFixed(1)}" cy="${Y(p.mult).toFixed(1)}" r="${hit ? 7 : 5}" fill="${hit ? '#F5A524' : '#7C9BF5'}" fill-opacity="${hit ? 0.95 : 0.72}" stroke="#18181A" stroke-width="1.8"/>
         </g>`;
       }).join('')}
     </svg>`;
   }
 
-  function renderBaseline() {
-    const vals = [52, 64, 58, 76, 82, 69, 91, 108, 68, 114];
-    const med = [54, 57, 58, 62, 65, 66, 69, 73, 72, 75];
-    const linePts = med.map((v, i) => `${(20 + i * 26).toFixed(1)},${(156 - v * 1.1).toFixed(1)}`).join(' ');
-    return `<svg viewBox="0 0 280 184" class="chart-svg">
-      ${vals.map((v, i) => {
-        const x = 11 + i * 26, h = v * 1.1, y = 156 - h;
-        return `<rect x="${x}" y="${y.toFixed(1)}" width="18" height="${h.toFixed(1)}" rx="4" fill="${i === 9 ? '#7C9BF5' : '#C8C8CE'}" fill-opacity="${i === 9 ? 0.95 : 0.72}" data-tip="EP${32 + i} · ${v}k"/>`;
-      }).join('')}
-      <polyline points="${linePts}" fill="none" stroke="#7C9BF5" stroke-width="2" stroke-dasharray="4 3"/>
-      <text x="16" y="174">EP32</text><text x="136" y="174">EP37</text><text x="242" y="174">EP41</text>
-    </svg>`;
+  function renderWeChatModal() {
+    if (!wxModalMode) return '';
+    const isEn = lang === 'en';
+    let title = isEn ? 'Join Park WeChat Group (¥199)' : '加 Park 微信 · ¥199 实战群';
+    let remark = isEn ? '199 Group' : '199进群';
+    let hint = isEn
+      ? 'Scan with WeChat to add Park (Singapore) and note "199 Group" (one-time admission; private 1-on-1 Q&A ¥199/case):'
+      : '用微信扫一扫添加 Park（新加坡），备注「199进群」（一次性入群；私聊 1v1 单独提问 ¥199/次）：';
+
+    if (wxModalMode === 'desktop') {
+      title = isEn ? 'Pre-order Signed Mac Desktop App (¥199)' : '预约 Mac 桌面签名版（¥199）';
+      remark = isEn ? 'MacApp199' : 'Mac桌面版199';
+      hint = isEn
+        ? 'Scan to reserve the Apple-notarized .dmg build (launches at 5 reservations, or hands-on packaging by Park):'
+        : '扫一扫添加 Park（新加坡），备注「Mac桌面版199」登记早鸟签名版（满 5 人即上线公证 .dmg，或直接帮你本地打包装好）：';
+    } else if (wxModalMode === 'custom') {
+      title = isEn ? 'Custom Builds & Enterprise AI Training' : '加 Park 微信 · 定制开发与企业 AI 培训';
+      remark = isEn ? 'Hi Park, I want to discuss Custom Dev / AI Training. Our scenario is: ' : '你好 Park，我想咨询定制开发 / 企业 AI 培训，我们的业务场景是：';
+      hint = isEn
+        ? 'Scan to connect directly with Park (Singapore) and copy the note below:'
+        : '用微信扫一扫添加 Park（新加坡），复制下方备注简述你的业务场景即可直接评估：';
+    }
+
+    return `<div class="wx-modal-bg" id="wxModalBg">
+      <div class="wx-modal" role="dialog" aria-modal="true" aria-label="${title}">
+        <div class="wx-modal-h">
+          <h3>${title}</h3>
+          <button type="button" class="wx-close" id="wxClose" aria-label="Close">✕</button>
+        </div>
+        <p style="margin:0;font-size:13.5px;color:var(--label-2);line-height:1.6">${hint}</p>
+        <div class="wx-qr-frame"><img src="${rel('assets/park-wechat-qr.jpg')}" alt="Park WeChat QR Code"></div>
+        <div class="wx-remark-box">
+          <div>${isEn ? 'Suggested Note:' : '建议备注：'}<br><b id="wxRemarkTxt">${remark}</b></div>
+          <button type="button" class="copy-btn" id="copyWxRemark">${isEn ? 'Copy' : '复制'}</button>
+        </div>
+      </div>
+    </div>`;
   }
 
-  function renderHeatmap() {
-    const cols = 42, rows = 7, cell = 15, gap = 5;
-    const W = cols * (cell + gap), H = rows * (cell + gap) + 22;
-    const tones = ['#202023', '#283152', '#3A4E8C', '#5674D1', '#7C9BF5'];
-    let rects = '';
-    for (let c = 0; c < cols; c++) {
-      for (let r = 0; r < rows; r++) {
-        const seed = (c * 17 + r * 31 + (c % 5) * 7) % 13;
-        const lv = seed < 5 ? 0 : seed < 8 ? 1 : seed < 10 ? 2 : seed < 12 ? 3 : 4;
-        const x = c * (cell + gap), y = r * (cell + gap);
-        const isToday = c === cols - 3 && r === 1;
-        rects += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="3.5" fill="${tones[lv]}" ${isToday ? 'stroke="#FF5A5F" stroke-width="1.5"' : ''} data-tip="W${c + 1} · ${lv ? lv + (lang === 'en' ? ' actions' : ' 次推进') : (lang === 'en' ? 'Rest day' : '休整日')}"/>`;
-      }
-    }
-    const ms = lang === 'en' ? ['Jan','Mar','May','Jul','Sep','Nov'] : ['1月','3月','5月','7月','9月','11月'];
-    const labels = ms.map((m, i) => `<text x="${i * (W / 6) + 8}" y="${H - 2}">${m}</text>`).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" class="chart-svg">${rects}${labels}</svg>`;
+  function renderLightbox() {
+    if (!lightbox) return '';
+    const item = CASES.find(c => c.id === lightbox.caseId);
+    if (!item) return '';
+    const shot = item.shots[lightbox.idx] || item.shots[0];
+    const isEn = lang === 'en';
+    return `<div class="wx-modal-bg" id="lbBg">
+      <div class="lb-modal" role="dialog" aria-modal="true" aria-label="${item.name[lang]}">
+        <div class="wx-modal-h">
+          <div>
+            <h3 style="margin:0;font-size:17px">${item.name[lang]} <span class="case-tag" style="margin-left:8px;vertical-align:middle">${item.tag[lang]}</span></h3>
+          </div>
+          <button type="button" class="wx-close" id="lbClose" aria-label="Close">✕</button>
+        </div>
+        <div class="lb-img-wrap">
+          <img src="${rel(shot.src)}" alt="${shot.cap[lang]}">
+        </div>
+        <div class="lb-foot">
+          <span>${shot.cap[lang]} (${lightbox.idx + 1} / ${item.shots.length})</span>
+          <div class="lb-nav">
+            <button type="button" class="btn-pill ghost" id="lbPrev">← ${isEn ? 'Prev' : '上一张'}</button>
+            <button type="button" class="btn-pill ghost" id="lbNext">${isEn ? 'Next' : '下一张'} →</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
   }
 
   function renderAll() {
     const t = I18N[lang];
-    document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+    const isEn = lang === 'en';
+    document.documentElement.lang = isEn ? 'en' : 'zh-CN';
     document.title = t.title;
     const metaDesc = document.querySelector('meta[name="description"]');
     if (metaDesc) metaDesc.content = t.desc;
 
     const feat = t.features.tabs.find(x => x.key === activeFeat) || t.features.tabs[0];
     const dep = t.deploy.tabs.find(x => x.key === activeDeploy) || t.deploy.tabs[0];
-    const stream = renderStreamgraph();
 
     document.getElementById('root').innerHTML = `
       <header class="nav">
@@ -802,9 +841,7 @@ open "dist/Park Studio.app"`,
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
               <span>${t.nav.langLabel}</span>
             </button>
-            <a class="nav-util" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">
-              ${GH_SVG}<span id="ghStars">MIT</span>
-            </a>
+            <a class="nav-util" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">${GH_SVG}<span id="ghStars">GitHub</span></a>
             <span class="nav-sep"></span>
             <a class="btn-pill solid" href="${rel('demo/')}">${t.nav.demo}</a>
           </div>
@@ -841,45 +878,44 @@ open "dist/Park Studio.app"`,
                 <div class="mac-body">
                   <aside class="mac-side">
                     <div class="ms-brand">${BRAND_SVG.replace('brand-ic', 'brand-ic" style="width:18px;height:18px')}<span>Park Studio</span></div>
-                    <div class="ms-item on"><span>${lang === 'en' ? 'Overview' : '中控大屏'}</span><span class="ms-cnt">7/7</span></div>
-                    <div class="ms-item"><span>${lang === 'en' ? 'Topics' : '选题'}</span><span class="ms-cnt">12</span></div>
-                    <div class="ms-item"><span>${lang === 'en' ? 'Cut' : '剪辑'}</span><span class="ms-cnt">EP42</span></div>
-                    <div class="ms-item"><span>${lang === 'en' ? 'Publish' : '发布'}</span><span class="ms-cnt" style="color:var(--amber)">2</span></div>
-                    <div class="ms-item"><span>${lang === 'en' ? 'Review' : '复盘'}</span><span class="ms-cnt">+66%</span></div>
-                    <div class="ms-sec">${lang === 'en' ? 'Local Daemon' : '本机守护'}</div>
+                    <div class="ms-item on"><span>${isEn ? 'Overview' : '中控大屏'}</span><span class="ms-cnt">12</span></div>
+                    <div class="ms-item"><span>${isEn ? 'Topics' : '选题'}</span><span class="ms-cnt">1/day</span></div>
+                    <div class="ms-item"><span>${isEn ? 'Cut' : '剪辑'}</span><span class="ms-cnt">EP42</span></div>
+                    <div class="ms-item"><span>${isEn ? 'Publish' : '发布'}</span><span class="ms-cnt" style="color:var(--amber)">2</span></div>
+                    <div class="ms-item"><span>${isEn ? 'Review' : '复盘'}</span><span class="ms-cnt">+66%</span></div>
+                    <div class="ms-sec">${isEn ? 'Local Engine' : '本机引擎'}</div>
                     <div class="ms-up"><span>Chrome :9333</span><span style="color:var(--green)">Live</span></div>
                     <div class="ms-up"><span>Obsidian</span><span style="color:var(--green)">RO</span></div>
-                    <div class="ms-up"><span>Gemini CLI</span><span>Ready</span></div>
+                    <div class="ms-up"><span>Local CLI</span><span>Ready</span></div>
                   </aside>
                   <div class="mac-main">
                     <div class="mm-head">
-                      <h3>${lang === 'en' ? 'Overview' : '中控总览'}</h3>
-                      <span class="mm-pill">● ${lang === 'en' ? 'Local SQLite · Zero API Fees' : '本机 SQLite · 零 API 费'}</span>
+                      <h3>${isEn ? '12-Platform Command Hub' : '12 平台内容中控'}</h3>
+                      <span class="mm-pill"><i></i>${isEn ? 'MIT Open Source · 100% Local' : 'MIT 开源 · 数据 100% 在本机'}</span>
                     </div>
                     <div class="mm-hero-card">
                       <div>
-                        <div class="mm-kpi-lbl">${lang === 'en' ? 'Total followers across 7 platforms' : '7 平台实测总粉丝'}</div>
-                        <div class="mm-kpi-val">141,420</div>
-                        <div class="mm-delta">↑ +2,840 · 30d</div>
+                        <div class="mm-kpi-lbl">${isEn ? 'Cumulative followers (12 platforms)' : '12 平台累计真实粉丝'}</div>
+                        <div class="mm-kpi-val">174,820</div>
+                        <div class="mm-delta">↑ +3,840 · 30d</div>
                         <div class="mm-mini-grid">
-                          <div><span>${lang === 'en' ? 'EP41 Day-1 views' : 'EP41 首日播放'}</span><b>114,060</b></div>
-                          <div><span>${lang === 'en' ? 'Vs. median' : '较账号中位数'}</span><b style="color:var(--green)">+66.8%</b></div>
-                          <div><span>${lang === 'en' ? 'Awaiting click' : '待你点发'}</span><b style="color:var(--amber)">2 plats</b></div>
-                          <div><span>${lang === 'en' ? 'Daily brief' : '今日 AI 日报'}</span><b>28 items</b></div>
+                          <div><span>${isEn ? 'EP41 Day-1 views' : 'EP41 首日播放'}</span><b>168,420</b></div>
+                          <div><span>${isEn ? 'Team replaced' : '替代人力'}</span><b style="color:var(--accent)">4 → 1</b></div>
+                          <div><span>${isEn ? 'Daily focus' : '每日选题'}</span><b>1 / day</b></div>
+                          <div><span>${isEn ? 'API / SaaS fee' : '强制订阅费'}</span><b style="color:var(--green)">¥0</b></div>
                         </div>
                       </div>
-                      <div class="mm-bubbles">${buildHeroBubbles()}</div>
+                      <div class="mm-bubbles">${buildHeroMiniChart()}</div>
                     </div>
                     <div class="mm-timeline">
-                      <div class="mm-tl-head"><span>${lang === 'en' ? 'EP41 · 7-Platform Publish Matrix' : 'EP41 · 7 平台发布闭环状态'}</span><span>${lang === 'en' ? '5 published · 2 awaiting human click' : '5 平台已发 · 2 平台待人工点发'}</span></div>
+                      <div class="mm-tl-head"><span>${isEn ? 'EP41 · 12 Opt-In Platforms' : 'EP41 · 12 平台按需分发矩阵'}</span><span>${isEn ? 'Pick only what you use' : '支持 12 平台 · 按需勾选不强填'}</span></div>
                       <div class="mm-tl-row">
-                        <div class="mm-plat-pill ok"><b>${lang === 'en' ? 'Douyin' : '抖音'}</b><span>38.4k</span></div>
-                        <div class="mm-plat-pill wait"><b>${lang === 'en' ? 'XHS' : '小红书'}</b><span>${lang === 'en' ? 'Filled' : '待点发'}</span></div>
+                        <div class="mm-plat-pill wait"><b>${isEn ? 'Douyin' : '抖音'}</b><span>${isEn ? 'Guard' : '只填不发'}</span></div>
+                        <div class="mm-plat-pill wait"><b>${isEn ? 'XHS' : '小红书'}</b><span>${isEn ? 'Guard' : '只填不发'}</span></div>
                         <div class="mm-plat-pill ok"><b>B站</b><span>21.6k</span></div>
-                        <div class="mm-plat-pill wait"><b>${lang === 'en' ? 'Channels' : '视频号'}</b><span>${lang === 'en' ? 'Filled' : '待点发'}</span></div>
-                        <div class="mm-plat-pill ok"><b>YouTube</b><span>9.8k</span></div>
-                        <div class="mm-plat-pill ok"><b>X</b><span>44.1k</span></div>
-                        <div class="mm-plat-pill ok"><b>${lang === 'en' ? 'WeChat' : '公众号'}</b><span>${lang === 'en' ? 'Draft' : '草稿箱'}</span></div>
+                        <div class="mm-plat-pill ok"><b>YouTube</b><span>12.8k</span></div>
+                        <div class="mm-plat-pill ok"><b>TikTok</b><span>26.8k</span></div>
+                        <div class="mm-plat-pill ok"><b>X · IG · LI</b><span>+68k</span></div>
                       </div>
                     </div>
                   </div>
@@ -887,25 +923,25 @@ open "dist/Park Studio.app"`,
               </div>
 
               <div class="float-card float-left">
-                <div class="fl-head"><span>${lang === 'en' ? 'Breakout Radar' : '对标爆款雷达'}</span><span class="fl-badge">3×+</span></div>
+                <div class="fl-head"><span>${isEn ? 'Today\'s 1 Pick' : '今日唯一主线选题'}</span><span class="fl-badge">4.6×</span></div>
                 <div class="fl-item">
-                  <b>${lang === 'en' ? 'Local Coding Agents Replace Paid SaaS Workflows' : '用本机 Coding Agent 替代所有收费工作流'}</b>
-                  <small><span>Bilibili · 94k</span><span class="fl-mult">4.6×</span></small>
+                  <b>${isEn ? '1 Daily Topic → 12 Platforms With Zero SaaS Fees' : '每天只挑 1 条好题，穿透 12 平台闭环'}</b>
+                  <small><span>Obsidian + 3× Radar</span><span class="fl-mult">${isEn ? 'Selected' : '已选定'}</span></small>
                 </div>
                 <div class="fl-item">
-                  <b>${lang === 'en' ? '1 Script → 7 Platforms With Strict Human Guardrails' : '一条口播稿跑通 7 平台发布闭环'}</b>
-                  <small><span>Douyin · 128k</span><span class="fl-mult">3.8×</span></small>
+                  <b>${isEn ? '4-Person Content Team → Just You' : '一个人干完编导、文案、剪辑、运营的活'}</b>
+                  <small><span>${isEn ? 'Local Agent' : '本机 Agent'}</span><span class="fl-mult">¥0</span></small>
                 </div>
               </div>
 
               <div class="float-card float-right">
-                <div class="fr-head"><b>EP42 · ${lang === 'en' ? 'Publish Queue' : '发布护栏'}</b><span>CDP :9333</span></div>
+                <div class="fr-head"><b>EP42 · ${isEn ? 'Safety Guardrails' : '发布安全护栏'}</b><span>CDP :9333</span></div>
                 <div class="fr-rows">
-                  <div class="fr-row"><span><i class="fr-dot wait"></i>${lang === 'en' ? 'Xiaohongshu · Draft filled' : '小红书 · 已传片填话题'}</span><span class="fr-tag">${lang === 'en' ? 'Click' : '待点发'}</span></div>
-                  <div class="fr-row"><span><i class="fr-dot wait"></i>${lang === 'en' ? 'Channels · Schedule checked' : '视频号 · 已核对定时'}</span><span class="fr-tag">${lang === 'en' ? 'Click' : '待点发'}</span></div>
-                  <div class="fr-row"><span><i class="fr-dot ok"></i>YouTube Studio · Verified</span><span class="fr-tag">19:00</span></div>
+                  <div class="fr-row"><span><i class="fr-dot wait"></i>${isEn ? 'Douyin / XHS / Bili / Channels' : '抖音 · 小红书 · B站 · 视频号'}</span><span class="fr-tag">${isEn ? 'Human Click' : '只填不点发'}</span></div>
+                  <div class="fr-row"><span><i class="fr-dot ok"></i>YouTube · X · TikTok · IG</span><span class="fr-tag">${isEn ? 'Opt-In Auto' : '定时 / 自动'}</span></div>
+                  <div class="fr-row"><span><i class="fr-dot ok"></i>Threads · LinkedIn · Meta</span><span class="fr-tag">${isEn ? 'Opt-In Auto' : '按需启用'}</span></div>
                 </div>
-                <div class="fr-foot"><span>🛡</span><span>${lang === 'en' ? 'CN platforms pause before final publish click' : '国内 4 平台严格只填不点发 · 存档提交前截图'}</span></div>
+                <div class="fr-foot"><span>🛡</span><span>${isEn ? 'Pre-submit JPEG saved · Zero cloud cookies' : '存档提交前截图 · Cookie 绝不出本机'}</span></div>
               </div>
             </div>
           </div>
@@ -938,58 +974,63 @@ open "dist/Park Studio.app"`,
           <div class="wrap sec-divider">
             <div class="sec-split">
               <div>
-                <div class="eyebrow">${t.charts.eyebrow}</div>
-                <h2>${t.charts.h2}</h2>
+                <div class="eyebrow">${t.selling.eyebrow}</div>
+                <h2>${t.selling.h2}</h2>
               </div>
               <div>
-                <p>${t.charts.lead}</p>
-                <a class="inline-link" href="${rel('docs/#privacy')}">${t.charts.link}</a>
+                <p>${t.selling.lead}</p>
+                <a class="inline-link" href="${rel('demo/')}">${t.selling.link}</a>
               </div>
             </div>
 
             <div class="bento-stack">
               <div class="bcard">
                 <div class="bcard-h">
-                  <div><h3>${t.charts.streamTitle}</h3><p>${t.charts.streamSub}</p></div>
-                  <div class="legend">${stream.legend}</div>
+                  <div><h3>${t.selling.orgTitle}</h3><p>${t.selling.orgSub}</p></div>
                 </div>
-                ${stream.svg}
+                ${renderOrgChart()}
+              </div>
+
+              <div class="bcard">
+                <div class="bcard-h">
+                  <div><h3>${t.selling.fanTitle}</h3><p>${t.selling.fanSub}</p></div>
+                  <div class="fanout-controls">
+                    <div class="seg-pills">
+                      <button type="button" class="${enabledPlats.size === 12 ? 'on' : ''}" data-preset="all12">${isEn ? 'All 12' : '全部 12 平台'}</button>
+                      <button type="button" class="${enabledPlats.size === 5 && enabledPlats.has('douyin') && !enabledPlats.has('youtube') ? 'on' : ''}" data-preset="cn5">${isEn ? 'CN 5' : '仅国内 5 家'}</button>
+                      <button type="button" class="${enabledPlats.size === 7 && enabledPlats.has('youtube') && !enabledPlats.has('douyin') ? 'on' : ''}" data-preset="gl7">${isEn ? 'Global 7' : '仅海外 7 家'}</button>
+                    </div>
+                  </div>
+                </div>
+                ${renderFanOut12()}
+              </div>
+
+              <div class="bcard">
+                <div class="bcard-h">
+                  <div><h3>${t.selling.growthTitle}</h3><p>${t.selling.growthSub}</p></div>
+                  <div class="legend">
+                    <button type="button" class="legend-btn ${activeGrowthFilter === 'all' ? 'on' : ''}" data-gf="all"><i class="ldot" style="background:#7C9BF5"></i>${isEn ? 'All 12 (175k)' : '全网 12 平台 (17.5万)'}</button>
+                    <button type="button" class="legend-btn ${activeGrowthFilter === 'cn' ? 'on' : ''}" data-gf="cn"><i class="ldot" style="background:#3DD68C"></i>${isEn ? 'CN 5 (128k)' : '国内 5 平台 (12.8万)'}</button>
+                    <button type="button" class="legend-btn ${activeGrowthFilter === 'gl' ? 'on' : ''}" data-gf="gl"><i class="ldot" style="background:#A78BFA"></i>${isEn ? 'Global 7 (47k)' : '海外 7 平台 (4.7万)'}</button>
+                  </div>
+                </div>
+                ${renderZeroGrowthChart()}
               </div>
 
               <div class="bento-2">
                 <div class="bcard">
-                  <div class="bcard-h"><div><h3>${t.charts.sankeyTitle}</h3><p>${t.charts.sankeySub}</p></div></div>
-                  ${renderSankey()}
+                  <div class="bcard-h"><div><h3>${t.selling.scatterTitle}</h3><p>${t.selling.scatterSub}</p></div></div>
+                  ${renderMultiplierScatter()}
                 </div>
                 <div class="bcard">
-                  <div class="bcard-h"><div><h3>${t.charts.radarTitle}</h3><p>${t.charts.radarSub}</p></div></div>
-                  ${renderRadar()}
-                </div>
-              </div>
-
-              <div class="bento-3">
-                <div class="bcard">
-                  <div class="bcard-h"><div><h3>${t.charts.bubbleTitle}</h3><p>${t.charts.bubbleSub}</p></div></div>
-                  ${buildHeroBubbles()}
-                  <div class="globe-legend">
-                    <span><b>${lang === 'en' ? 'Douyin' : '抖音'}</b>31%</span><span><b>Bilibili</b>17%</span>
-                    <span><b>${lang === 'en' ? 'WeChat' : '公众号'}</b>14%</span><span><b>X</b>12%</span>
-                    <span><b>${lang === 'en' ? 'XHS' : '小红书'}</b>11%</span><span><b>YouTube</b>7%</span>
+                  <div class="bcard-h"><div><h3>${t.selling.guardTitle}</h3><p>${t.selling.guardSub}</p></div></div>
+                  <div class="sec-list">
+                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot"></span><div><b>${isEn ? '100% MIT Open Source' : 'GitHub 100% MIT 开源'}</b><small>${isEn ? 'Auditable code, zero vendor lock-in' : '全部代码公开可审计，零闭源插件'}</small></div></div><span class="sec-tag">GitHub</span></div>
+                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot"></span><div><b>${isEn ? 'Obsidian Strictly Read-Only' : 'Obsidian 严格只读挂载'}</b><small>${isEn ? 'Never overwrites your Markdown notes' : '只读不写，绝不改动任何原始笔记'}</small></div></div><span class="sec-tag">RO</span></div>
+                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot amber"></span><div><b>${isEn ? 'CN 4 Platforms: Autofill Only' : '国内 4 平台严格只填不点发'}</b><small>${isEn ? 'Pauses with JPEG proof before final click' : '存档提交前截图，最后一下亲自确认'}</small></div></div><span class="sec-tag amber">Guard</span></div>
+                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot"></span><div><b>${isEn ? 'Isolated Chrome CDP :9333' : '独立 Chrome Profile 隔离'}</b><small>${isEn ? 'Never touches your everyday browser' : '一次扫码保活，绝不碰日常浏览器'}</small></div></div><span class="sec-tag">:9333</span></div>
                   </div>
                 </div>
-                <div class="bcard">
-                  <div class="bcard-h"><div><h3>${t.charts.waterfallTitle}</h3><p>${t.charts.waterfallSub}</p></div><div class="bcard-stat">+66.8%</div></div>
-                  ${renderWaterfall()}
-                </div>
-                <div class="bcard">
-                  <div class="bcard-h"><div><h3>${t.charts.baselineTitle}</h3><p>${t.charts.baselineSub}</p></div></div>
-                  ${renderBaseline()}
-                </div>
-              </div>
-
-              <div class="bcard">
-                <div class="bcard-h"><div><h3>${t.charts.heatTitle}</h3><p>${t.charts.heatSub}</p></div></div>
-                ${renderHeatmap()}
               </div>
             </div>
           </div>
@@ -1017,21 +1058,19 @@ open "dist/Park Studio.app"`,
                   <div>
                     <div class="eyebrow">${t.ai.leftEyebrow}</div>
                     <h3>${t.ai.leftH3}</h3>
-                    <ul class="ai-list">
-                      ${t.ai.leftList.map(li => `<li><span class="ai-check">✓</span><span>${li}</span></li>`).join('')}
-                    </ul>
+                    <ul class="ai-list">${t.ai.leftList.map(li => `<li><span class="ai-check">✓</span><span>${li}</span></li>`).join('')}</ul>
                     <a class="inline-link" href="${rel('docs/#topic')}">${t.ai.leftLink}</a>
                   </div>
                   <div class="audit-mock">
-                    <div style="display:flex;justify-content:space-between;color:var(--label-3);font-family:var(--mono);font-size:11px"><span>3-AXIS AUDIT</span><span style="color:var(--green)">Gemini CLI</span></div>
+                    <div style="display:flex;justify-content:space-between;color:var(--label-3);font-family:var(--mono);font-size:11px"><span>3-AXIS AUDIT</span><span style="color:var(--green)">Local CLI</span></div>
                     <div class="audit-score-row">
-                      <div class="audit-score"><span>${lang === 'en' ? 'Value' : '价值'}</span><b>9.2</b></div>
-                      <div class="audit-score"><span>${lang === 'en' ? 'Resonance' : '共鸣'}</span><b>8.8</b></div>
-                      <div class="audit-score"><span>${lang === 'en' ? 'Pacing' : '节奏'}</span><b>8.6</b></div>
+                      <div class="audit-score"><span>${isEn ? 'Value' : '价值'}</span><b>9.4</b></div>
+                      <div class="audit-score"><span>${isEn ? 'Resonance' : '共鸣'}</span><b>9.1</b></div>
+                      <div class="audit-score"><span>${isEn ? 'Pacing' : '节奏'}</span><b>8.8</b></div>
                     </div>
                     <div class="audit-diff">
-                      <b>${lang === 'en' ? 'Suggested Hook Rewrite:' : '最小改法建议：'}</b><br>
-                      ${lang === 'en' ? 'Lead with the 60-second autofill clip instead of background context.' : '删掉前 18 秒背景铺垫，第一句直接抛「60 秒自动填完 7 个平台」结果画面。'}
+                      <b>${isEn ? 'Suggested Hook Rewrite:' : '最小改法建议：'}</b><br>
+                      ${isEn ? 'Lead with the 60-second autofill clip instead of background context.' : '删掉前 18 秒背景铺垫，第一句直接抛「1 条好题穿透 12 个平台」真实演示画面。'}
                     </div>
                   </div>
                 </div>
@@ -1046,11 +1085,9 @@ open "dist/Park Studio.app"`,
                 </div>
                 <div style="display:flex;flex-direction:column;gap:12px">
                   <div class="chat-bubble">${t.ai.rightBubble}</div>
-                  <div class="dir-box"><b>2026-11-24_EP42/final/上传/</b><br>├── 视频（5平台通用）.mp4 <em>faststart</em><br>├── 竖封面（抖音、视频号）.png<br>├── 横封面（抖音、小红书）.png<br>├── 16比9封面（B站、YouTube）.png<br>└── 文案.txt · publish.json <em>✓ Ready</em></div>
+                  <div class="dir-box"><b>2026-11-25_EP42/final/上传/</b><br>├── 视频（通用主片）.mp4 <em>faststart</em><br>├── 竖封面（9:16）.png<br>├── 横封面（3:4 / 4:3）.png<br>├── 16比9封面（B站、YouTube）.png<br>└── 文案.txt · publish.json <em>✓ Ready</em></div>
                 </div>
-                <div class="ai-foot">
-                  <a class="inline-link" href="${rel('docs/#directory')}">${t.ai.rightLink}</a>
-                </div>
+                <div class="ai-foot"><a class="inline-link" href="${rel('docs/#directory')}">${t.ai.rightLink}</a></div>
               </div>
             </div>
           </div>
@@ -1071,10 +1108,7 @@ open "dist/Park Studio.app"`,
                 </div>
                 <a class="inline-link" href="${rel('docs/#quickstart')}">${t.deploy.docsLink}</a>
               </div>
-              <div class="deploy-note">
-                <span class="rec-tag">${dep.rec}</span>
-                <span>${dep.note}</span>
-              </div>
+              <div class="deploy-note"><span class="rec-tag">${dep.rec}</span><span>${dep.note}</span></div>
               <div class="term">
                 <div class="term-h">
                   <div class="term-dots"><i></i><i></i><i></i></div>
@@ -1084,11 +1118,14 @@ open "dist/Park Studio.app"`,
               </div>
               <div class="deploy-foot">
                 <span>${dep.foot}</span>
-                <a class="btn-pill solid" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">${t.deploy.ghCta} →</a>
+                <a class="btn-pill solid" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">${GH_SVG}<span>${t.deploy.ghCta}</span></a>
               </div>
-              <div class="deploy-bridge">
-                <span>${t.deploy.bridgeText}</span>
-                <a class="inline-link" style="color:var(--accent)" href="#community">${t.deploy.bridgeLink}</a>
+              <div class="desktop-upsell">
+                <div style="max-width:640px">
+                  <b>${t.deploy.desktopTitle}</b>
+                  <span>${t.deploy.desktopDesc}</span>
+                </div>
+                <button type="button" class="btn-pill indigo" data-open-wx="desktop">${t.deploy.desktopBtn}</button>
               </div>
             </div>
           </div>
@@ -1112,10 +1149,8 @@ open "dist/Park Studio.app"`,
                   <ul class="biz-list">${t.community.c1List.map(li => `<li><span class="ai-check">✓</span><span>${li}</span></li>`).join('')}</ul>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:14px">
-                  <div class="biz-note">${t.community.c1Note}</div>
-                  <div class="biz-actions">
-                    <button type="button" class="btn-pill ghost lg" style="width:100%" data-open-wx="group">${t.community.c1Cta}</button>
-                  </div>
+                  <div class="biz-rule">${t.community.c1Rule}</div>
+                  <button type="button" class="btn-pill ghost lg" style="width:100%" data-open-wx="group">${t.community.c1Cta}</button>
                 </div>
               </div>
 
@@ -1129,24 +1164,47 @@ open "dist/Park Studio.app"`,
                 </div>
                 <div style="display:flex;flex-direction:column;gap:14px">
                   <div class="biz-note">${t.community.c2Note}</div>
-                  <div class="biz-actions">
-                    <button type="button" class="btn-pill solid lg" style="width:100%" data-open-wx="custom">${t.community.c2Cta}</button>
-                  </div>
+                  <button type="button" class="btn-pill solid lg" style="width:100%" data-open-wx="custom">${t.community.c2Cta}</button>
                 </div>
               </div>
             </div>
 
+            <div id="cases" class="cases-head">
+              <div>
+                <h3>${t.community.casesTitle}</h3>
+                <p>${t.community.casesSub}</p>
+              </div>
+              <span class="qr-tag">${isEn ? '6 Shipped Systems · Click to zoom' : '6 个真实交付项目 · 点击缩略图放大'}</span>
+            </div>
+
+            <div class="cases-grid">
+              ${CASES.map(cs => `
+                <div class="case-card">
+                  <div class="case-top">
+                    <h4>${cs.name[lang]}</h4>
+                    <span class="case-tag">${cs.tag[lang]}</span>
+                  </div>
+                  <p class="case-desc">${cs.desc[lang]}</p>
+                  <div class="case-thumbs">
+                    ${cs.shots.map((sh, idx) => `
+                      <button type="button" class="case-thumb" data-lb="${cs.id}:${idx}" title="${sh.cap[lang]}">
+                        <img src="${rel(sh.src)}" alt="${sh.cap[lang]}" loading="lazy">
+                      </button>`).join('')}
+                  </div>
+                </div>`).join('')}
+            </div>
+
             <div class="qr-strip">
-              <div class="qr-thumb-box" data-open-wx="group" title="${lang === 'en' ? 'Click to enlarge QR' : '点击放大二维码'}">
+              <div class="qr-thumb-box" data-open-wx="group" title="${isEn ? 'Click to enlarge QR' : '点击放大二维码'}">
                 <img src="${rel('assets/park-wechat-qr.jpg')}" alt="Park WeChat QR Code">
               </div>
               <div>
                 <h4>${t.community.qrTitle}</h4>
                 <p>${t.community.qrDesc}</p>
                 <div class="qr-tags">
-                  <span class="qr-tag">${lang === 'en' ? 'Note: 199 Group' : '入群备注：199进群'}</span>
-                  <span class="qr-tag">${lang === 'en' ? 'Note: Custom (¥10,000+)' : '定制备注：定制（¥10,000 起）'}</span>
-                  <span class="qr-tag">Park · ${lang === 'en' ? 'Singapore' : '新加坡'}</span>
+                  <span class="qr-tag">${isEn ? 'Note: 199 Group' : '实战群备注：199进群'}</span>
+                  <span class="qr-tag">${isEn ? 'Note: MacApp199' : '桌面版：Mac桌面版199'}</span>
+                  <span class="qr-tag">${isEn ? 'Note: Custom' : '定制与培训：定制'}</span>
                 </div>
               </div>
               <button type="button" class="btn-pill indigo" data-open-wx="group">${t.community.qrBtn}</button>
@@ -1158,23 +1216,14 @@ open "dist/Park Studio.app"`,
       <footer class="foot">
         <div class="wrap">
           <div class="foot-grid">
-            <div>
-              <a class="brand" href="#top">${BRAND_SVG}<span>Park Studio</span></a>
-              <p class="foot-desc">${t.foot.desc}</p>
-            </div>
-            ${t.foot.cols.map(col => `
-              <div>
-                <h4>${col.h}</h4>
-                <ul>${col.links.map(([lbl, href]) => `<li><a href="${rel(href)}" ${href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''}>${lbl}</a></li>`).join('')}</ul>
-              </div>`).join('')}
+            <div><a class="brand" href="#top">${BRAND_SVG}<span>Park Studio</span></a><p class="foot-desc">${t.foot.desc}</p></div>
+            ${t.foot.cols.map(col => `<div><h4>${col.h}</h4><ul>${col.links.map(([lbl, href]) => `<li><a href="${rel(href)}" ${href.startsWith('http') ? 'target="_blank" rel="noopener noreferrer"' : ''}>${lbl}</a></li>`).join('')}</ul></div>`).join('')}
           </div>
-          <div class="colophon">
-            <span>${t.foot.colophon}</span>
-            <span>${t.foot.license}</span>
-          </div>
+          <div class="colophon"><span>${t.foot.colophon}</span><span>${t.foot.license}</span></div>
         </div>
       </footer>
       ${renderWeChatModal()}
+      ${renderLightbox()}
     `;
 
     document.getElementById('deployCode').textContent = dep.code;
@@ -1185,23 +1234,28 @@ open "dist/Park Studio.app"`,
       try { localStorage.setItem('ps:site:lang', lang); } catch (e) {}
       renderAll();
     };
-    document.querySelectorAll('[data-feat]').forEach(btn => {
-      btn.onclick = () => { activeFeat = btn.dataset.feat; renderAll(); };
-    });
-    document.querySelectorAll('[data-dep]').forEach(btn => {
-      btn.onclick = () => { activeDeploy = btn.dataset.dep; renderAll(); };
-    });
-    document.querySelectorAll('[data-sf]').forEach(btn => {
-      btn.onclick = () => {
-        activeStreamFilter = activeStreamFilter === btn.dataset.sf ? null : btn.dataset.sf;
+    document.querySelectorAll('[data-feat]').forEach(b => b.onclick = () => { activeFeat = b.dataset.feat; renderAll(); });
+    document.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => { activeDeploy = b.dataset.dep; renderAll(); });
+    document.querySelectorAll('[data-tf]').forEach(b => b.onclick = () => { activeTopicFilter = b.dataset.tf; renderAll(); });
+    document.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { activeCutMode = b.dataset.cm; renderAll(); });
+    document.querySelectorAll('[data-gf]').forEach(b => b.onclick = () => { activeGrowthFilter = b.dataset.gf; renderAll(); });
+
+    document.querySelectorAll('[data-ptog]').forEach(el => {
+      el.onclick = () => {
+        const pid = el.dataset.ptog;
+        if (enabledPlats.has(pid) && enabledPlats.size > 1) enabledPlats.delete(pid);
+        else enabledPlats.add(pid);
         renderAll();
       };
     });
-    document.querySelectorAll('[data-tf]').forEach(btn => {
-      btn.onclick = () => { activeTopicFilter = btn.dataset.tf; renderAll(); };
-    });
-    document.querySelectorAll('[data-cm]').forEach(btn => {
-      btn.onclick = () => { activeCutMode = btn.dataset.cm; renderAll(); };
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.onclick = () => {
+        const k = btn.dataset.preset;
+        if (k === 'all12') enabledPlats = new Set(PLATFORMS_12.map(p => p.id));
+        if (k === 'cn5') enabledPlats = new Set(PLATFORMS_12.filter(p => p.group === 'cn').map(p => p.id));
+        if (k === 'gl7') enabledPlats = new Set(PLATFORMS_12.filter(p => p.group === 'gl').map(p => p.id));
+        renderAll();
+      };
     });
 
     const copyBtn = document.getElementById('copyDeployBtn');
@@ -1223,10 +1277,27 @@ open "dist/Park Studio.app"`,
       cBtn.onclick = async () => {
         const txt = document.getElementById('wxRemarkTxt').textContent;
         try { await navigator.clipboard.writeText(txt); } catch (e) {}
-        cBtn.textContent = lang === 'en' ? 'Copied ✓' : '已复制 ✓';
+        cBtn.textContent = isEn ? 'Copied ✓' : '已复制 ✓';
         cBtn.classList.add('ok');
-        setTimeout(() => { cBtn.textContent = lang === 'en' ? 'Copy' : '复制'; cBtn.classList.remove('ok'); }, 1600);
+        setTimeout(() => { cBtn.textContent = isEn ? 'Copy' : '复制'; cBtn.classList.remove('ok'); }, 1600);
       };
+    }
+
+    document.querySelectorAll('[data-lb]').forEach(btn => {
+      btn.onclick = () => {
+        const [caseId, idx] = btn.dataset.lb.split(':');
+        lightbox = { caseId, idx: Number(idx) || 0 };
+        renderAll();
+      };
+    });
+    const lbBg = document.getElementById('lbBg');
+    if (lbBg && lightbox) {
+      const item = CASES.find(c => c.id === lightbox.caseId);
+      const total = item ? item.shots.length : 1;
+      lbBg.onclick = e => { if (e.target === lbBg) { lightbox = null; renderAll(); } };
+      document.getElementById('lbClose').onclick = () => { lightbox = null; renderAll(); };
+      document.getElementById('lbPrev').onclick = () => { lightbox.idx = (lightbox.idx - 1 + total) % total; renderAll(); };
+      document.getElementById('lbNext').onclick = () => { lightbox.idx = (lightbox.idx + 1) % total; renderAll(); };
     }
 
     updateStarsText();
@@ -1236,7 +1307,7 @@ open "dist/Park Studio.app"`,
   let cachedStars = null;
   function updateStarsText() {
     const el = document.getElementById('ghStars');
-    if (el && cachedStars != null) el.textContent = String(cachedStars);
+    if (el && cachedStars != null) el.textContent = `★ ${cachedStars}`;
   }
   fetch(`https://api.github.com/repos/${GITHUB_REPO}`)
     .then(r => (r.ok ? r.json() : null))
@@ -1260,10 +1331,16 @@ open "dist/Park Studio.app"`,
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && wxModalMode) { wxModalMode = null; renderAll(); }
+    if (e.key === 'Escape' && (wxModalMode || lightbox)) { wxModalMode = null; lightbox = null; renderAll(); }
+    if (lightbox && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      const item = CASES.find(c => c.id === lightbox.caseId);
+      if (!item) return;
+      const n = item.shots.length;
+      lightbox.idx = e.key === 'ArrowRight' ? (lightbox.idx + 1) % n : (lightbox.idx - 1 + n) % n;
+      renderAll();
+    }
   });
 
-  // Hover tooltips for live SVG charts
   const tip = document.createElement('div');
   tip.className = 'site-tip';
   document.body.appendChild(tip);
