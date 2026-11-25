@@ -392,7 +392,7 @@ open "dist/Park Studio.app"`,
       foot: {
         desc: '100% MIT open-source local content pipeline (12 opt-in platforms). Zero forced API fees; your data stays on disk.',
         cols: [
-          { h: 'Open Source', links: [['GitHub Repository', GITHUB_URL], ['Live Demo (12 Plats)', 'demo/'], ['Core Value Props', '#charts'], ['Self-Host', '#deploy']] },
+          { h: 'Open Source', links: [['GitHub Repository', GITHUB_URL], ['Live Demo (12 Plats)', 'demo/?lang=en'], ['Core Value Props', '#charts'], ['Self-Host', '#deploy']] },
           { h: 'Community & Custom', links: [['¥199 WeChat Group', '#community'], ['Signed Mac App ¥199', '#deploy'], ['Custom & AI Training', '#community'], ['Shipped Portfolio', '#cases']] },
           { h: 'Docs & Safety', links: [['Quick Start', 'docs/#quickstart'], ['12-Platform Guardrails', 'docs/#publish'], ['Privacy Pledge', 'docs/#privacy'], ['FAQ', 'docs/#faq']] },
         ],
@@ -460,35 +460,37 @@ open "dist/Park Studio.app"`,
 
   function renderFeaturePreview(key) {
     const isEn = lang === 'en';
+    const vDir = isEn ? 'assets/views/en' : 'assets/views';
+    const dBase = isEn ? 'demo/?lang=en' : 'demo/?lang=zh';
     const VIEW_META = {
       hub: {
-        img: 'assets/views/hub.png',
+        img: `${vDir}/hub.png`,
         route: 'Park Studio · #dashboard',
-        demoHref: 'demo/#dashboard',
+        demoHref: `${dBase}#dashboard`,
         pills: isEn ? ['In-Progress Strip', '12-Platform Totals', 'Plain-English Insights'] : ['顶部正在做推进条', '12 平台总粉与堆叠图', 'AI 一句话人话结论'],
       },
       topic: {
-        img: 'assets/views/topic.png',
+        img: `${vDir}/topic.png`,
         route: 'Park Studio · #source',
-        demoHref: 'demo/#source',
+        demoHref: `${dBase}#source`,
         pills: isEn ? ['AI / Money / Dev Briefs', '3× Breakout Radar', 'Curated Materials'] : ['AI / 搞钱 / 开发日报一屏看', '对标爆款库', '内置精选素材库'],
       },
       cut: {
-        img: 'assets/views/cut.png',
+        img: `${vDir}/cut.png`,
         route: 'Park Studio · #cut',
-        demoHref: 'demo/#cut',
+        demoHref: `${dBase}#cut`,
         pills: isEn ? ['One-Click Rough Cut', 'Spec Table Motion', 'Independent Cut Agent'] : ['口播逐字稿标 Hook', '动效镜头表 Spec Table', '独立剪辑 Agent 渲染'],
       },
       publish: {
-        img: 'assets/views/publish.png',
+        img: `${vDir}/publish.png`,
         route: 'Park Studio · #pub-confirm',
-        demoHref: 'demo/#pub-confirm',
+        demoHref: `${dBase}#pub-confirm`,
         pills: isEn ? ['12 Opt-In Platforms', 'CN 4 Guardrails', 'Isolated Chrome :9333'] : ['12 平台按需填表', '国内 4 家只填不点发', '自动存档提交前截图'],
       },
       review: {
-        img: 'assets/views/review.png',
+        img: `${vDir}/review.png`,
         route: 'Park Studio · #review',
-        demoHref: 'demo/#review',
+        demoHref: `${dBase}#review`,
         pills: isEn ? ['3× Duration Scatter', 'Day-1/3/7 Cohorts', '100% Real Local SQLite'] : ['时长 × 播放 3× 散点图', '1/3/7 天同龄复盘', '100% 实测数据零造假'],
       },
     };
@@ -500,7 +502,7 @@ open "dist/Park Studio.app"`,
         <div class="vw-pills"><span class="vw-pill accent">${isEn ? 'Live App View' : '真实工作台界面'}</span></div>
       </div>
       <div class="vw-stage">
-        <img src="${rel(m.img)}?v=20261125b" alt="${m.route}">
+        <img src="${rel(m.img)}?v=20261125d" alt="${m.route}">
         <div class="vw-fade">
           <div class="vw-highlights">
             ${m.pills.map(p => `<span class="vw-hi">${p}</span>`).join('')}
@@ -832,7 +834,7 @@ open "dist/Park Studio.app"`,
             </button>
             <a class="nav-util" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">${GH_SVG}<span id="ghStars">GitHub</span></a>
             <span class="nav-sep"></span>
-            <a class="btn-pill solid" href="${rel('demo/')}">${t.nav.demo}</a>
+            <a class="btn-pill solid" href="${rel(isEn ? 'demo/?lang=en' : 'demo/?lang=zh')}">${t.nav.demo}</a>
           </div>
         </div>
       </header>
@@ -847,7 +849,7 @@ open "dist/Park Studio.app"`,
             <div class="hero-subrow">
               <p class="hero-lead">${t.hero.lead}</p>
               <div class="hero-ctas">
-                <a class="btn-pill solid lg" href="${rel('demo/')}">${t.hero.ctaDemo} →</a>
+                <a class="btn-pill solid lg" href="${rel(isEn ? 'demo/?lang=en' : 'demo/?lang=zh')}">${t.hero.ctaDemo} →</a>
                 <a class="btn-pill ghost lg" href="#deploy">${t.hero.ctaDeploy}</a>
               </div>
             </div>
@@ -968,7 +970,7 @@ open "dist/Park Studio.app"`,
               </div>
               <div>
                 <p>${t.selling.lead}</p>
-                <a class="inline-link" href="${rel('demo/')}">${t.selling.link}</a>
+                <a class="inline-link" href="${rel(isEn ? 'demo/?lang=en' : 'demo/?lang=zh')}">${t.selling.link}</a>
               </div>
             </div>
 

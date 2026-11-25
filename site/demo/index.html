@@ -4,13 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Park Studio · 在线演示</title>
-  <meta name="description" content="Park Studio 免注册在线演示：直接体验中控大屏、选题、剪辑镜头表、7 平台安全填表发布与全网复盘。">
+  <meta name="description" content="Park Studio 免注册在线演示：直接体验中控大屏、选题、剪辑镜头表、12 平台按需安全填表发布与全网复盘。">
   <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
   <script>
     try {
       var t = localStorage.getItem('ps:theme');
       if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
       else document.documentElement.dataset.theme = 'dark';
+      var sp = new URLSearchParams(location.search);
+      var ql = sp.get('lang');
+      if (ql === 'en' || ql === 'zh') {
+        var prev = localStorage.getItem('ps:lang');
+        localStorage.setItem('ps:lang', ql);
+        if (prev !== ql) localStorage.removeItem('park-studio:state:v3');
+      }
+      var curLang = localStorage.getItem('ps:lang') || 'zh';
+      window.__PS_DEMO_LANG = curLang;
+      document.documentElement.lang = curLang === 'en' ? 'en' : 'zh-CN';
+      if (curLang === 'en') document.title = 'Park Studio · Live Interactive Demo';
     } catch (e) {
       document.documentElement.dataset.theme = 'dark';
     }
@@ -48,32 +59,50 @@
   </style>
 </head>
 <body>
-  <div class="demo-banner" role="region" aria-label="Demo Notice">
+  <div class="demo-banner" id="demoBanner" role="region" aria-label="Demo Notice">
     <div class="demo-banner-l">
       <span class="demo-dot"></span>
-      <span>这是一个在线演示 — 支持 12 平台按需勾选，你可以随意切换深浅色与体验 5 大工作台，所有改动仅保存在当前浏览器。</span>
-      <button type="button" onclick="window.PS && PS.resetDemo()">重置演示数据</button>
+      <span id="demoNoticeText">这是一个在线演示 — 支持 12 平台按需勾选，你可以随意切换深浅色与体验 5 大工作台，所有改动仅保存在当前浏览器。</span>
+      <button type="button" id="demoResetBtn" onclick="window.PS && PS.resetDemo()">重置演示数据</button>
     </div>
     <div class="demo-banner-r">
-      <a href="../">← 返回官网</a>
-      <a href="../docs/#quickstart">文档</a>
-      <a href="../#community" style="color:var(--accent)">¥199 实战群 &amp; 定制</a>
-      <a href="../#deploy">部署你自己的 →</a>
+      <a id="demoBackLink" href="../">← 返回官网</a>
+      <a id="demoDocsLink" href="../docs/#quickstart">文档</a>
+      <a id="demoBizLink" href="../#community" style="color:var(--accent)">¥199 实战群 &amp; 定制</a>
+      <a id="demoDeployLink" href="../#deploy">部署你自己的 →</a>
     </div>
   </div>
   <div id="app"></div>
   <div id="tip" role="tooltip"></div>
   <div id="toasts" aria-live="polite"></div>
 
-  <script src="demo-shim.js?v=20261125"></script>
-  <script src="static/js/icons.js?v=20261125"></script>
-  <script src="static/js/data.js?v=20261125"></script>
-  <script src="static/js/charts.js?v=20261125"></script>
-  <script src="static/js/core.js?v=20261125"></script>
-  <script src="static/js/pages-home.js?v=20261125"></script>
-  <script src="static/js/pages-flow.js?v=20261125"></script>
-  <script src="static/js/pages-ops.js?v=20261125"></script>
-  <script src="static/js/pages-more.js?v=20261125"></script>
-  <script>PS.boot();</script>
+  <script>
+    if (window.__PS_DEMO_LANG === 'en') {
+      document.getElementById('demoNoticeText').textContent = 'Interactive Live Demo — 12 opt-in platforms, light/dark themes, and all 5 workbenches. All edits stay in your browser.';
+      document.getElementById('demoResetBtn').textContent = 'Reset Demo Data';
+      document.getElementById('demoBackLink').textContent = '← Back to Site';
+      document.getElementById('demoBackLink').href = '../en/';
+      document.getElementById('demoDocsLink').textContent = 'Docs';
+      document.getElementById('demoBizLink').textContent = 'Community & Custom';
+      document.getElementById('demoBizLink').href = '../en/#community';
+      document.getElementById('demoDeployLink').textContent = 'Deploy Yours →';
+      document.getElementById('demoDeployLink').href = '../en/#deploy';
+    }
+  </script>
+
+  <script src="demo-shim.js?v=20261125d"></script>
+  <script src="static/js/icons.js?v=20261125d"></script>
+  <script src="static/js/data.js?v=20261125d"></script>
+  <script src="static/js/i18n.js?v=20261125d"></script>
+  <script src="static/js/charts.js?v=20261125d"></script>
+  <script src="static/js/core.js?v=20261125d"></script>
+  <script src="static/js/pages-home.js?v=20261125d"></script>
+  <script src="static/js/pages-flow.js?v=20261125d"></script>
+  <script src="static/js/pages-ops.js?v=20261125d"></script>
+  <script src="static/js/pages-more.js?v=20261125d"></script>
+  <script>
+    if (window.PS && PS.initDemoLocale) PS.initDemoLocale();
+    PS.boot();
+  </script>
 </body>
 </html>

@@ -125,23 +125,24 @@
     const X = s => L + (Math.min(s, maxSec) / maxSec) * pw;
     const Y = v => T + ph - (Math.min(v, maxV) / maxV) * ph;
 
+    const isEn = PS.lang === 'en';
     let svg = `<svg viewBox="0 0 ${W} ${H}">`;
     for (let i = 0; i <= 4; i++) {
       const v = Math.round((maxV / 4) * i);
       const y = Y(v).toFixed(1);
       svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--line-soft)" stroke-dasharray="${v ? '3 3' : ''}"/>`;
-      const lbl = v === 0 ? '0' : (v >= 10000 ? `${(v / 10000).toFixed(v % 10000 === 0 ? 0 : 1)}万` : PS.fmt(v));
+      const lbl = v === 0 ? '0' : (isEn ? PS.kfmt(v) : (v >= 10000 ? `${(v / 10000).toFixed(v % 10000 === 0 ? 0 : 1)}万` : PS.fmt(v)));
       svg += `<text x="${L - 8}" y="${+y + 4}" text-anchor="end">${lbl}</text>`;
     }
     for (let i = 1; i <= 5; i++) {
       const s = Math.round((maxSec / 5) * i);
       const x = X(s).toFixed(1);
-      svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${(s / 60).toFixed(s % 60 === 0 ? 0 : 1)}分钟</text>`;
+      svg += `<text x="${x}" y="${H - 8}" text-anchor="middle">${(s / 60).toFixed(s % 60 === 0 ? 0 : 1)}${isEn ? 'm' : '分钟'}</text>`;
     }
     if (med > 0) {
       const my = Y(med).toFixed(1);
       svg += `<line x1="${L}" x2="${W - R}" y1="${my}" y2="${my}" stroke="var(--ink-3)" stroke-dasharray="5 4" stroke-opacity="0.55"/>`;
-      svg += `<text x="${W - R - 4}" y="${+my - 5}" text-anchor="end" style="fill:var(--ink-3)">账号中位数 ${PS.kfmt(med)}</text>`;
+      svg += `<text x="${W - R - 4}" y="${+my - 5}" text-anchor="end" style="fill:var(--ink-3)">${isEn ? 'Account Median ' : '账号中位数 '}${PS.kfmt(med)}</text>`;
     }
 
     for (const p of pts) {
