@@ -34,35 +34,36 @@
     },
     {
       id: 'getfit',
+      portrait: true,
       name: { zh: '轻练', en: 'Get-Fit (Coach & Member CRM)' },
-      tag: { zh: '会员管理系统', en: 'Member CRM' },
-      desc: { zh: '面向健身私教的 30 天训练与饮食计划、会员跟进与续费管理全套系统。', en: '30-day workout & nutrition planning, client review, and membership management for personal trainers.' },
+      tag: { zh: '小程序 · 会员管理', en: 'Mobile Member CRM' },
+      desc: { zh: '面向健身私教的 30 天训练与饮食打卡、会员档案跟进与续费管理小程序。', en: '30-day mobile workout & nutrition tracking, client review, and membership CRM for trainers.' },
       shots: [
-        { src: 'assets/cases/getfit-1.png', cap: { zh: '轻练 · 产品总览与小程序界面', en: 'Product overview' } },
-        { src: 'assets/cases/getfit-2.png', cap: { zh: '轻练 · 教练端学员进度复盘', en: 'Coach client review' } },
-        { src: 'assets/cases/getfit-3.png', cap: { zh: '轻练 · 教练端训练计划编辑', en: 'Coach plan editor' } },
+        { src: 'assets/cases/getfit-1.png', cap: { zh: '轻练 · 学员端今日训练与动作要领', en: 'Client daily workout & posture cues' } },
+        { src: 'assets/cases/getfit-2.png', cap: { zh: '轻练 · 今日饮食打卡与热量记录', en: 'Daily meals & calorie tracking' } },
+        { src: 'assets/cases/getfit-3.png', cap: { zh: '轻练 · 教练端学员档案审核与建计划', en: 'Coach client profile review' } },
       ],
     },
     {
       id: 'tianji',
+      twoCols: true,
       name: { zh: '天机', en: 'Tianji (AI Metaphysics App)' },
       tag: { zh: '垂类 AI 应用', en: 'Vertical AI App' },
-      desc: { zh: '传统命理排盘引擎结合 AI 深度结构化解读，覆盖桌面端与移动端 PWA。', en: 'Traditional charting engine paired with structured AI interpretation across desktop & mobile.' },
+      desc: { zh: 'Park 独立打造的八字排盘与 AI 人生判词解读应用，极简纸感排版与结构化长文输出。', en: 'Custom BaZi charting and narrative AI reading app with warm editorial typography.' },
       shots: [
-        { src: 'assets/cases/tianji-1.png', cap: { zh: '天机 · 桌面端盘面与可信度分析', en: 'Desktop charting & analysis' } },
-        { src: 'assets/cases/tianji-2.png', cap: { zh: '天机 · 移动端流年与大运视图', en: 'Mobile decadal view' } },
-        { src: 'assets/cases/tianji-3.png', cap: { zh: '天机 · 产品界面展示', en: 'Product interface' } },
+        { src: 'assets/cases/tianji-1.png', cap: { zh: '天机 · 极简生辰输入与排盘首屏', en: 'Minimalist birth-chart input home' } },
+        { src: 'assets/cases/tianji-2.png', cap: { zh: '天机 · 四柱排盘与 AI 人生判词解读', en: 'Four Pillars chart & AI narrative reading' } },
       ],
     },
     {
       id: 'trading',
       name: { zh: '交易系统（Trading System）', en: 'Trading System (DCA & Grid Bot)' },
       tag: { zh: 'DCA / Grid Bot', en: 'Quant Bots' },
-      desc: { zh: '自动化 DCA Bot 与 Grid Bot 量化交易台，含多交易所策略配置、风控确认与实时运行监控。', en: 'Automated DCA & Grid Bot workbench with venue/strategy controls, risk confirmation, and live execution.' },
+      desc: { zh: '自动化 DCA Bot 与 Grid Bot 生产级网格交易台，含实盘 K 线、AI 趋势评分与 20 笔网格挂单执行。', en: 'Production DCA & Grid Bot console with live K-lines, AI trend scoring, and active grid order execution.' },
       shots: [
-        { src: 'assets/cases/trading-1.png', cap: { zh: '交易系统 · 策略实时运行监控', en: 'Live strategy monitor' } },
-        { src: 'assets/cases/trading-2.png', cap: { zh: '交易系统 · 交易所、标的与策略配置', en: 'Venue, instrument & strategy setup' } },
-        { src: 'assets/cases/trading-3.png', cap: { zh: '交易系统 · 风控与历史执行追踪', en: 'Supervisor & execution history' } },
+        { src: 'assets/cases/trading-1.png', cap: { zh: '交易系统 · 实盘 GOLD K 线与 20 笔运行中网格挂单', en: 'Live K-line & 20 running grid orders' } },
+        { src: 'assets/cases/trading-2.png', cap: { zh: '交易系统 · AI 决策引擎与多周期趋势自评', en: 'AI decision engine & multi-timeframe trend review' } },
+        { src: 'assets/cases/trading-3.png', cap: { zh: '交易系统 · 动态区间边界调整与成交生命周期', en: 'Live range adjustment & order lifecycle' } },
       ],
     },
     {
@@ -127,28 +128,28 @@
         fanSub: '从日报、对标榜和 Obsidian 中精选唯一 1 条当日主线，打包成统一工程目录，按需分发至最多 12 个海内外平台。点击下方任意平台标签可实时开关光流。',
         growthTitle: '卖点 03 · 粉丝从 0 轴稳步堆叠增长（而非空洞波动）',
         growthSub: '严格以 0 为底轴，随着每周稳定发片（标注 EP 节点）一层层向上累积全网真实粉丝，右侧虚线按当前发片频次推演未来 3 个月走势。',
-        scatterTitle: '卖点 04 · 3× 爆款时长甜点区',
-        scatterSub: '自动归并实测数据，一眼锁定你的高完播黄金时长带。',
-        guardTitle: '100% 本地开源安全闭环',
-        guardSub: '零云端 Cookie 上传、零强制 API 抽成、国内平台绝不误发。',
+        scatterTitle: '卖点 04 · 一个面板看清哪里做得好、哪里不好',
+        scatterSub: '自动归并实测数据，用 3× 爆款散点与同龄对比，直接告诉你下一期怎么拍更稳。',
+        guardTitle: '卖点 05 · Park 帮你找好的精选素材库，直接用',
+        guardSub: '全网高密度生图风格、视频动效样片与爆款模板都已整理进工作台——自己全网搜几天根本找不到，打开直接套用。',
       },
       ai: {
-        eyebrow: 'AI 协作',
-        h2: '用你电脑里已有的 AI，零强制 API 费',
-        lead: '不需要再买一份 SaaS 订阅积分。Park Studio 原生调度你本机的 Coding Agent，也可以独立拆分全局 Agent 与剪辑 Agent。',
-        leftEyebrow: '本机 Coding Agent',
-        leftH3: '拆解、写稿、三路审稿，直接跑在你本机',
+        eyebrow: 'AI 协作 · 每一步都可替换',
+        h2: '接入你电脑里已有的任何 AI，每个环节都能自由换 Skill',
+        lead: '不绑定任何一家云端模型或固定套路。海内外你电脑里装好的 AI 全都能接，写作、剪辑、生图每一步都可以替换成你最顺手的 Skill。',
+        leftEyebrow: '模块化可插拔流水线',
+        leftH3: '写作、剪辑、AI 引擎——想换哪个换哪个',
         leftList: [
-          '支持 Gemini CLI、Claude Code、Codex、Antigravity CLI (agy) 与自定义 API',
-          'Obsidian 笔记库严格只读，结合「我说过的话」写稿不洗稿、不编造',
-          '独立配置剪辑 Agent，后台实时查看切镜头表与渲染日志',
+          '支持海外与国内全部主流 AI：Gemini CLI、Claude Code、Codex、Antigravity、WorkBuddy、豆包、千问 Agent',
+          '写作步骤自由替换：可用 park-writing、DB skill，也可以换成符合你自己写作习惯的 Skill',
+          '视频步骤自由替换：可用 video-shotcraft、park-video-v2、OpusClip 或你自己的剪辑工作流',
         ],
-        leftLink: '查看 Agent 配置指南 →',
-        leftFoot: '零云端中转 · 你的稿件与 API Key 只存在 ~/.park-studio/',
+        leftLink: '查看 Agent 与 Skill 接入文档 →',
+        leftFoot: '零云端中转 · Obsidian 严格只读 · 你的稿件与 Key 只存在 ~/.park-studio/',
         rightEyebrow: '统一工程目录 + 本地 REST API',
-        rightH3: '让你的 AI 直接交付成片，一句触发 12 平台填表',
-        rightP: '从定稿自动按统一规范建目录。任何外部 AI Agent 只要把成片、三套封面和文案写进 final/上传/，Park Studio 就会自动识别并可通过本机 REST API 直接触发你勾选的平台填表。',
-        rightBubble: '帮我把 EP42 粗剪渲染成片，并按规范落盘填好我启用的 12 个平台草稿',
+        rightH3: '不管你换哪个 Skill，产出都自动接上 12 平台发布',
+        rightP: '从定稿自动按统一规范建目录。无论你用哪个 AI 或 Skill 产出成片、三套封面和文案，只要写进 final/上传/，Park Studio 立刻识别并触发你勾选的平台安全填表。',
+        rightBubble: '用我习惯的写作 Skill 改完稿，接 video-shotcraft 出片，再填好我启用的 12 个平台草稿',
         rightLink: '工程目录规范与 REST API →',
       },
       deploy: {
@@ -284,28 +285,28 @@ open "dist/Park Studio.app"`,
         fanSub: 'Converge briefs, breakouts, and Obsidian into ONE daily episode, then fan that single master out to up to 12 opt-in platforms. Click any platform chip to toggle its live flow.',
         growthTitle: '03 · Cumulative follower growth anchored cleanly at 0',
         growthSub: 'Anchored to a true 0 baseline, showing steady cumulative compounding across every episode release (EP markers) plus dashed 3-month projection.',
-        scatterTitle: '04 · 3× Breakout Duration Sweet Spot',
-        scatterSub: 'Pinpoints your highest-retention length window from real local metrics.',
-        guardTitle: '100% Local & Open-Source Guardrails',
-        guardSub: 'Zero cloud cookies, zero forced token fees, zero accidental auto-posts.',
+        scatterTitle: '04 · One Dashboard to See What Worked & What Didn\'t',
+        scatterSub: 'Pinpoints your 3× breakout duration sweet spot from real local metrics.',
+        guardTitle: '05 · Curated Ready-to-Use Materials Library',
+        guardSub: '352+ curated image styles, motion templates, and teardown libraries pre-collected by Park — impossible to hunt down alone, ready to use in one click.',
       },
       ai: {
-        eyebrow: 'AI Native',
-        h2: 'Use the AI agents already on your machine',
-        lead: 'Zero forced API fees. Park Studio runs directly on your local Coding Agent CLIs and supports an independent Cut Agent.',
-        leftEyebrow: 'Local Coding Agents',
-        leftH3: 'Teardown, draft, and 3-axis audit — zero API fees',
+        eyebrow: 'Pluggable AI & Skills',
+        h2: 'Bring any AI on your machine — swap any step freely',
+        lead: 'Zero model lock-in. Connect global or Chinese AIs (WorkBuddy, Doubao, Qwen, Gemini, Claude, Codex) and swap writing or video skills anytime.',
+        leftEyebrow: 'Modular Pluggable Pipeline',
+        leftH3: 'Writing, video, and AI engine — every step is swappable',
         leftList: [
-          'First-class Gemini CLI, Claude Code, Codex, Antigravity CLI (agy), or custom APIs',
-          'Read-only Obsidian access keeps scripts faithful to your real stories',
-          'Split a dedicated Cut Agent with live background render logs',
+          'Works with Gemini CLI, Claude Code, Codex, Antigravity, WorkBuddy, Doubao, Qwen Agent & any OpenAI API',
+          'Swap writing skills freely: park-writing, DB skill, or your own personal writing-style skill',
+          'Swap video skills freely: video-shotcraft, park-video-v2, OpusClip, or any custom cutting workflow',
         ],
-        leftLink: 'Configure local AI backends →',
-        leftFoot: 'Zero cloud relay · Notes, drafts, and keys stay inside ~/.park-studio/',
+        leftLink: 'Configure Agents & Skills →',
+        leftFoot: 'Zero cloud relay · Read-only Obsidian · Notes & keys stay in ~/.park-studio/',
         rightEyebrow: 'Unified Project Spec + Local REST API',
-        rightH3: 'Drop finals once, autofill all enabled platforms',
-        rightP: 'Any external AI agent writes video, three covers, and copy into final/上传/ and drives 12-platform opt-in autofill over localhost REST API.',
-        rightBubble: 'Rough-cut EP42, export all covers, and pre-fill all 12 enabled platform drafts',
+        rightH3: 'Any skill output flows straight into 12-platform autofill',
+        rightP: 'No matter which writing or video skill produces your final video, covers, and copy, dropping them into final/上传/ connects straight to safe autofill.',
+        rightBubble: 'Draft with my own writing skill, cut with video-shotcraft, and pre-fill my enabled platforms',
         rightLink: 'Project spec & REST API →',
       },
       deploy: {
@@ -415,10 +416,10 @@ open "dist/Park Studio.app"`,
   let lang = detectLang();
   let activeFeat = 'hub';
   let activeDeploy = 'ai';
-  let activeTopicFilter = 'all';
-  let activeCutMode = 'spec';
   let activeGrowthFilter = 'all'; // all | cn | gl
   let enabledPlats = new Set(PLATFORMS_12.map(p => p.id));
+  let pickedWriteSkill = 'park-writing';
+  let pickedVideoSkill = 'video-shotcraft';
   let wxModalMode = null; // null | 'group' | 'desktop' | 'custom'
   let lightbox = null; // null | { caseId, idx }
 
@@ -459,66 +460,54 @@ open "dist/Park Studio.app"`,
 
   function renderFeaturePreview(key) {
     const isEn = lang === 'en';
-    if (key === 'hub') {
-      return `
-        <div class="pv-bar">
-          <div class="pv-title">${isEn ? 'Command Hub · In Progress & 12-Platform Overview' : '中控大屏 · 正在做与 12 平台总览'}</div>
-          <div class="pv-chips"><span class="pv-chip on">${isEn ? '12 opt-in platforms' : '12 平台按需启用'}</span><span class="pv-chip">174,820 ${isEn ? 'followers' : '总粉'}</span></div>
-        </div>
-        <div class="pv-grid-3" style="margin-bottom:12px">
-          <div class="pv-card"><div class="pv-card-top"><span class="pv-tag">${isEn ? 'Cutting' : '剪辑中'}</span><span class="pv-meta">EP42</span></div><h4>${isEn ? 'One Local Studio Replacing a 4-Person Team' : '一个人顶 4 人团队的本地内容中控'}</h4><div class="pv-meta">${isEn ? 'Spec Table · 14 shots · -16 LUFS' : '停在镜头表 · 14 镜 · 待渲染'}</div></div>
-          <div class="pv-card"><div class="pv-card-top"><span class="pv-tag amber">${isEn ? '2 awaiting click' : '2 平台待点发'}</span><span class="pv-meta">EP41</span></div><h4>${isEn ? '1 Daily Topic Fanned Out to 12 Platforms' : '1 条好题穿透 12 平台按需填表'}</h4><div class="pv-meta">${isEn ? 'XHS & Channels filled · JPEG proof saved' : '小红书 / 视频号已填表 · 已存档截图'}</div></div>
-          <div class="pv-card"><div class="pv-card-top"><span class="pv-tag good">${isEn ? 'Today Brief' : '今日 AI 日报'}</span><span class="pv-meta">28 items</span></div><h4>${isEn ? 'Obsidian Read-Only Briefs + Breakout Radar' : 'Obsidian 只读日报 + 3× 对标爆款'}</h4><div class="pv-meta">${isEn ? 'Pick 1 winning topic each morning' : '每天早上只挑 1 条最值得讲的题'}</div></div>
-        </div>`;
-    }
-    if (key === 'topic') {
-      const items = [
-        { cat: 'bench', tag: '4.6×', title: isEn ? 'Why Solo Creators Are Replacing 4-Person Teams With Local Agents' : '为什么一人博主正在用本地 Agent 替代 4 人内容团队', meta: 'YouTube · 182k · 4.6×', score: isEn ? 'Value 9.4 · Resonance 9.1 · Pace 8.8' : '价值 9.4 · 共鸣 9.1 · 节奏 8.8' },
-        { cat: 'daily', tag: isEn ? 'AI Brief' : 'AI 日报', title: isEn ? 'Apple Silicon Offline Rough Cut: 18s Transcription for 10-Min Video' : 'Apple Silicon 离线转写实测：10 分钟口播 18 秒标完口误', meta: 'Obsidian · Read-only', score: isEn ? 'Value 9.1 · Resonance 8.4 · Pace 8.9' : '价值 9.1 · 共鸣 8.4 · 节奏 8.9' },
-        { cat: 'bench', tag: '3.8×', title: isEn ? '1 Topic → 12 Opt-In Platforms With Zero Forced API Fees' : '1 条选题穿透 12 个海内外平台，零强制 API 费闭环', meta: 'Bilibili · 94k · 3.8×', score: isEn ? 'Value 9.3 · Resonance 8.9 · Pace 8.5' : '价值 9.3 · 共鸣 8.9 · 节奏 8.5' },
-        { cat: 'daily', tag: isEn ? 'Builder' : '搞钱日报', title: isEn ? 'Open-Source Product → Paid Community → Bespoke B2B Systems' : '开源产品 + 实战社群 + 企业定制开发的真实商业闭环', meta: 'Saved · Deep Read', score: isEn ? 'Value 9.0 · Resonance 9.3 · Pace 8.7' : '价值 9.0 · 共鸣 9.3 · 节奏 8.7' },
-      ].filter(x => activeTopicFilter === 'all' || x.cat === activeTopicFilter);
-      return `
-        <div class="pv-bar">
-          <div class="pv-title">${isEn ? 'Topic Sourcing & 3-Axis Audit' : '日报 · 对标爆款 · 三路审稿'}</div>
-          <div class="pv-chips">
-            <button type="button" class="pv-chip ${activeTopicFilter === 'all' ? 'on' : ''}" data-tf="all">${isEn ? 'All (4)' : '全部 (4)'}</button>
-            <button type="button" class="pv-chip ${activeTopicFilter === 'bench' ? 'on' : ''}" data-tf="bench">${isEn ? 'Breakouts 3×+' : '对标爆款 3×+'}</button>
-            <button type="button" class="pv-chip ${activeTopicFilter === 'daily' ? 'on' : ''}" data-tf="daily">${isEn ? 'Obsidian Briefs' : 'Obsidian 日报'}</button>
+    const VIEW_META = {
+      hub: {
+        img: 'assets/views/hub.png',
+        route: 'Park Studio · #dashboard',
+        demoHref: 'demo/#dashboard',
+        pills: isEn ? ['In-Progress Strip', '12-Platform Totals', 'Plain-English Insights'] : ['顶部正在做推进条', '12 平台总粉与堆叠图', 'AI 一句话人话结论'],
+      },
+      topic: {
+        img: 'assets/views/topic.png',
+        route: 'Park Studio · #source',
+        demoHref: 'demo/#source',
+        pills: isEn ? ['AI / Money / Dev Briefs', '3× Breakout Radar', 'Curated Materials'] : ['AI / 搞钱 / 开发日报一屏看', '对标爆款库', '内置精选素材库'],
+      },
+      cut: {
+        img: 'assets/views/cut.png',
+        route: 'Park Studio · #cut',
+        demoHref: 'demo/#cut',
+        pills: isEn ? ['One-Click Rough Cut', 'Spec Table Motion', 'Independent Cut Agent'] : ['口播逐字稿标 Hook', '动效镜头表 Spec Table', '独立剪辑 Agent 渲染'],
+      },
+      publish: {
+        img: 'assets/views/publish.png',
+        route: 'Park Studio · #pub-confirm',
+        demoHref: 'demo/#pub-confirm',
+        pills: isEn ? ['12 Opt-In Platforms', 'CN 4 Guardrails', 'Isolated Chrome :9333'] : ['12 平台按需填表', '国内 4 家只填不点发', '自动存档提交前截图'],
+      },
+      review: {
+        img: 'assets/views/review.png',
+        route: 'Park Studio · #review',
+        demoHref: 'demo/#review',
+        pills: isEn ? ['3× Duration Scatter', 'Day-1/3/7 Cohorts', '100% Real Local SQLite'] : ['时长 × 播放 3× 散点图', '1/3/7 天同龄复盘', '100% 实测数据零造假'],
+      },
+    };
+    const m = VIEW_META[key] || VIEW_META.hub;
+    return `
+      <div class="vw-bar">
+        <div class="mac-dots"><i></i><i></i><i></i></div>
+        <div class="mac-url">${m.route}</div>
+        <div class="vw-pills"><span class="vw-pill accent">${isEn ? 'Live App View' : '真实工作台界面'}</span></div>
+      </div>
+      <div class="vw-stage">
+        <img src="${rel(m.img)}?v=20261125b" alt="${m.route}">
+        <div class="vw-fade">
+          <div class="vw-highlights">
+            ${m.pills.map(p => `<span class="vw-hi">${p}</span>`).join('')}
           </div>
+          <a class="btn-pill solid" href="${rel(m.demoHref)}">${isEn ? 'Try this view live →' : '进入在线 Demo 体验此视图 →'}</a>
         </div>
-        <div class="pv-grid-2">
-          ${items.map(it => `<div class="pv-card"><div class="pv-card-top"><span class="pv-tag">${it.tag}</span><span class="pv-meta">${it.meta}</span></div><h4>${it.title}</h4><div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="pv-meta">${it.score}</span><span class="pv-tag good">+ ${isEn ? 'Pick Today\'s 1 Topic' : '选为今日主线'}</span></div></div>`).join('')}
-        </div>`;
-    }
-    if (key === 'cut') {
-      return `
-        <div class="pv-bar">
-          <div class="pv-title">${isEn ? 'Local Video Cutter · EP42' : '双模式本地剪辑台 · EP42'}</div>
-          <div class="pv-chips">
-            <button type="button" class="pv-chip ${activeCutMode === 'rough' ? 'on' : ''}" data-cm="rough">${isEn ? 'One-Click Rough Cut' : '一键粗剪'}</button>
-            <button type="button" class="pv-chip ${activeCutMode === 'spec' ? 'on' : ''}" data-cm="spec">${isEn ? 'Spec Table & Motion' : '镜头表 · 高级动效'}</button>
-          </div>
-        </div>
-        ${activeCutMode === 'rough' ? `<div class="pv-card"><div class="pv-card-top"><b style="font-size:13px">${isEn ? 'mlx-whisper Offline Transcript · Auto Retake & Pause Removal' : 'mlx-whisper 离线转写 · 自动标口误与长停顿'}</b><span class="pv-tag good">-16 LUFS · faststart</span></div><div style="font-size:13px;line-height:1.9;color:#1F1F24"><span class="pv-meta">[00:00.4]</span> ${isEn ? 'If you publish to multiple platforms every week, ' : '如果你每周都要把一条视频发到多个平台，'}<span class="pv-strike">${isEn ? 'uhh wait let me rephrase that (1.8s pause) ' : '呃等一下我重新说这句（停顿 1.8s）'}</span><b>${isEn ? 'the real bottleneck is never filming.' : '真正的瓶颈从来不是拍摄。'}</b></div></div>` : `
-        <table class="pv-table"><thead><tr><th>${isEn ? 'Timecode' : '时间段'}</th><th>${isEn ? 'Voiceover' : '口播原句'}</th><th>${isEn ? 'Motion / Visual' : '画面与动效指令'}</th><th>${isEn ? 'Density' : '节奏'}</th></tr></thead><tbody>
-          <tr><td class="pv-meta">00:00–00:07</td><td><b>${isEn ? 'Hook: 1 topic → 12 platforms locally' : 'Hook：1 条选题 60 秒填完 12 平台'}</b></td><td><span class="pv-tag">Zoom Screen</span> Chrome CDP live fill</td><td><span class="pv-tag amber">High</span></td></tr>
-          <tr><td class="pv-meta">00:07–00:22</td><td>${isEn ? 'Why 1 creator replaces a 4-person content team' : '为什么一个人就能干完 4 个人的活'}</td><td><span class="pv-tag">Org Collapse</span> 4 Roles → 1 Studio</td><td><span class="pv-tag">Medium</span></td></tr>
-          <tr><td class="pv-meta">00:22–00:41</td><td>${isEn ? 'One unified directory spec for every agent' : '一套统一工程目录，所有 Agent 共用'}</td><td><span class="pv-tag good">Tree Reveal</span> final/上传/</td><td><span class="pv-tag">Medium</span></td></tr>
-        </tbody></table>`}`;
-    }
-    if (key === 'publish') {
-      const plats = [
-        { n: isEn ? 'Douyin' : '抖音', st: 'wait', txt: isEn ? 'Filled · Click to publish' : '已填表 · 待你点发', note: 'JPEG proof saved' },
-        { n: isEn ? 'Xiaohongshu' : '小红书', st: 'wait', txt: isEn ? 'Filled · Click to publish' : '已填表 · 待你点发', note: '5 topics attached' },
-        { n: 'Bilibili', st: 'good', txt: isEn ? 'Published · Synced' : '已发布 · 已回填链接', note: '21.6k views' },
-        { n: 'YouTube', st: 'good', txt: isEn ? 'Scheduled · Verified' : '已定时 · 回读一致', note: '16:9 cover ok' },
-        { n: 'TikTok / IG', st: 'good', txt: isEn ? 'Opt-In Enabled' : '按需已启用', note: '9:16 Reels synced' },
-        { n: 'X / LinkedIn', st: 'good', txt: isEn ? 'Published · UTM' : '已发布 · 带 UTM', note: '52.0k combined' },
-      ];
-      return `<div class="pv-bar"><div class="pv-title">Chrome CDP (:9333) · ${isEn ? '12 Opt-In Platforms' : '12 平台按需安全填表闭环'}</div><div class="pv-chips"><span class="pv-chip on">${isEn ? 'Pick only what you use · CN guardrails enforced' : '只勾常用平台 · 国内 4 家严格只填不点发'}</span></div></div><div class="pv-grid-3">${plats.map(p => `<div class="pv-card"><div class="pv-card-top"><b>${p.n}</b><span class="pv-tag ${p.st === 'good' ? 'good' : 'amber'}">${p.txt}</span></div><div class="pv-meta">${p.note}</div></div>`).join('')}</div>`;
-    }
-    return `<div class="pv-bar"><div class="pv-title">${isEn ? 'Day-1 / Day-3 / Day-7 Cohort Comparison' : '1 / 3 / 7 天同龄复盘与抖音时长分析'}</div><div class="pv-chips"><span class="pv-chip on">EP41 · 168.4k Day-1 (+66.8%)</span></div></div><div class="pv-grid-2"><div class="pv-card"><div class="pv-card-top"><b>${isEn ? 'EP41 Same-Age Cohort' : 'EP41 发布 24h 全网同龄对比'}</b><span class="pv-tag good">+66.8%</span></div><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;font-size:12px"><div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>EP41</span><b>168,420</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:94%;height:100%;background:#3E63DD;border-radius:99px"></div></div></div><div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>${isEn ? '30d Median' : '近 30 天中位数'}</span><b>101,000</b></div><div style="height:8px;border-radius:99px;background:#E8E8EE;overflow:hidden"><div style="width:56%;height:100%;background:#A1A1AA;border-radius:99px"></div></div></div></div></div><div class="pv-card"><div class="pv-card-top"><b>${isEn ? 'Zero-Fabrication Rule' : '零伪造数据原则'}</b><span class="pv-tag good">SQLite</span></div><div class="pv-meta">${isEn ? 'Every chart reads strictly from locally synced real creator studio stats.' : '所有大屏与复盘图表严格读取你本机采集的真实作品数据，绝不造假充数。'}</div></div></div>`;
+      </div>`;
   }
 
   // ===== SELLING POINT 1: Animated Org Chart (4-Person Team -> 1 Person + Park Studio) =====
@@ -800,7 +789,7 @@ open "dist/Park Studio.app"`,
           <button type="button" class="wx-close" id="lbClose" aria-label="Close">✕</button>
         </div>
         <div class="lb-img-wrap">
-          <img src="${rel(shot.src)}" alt="${shot.cap[lang]}">
+          <img src="${rel(shot.src)}?v=20261125b" alt="${shot.cap[lang]}">
         </div>
         <div class="lb-foot">
           <span>${shot.cap[lang]} (${lightbox.idx + 1} / ${item.shots.length})</span>
@@ -1024,11 +1013,11 @@ open "dist/Park Studio.app"`,
                 </div>
                 <div class="bcard">
                   <div class="bcard-h"><div><h3>${t.selling.guardTitle}</h3><p>${t.selling.guardSub}</p></div></div>
-                  <div class="sec-list">
-                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot"></span><div><b>${isEn ? '100% MIT Open Source' : 'GitHub 100% MIT 开源'}</b><small>${isEn ? 'Auditable code, zero vendor lock-in' : '全部代码公开可审计，零闭源插件'}</small></div></div><span class="sec-tag">GitHub</span></div>
-                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot"></span><div><b>${isEn ? 'Obsidian Strictly Read-Only' : 'Obsidian 严格只读挂载'}</b><small>${isEn ? 'Never overwrites your Markdown notes' : '只读不写，绝不改动任何原始笔记'}</small></div></div><span class="sec-tag">RO</span></div>
-                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot amber"></span><div><b>${isEn ? 'CN 4 Platforms: Autofill Only' : '国内 4 平台严格只填不点发'}</b><small>${isEn ? 'Pauses with JPEG proof before final click' : '存档提交前截图，最后一下亲自确认'}</small></div></div><span class="sec-tag amber">Guard</span></div>
-                    <div class="sec-row"><div class="sec-row-l"><span class="sec-dot"></span><div><b>${isEn ? 'Isolated Chrome CDP :9333' : '独立 Chrome Profile 隔离'}</b><small>${isEn ? 'Never touches your everyday browser' : '一次扫码保活，绝不碰日常浏览器'}</small></div></div><span class="sec-tag">:9333</span></div>
+                  <div class="mat-grid">
+                    <div class="mat-tile"><div class="mat-num">352+</div><b>${isEn ? 'Curated Image Styles' : '精选生图风格库'}</b><small>${isEn ? 'High-taste cover & visual prompts ready to copy' : '封面、配图与小红书高审美提示词，打开直接生图'}</small></div>
+                    <div class="mat-tile"><div class="mat-num">200+</div><b>${isEn ? 'Motion & Cut Recipes' : '视频动效与样片库'}</b><small>${isEn ? 'Tested hook cards, kinetic callouts & transitions' : '实测高完播开头动效、数据卡与镜头样片模板'}</small></div>
+                    <div class="mat-tile"><div class="mat-num">3×+</div><b>${isEn ? 'Breakout Teardowns' : '拆解好的爆款库'}</b><small>${isEn ? 'Pre-curated benchmark pools & winning structures' : '筛选好的行业对标号与逐段结构拆解，免去大海捞针'}</small></div>
+                    <div class="mat-tile"><div class="mat-num">Daily</div><b>${isEn ? 'Curated Intel Feeds' : '一手精选信源与网站'}</b><small>${isEn ? 'AI briefs, builder tools & sites curated daily' : '每天滚出来的 AI 日报、搞钱机会卡、好网站与好仓库'}</small></div>
                   </div>
                 </div>
               </div>
@@ -1047,9 +1036,12 @@ open "dist/Park Studio.app"`,
               <span class="agent-pill"><i></i>Gemini CLI</span>
               <span class="agent-pill"><i></i>Claude Code</span>
               <span class="agent-pill"><i></i>Codex</span>
-              <span class="agent-pill"><i></i>Antigravity CLI (agy)</span>
+              <span class="agent-pill"><i></i>Antigravity (agy)</span>
+              <span class="agent-pill"><i></i>WorkBuddy</span>
+              <span class="agent-pill"><i></i>${isEn ? 'Doubao' : '豆包'}</span>
+              <span class="agent-pill"><i></i>${isEn ? 'Qwen Agent' : '千问 Agent'}</span>
               <span class="agent-pill"><i></i>Cursor</span>
-              <span class="agent-pill"><i></i>OpenAI Compatible</span>
+              <span class="agent-pill"><i></i>OpenAI API</span>
             </div>
 
             <div class="ai-grid">
@@ -1061,16 +1053,22 @@ open "dist/Park Studio.app"`,
                     <ul class="ai-list">${t.ai.leftList.map(li => `<li><span class="ai-check">✓</span><span>${li}</span></li>`).join('')}</ul>
                     <a class="inline-link" href="${rel('docs/#topic')}">${t.ai.leftLink}</a>
                   </div>
-                  <div class="audit-mock">
-                    <div style="display:flex;justify-content:space-between;color:var(--label-3);font-family:var(--mono);font-size:11px"><span>3-AXIS AUDIT</span><span style="color:var(--green)">Local CLI</span></div>
-                    <div class="audit-score-row">
-                      <div class="audit-score"><span>${isEn ? 'Value' : '价值'}</span><b>9.4</b></div>
-                      <div class="audit-score"><span>${isEn ? 'Resonance' : '共鸣'}</span><b>9.1</b></div>
-                      <div class="audit-score"><span>${isEn ? 'Pacing' : '节奏'}</span><b>8.8</b></div>
+                  <div class="plug-grid">
+                    <div class="plug-row">
+                      <div class="plug-row-h"><b>${isEn ? 'Writing Step (Swappable)' : '写作步骤 · 自由替换'}</b><span>SKILL</span></div>
+                      <div class="plug-chips">
+                        ${['park-writing', 'DB skill', isEn ? 'Your Own Skill' : '自定义写作习惯'].map(s => `<button type="button" class="plug-chip ${pickedWriteSkill === s ? 'on' : ''}" data-ws="${s}">${s}</button>`).join('')}
+                      </div>
                     </div>
-                    <div class="audit-diff">
-                      <b>${isEn ? 'Suggested Hook Rewrite:' : '最小改法建议：'}</b><br>
-                      ${isEn ? 'Lead with the 60-second autofill clip instead of background context.' : '删掉前 18 秒背景铺垫，第一句直接抛「1 条好题穿透 12 个平台」真实演示画面。'}
+                    <div class="plug-row">
+                      <div class="plug-row-h"><b>${isEn ? 'Video Step (Swappable)' : '视频步骤 · 自由替换'}</b><span>SKILL</span></div>
+                      <div class="plug-chips">
+                        ${['video-shotcraft', 'park-video-v2', 'OpusClip', isEn ? 'Custom Cutter' : '其他剪辑工具'].map(s => `<button type="button" class="plug-chip ${pickedVideoSkill === s ? 'on' : ''}" data-vs="${s}">${s}</button>`).join('')}
+                      </div>
+                    </div>
+                    <div class="plug-row">
+                      <div class="plug-row-h"><b>${isEn ? 'Active Pipeline' : '当前生效组合'}</b><span style="color:var(--green)">READY</span></div>
+                      <div style="font-family:var(--mono);font-size:11.5px;color:var(--label-2)">${pickedWriteSkill} → ${pickedVideoSkill} → final/上传/</div>
                     </div>
                   </div>
                 </div>
@@ -1185,10 +1183,10 @@ open "dist/Park Studio.app"`,
                     <span class="case-tag">${cs.tag[lang]}</span>
                   </div>
                   <p class="case-desc">${cs.desc[lang]}</p>
-                  <div class="case-thumbs">
+                  <div class="case-thumbs ${cs.portrait ? 'portrait' : cs.twoCols ? 'two' : ''}">
                     ${cs.shots.map((sh, idx) => `
                       <button type="button" class="case-thumb" data-lb="${cs.id}:${idx}" title="${sh.cap[lang]}">
-                        <img src="${rel(sh.src)}" alt="${sh.cap[lang]}" loading="lazy">
+                        <img src="${rel(sh.src)}?v=20261125b" alt="${sh.cap[lang]}" loading="lazy">
                       </button>`).join('')}
                   </div>
                 </div>`).join('')}
@@ -1236,9 +1234,9 @@ open "dist/Park Studio.app"`,
     };
     document.querySelectorAll('[data-feat]').forEach(b => b.onclick = () => { activeFeat = b.dataset.feat; renderAll(); });
     document.querySelectorAll('[data-dep]').forEach(b => b.onclick = () => { activeDeploy = b.dataset.dep; renderAll(); });
-    document.querySelectorAll('[data-tf]').forEach(b => b.onclick = () => { activeTopicFilter = b.dataset.tf; renderAll(); });
-    document.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { activeCutMode = b.dataset.cm; renderAll(); });
     document.querySelectorAll('[data-gf]').forEach(b => b.onclick = () => { activeGrowthFilter = b.dataset.gf; renderAll(); });
+    document.querySelectorAll('[data-ws]').forEach(b => b.onclick = () => { pickedWriteSkill = b.dataset.ws; renderAll(); });
+    document.querySelectorAll('[data-vs]').forEach(b => b.onclick = () => { pickedVideoSkill = b.dataset.vs; renderAll(); });
 
     document.querySelectorAll('[data-ptog]').forEach(el => {
       el.onclick = () => {
