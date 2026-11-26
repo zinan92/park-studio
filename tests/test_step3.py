@@ -629,6 +629,40 @@ def test_v031_localize_copy_12_platforms_and_translate_srt(tmp_path: Path, monke
     assert saved_lang.json()["config"]["uiLang"] == "en"
 
 
+def test_v032_health_version_and_github_update_check(tmp_path: Path, monkeypatch) -> None:
+    import httpx
+    from park_studio import __version__
+
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    config.save_config({"obsidianPath": str(tmp_path / "empty")})
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+
+    # 1. /api/health 版本号必须与 __version__ 同步
+    h = client.get("/api/health").json()
+    assert h["ok"] is True
+    assert h["version"] == __version__
+
+    # 2. 模拟 GitHub Releases 返回新版本 v0.9.0
+    class FakeResp:
+        status_code = 200
+
+        def json(self):
+            return {
+                "tag_name": "v0.9.0",
+                "html_url": "https://github.com/zinan92/park-studio/releases/tag/v0.9.0",
+                "published_at": "2026-12-01T00:00:00Z",
+                "assets": [{"name": "Park-Studio.dmg", "browser_download_url": "https://example.com/Park-Studio.dmg"}],
+            }
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **kw: FakeResp())
+    upd = client.get("/api/app/check-update").json()
+    assert upd["ok"] is True
+    assert upd["hasUpdate"] is True
+    assert upd["latest"] == "0.9.0"
+    assert upd["downloadUrl"].endswith("Park-Studio.dmg")
+
+
+
 
 
 

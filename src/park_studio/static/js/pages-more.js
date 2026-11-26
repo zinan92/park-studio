@@ -150,8 +150,20 @@
             <button type="button" class="btn s" id="testAiBtn">${PS.icon('spark', 'sm')}测试 AI 连通性</button>
             <span class="sub" id="testAiStatus" style="font-size:12px">切换引擎或填写 API Key 后可立即验证是否可用</span>
           </div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">Obsidian 知识库根目录（只读 · <a href="#kb">去选接入文件夹 ›</a>）</label><input type="text" id="obPath" value="${PS.esc(s.obsidianPath)}"></div>
-          <div><label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿自动建目录 / 打包自动扫描）</label><input type="text" id="projRootIn" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}"></div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">Obsidian 知识库根目录（只读 · <a href="#kb">去选接入文件夹 ›</a>）</label>
+            <div class="row" style="gap:6px">
+              <input type="text" id="obPath" class="grow" value="${PS.esc(s.obsidianPath)}">
+              ${PS.isMacApp ? '<button type="button" class="btn s" id="pickObBtn">选文件夹…</button>' : ''}
+            </div>
+          </div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">统一视频工程根目录（定稿自动建目录 / 打包自动扫描）</label>
+            <div class="row" style="gap:6px">
+              <input type="text" id="projRootIn" class="grow" value="${PS.esc(s.projectRoot || '~/Movies/ParkStudio')}">
+              ${PS.isMacApp ? '<button type="button" class="btn s" id="pickProjBtn">选文件夹…</button>' : ''}
+            </div>
+          </div>
         </div>
 
         <div class="card stack">
@@ -449,6 +461,14 @@
       }
       PS.save(); PS.pages.settings();
     };
+    main.querySelector('#pickObBtn')?.addEventListener('click', async () => {
+      const p = await PS.pickNativePath({ mode: 'dir' });
+      if (p) main.querySelector('#obPath').value = p;
+    });
+    main.querySelector('#pickProjBtn')?.addEventListener('click', async () => {
+      const p = await PS.pickNativePath({ mode: 'dir' });
+      if (p) main.querySelector('#projRootIn').value = p;
+    });
     main.querySelector('#btnOnboardingTop')?.addEventListener('click', () => PS.openOnboarding());
     main.querySelector('#btnOnboarding')?.addEventListener('click', () => PS.openOnboarding());
     main.querySelector('#resetDemo')?.addEventListener('click', () => PS.resetDemo());
@@ -489,7 +509,34 @@
       </div>
     `, 'narrow');
 
-    main.querySelector('#chkUpd').onclick = () => PS.toast('当前已是最新版 v0.3.0 ✓', 'good');
+    main.querySelector('#chkUpd').onclick = async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true;
+      btn.textContent = '正在检查更新…';
+      try {
+        const r = await PS.api('GET', '/api/app/check-update');
+        if (!r.ok) {
+          PS.toast(`检查更新失败：${r.error || '网络不可用'}`, 'warn');
+        } else if (r.hasUpdate) {
+          PS.modal({
+            title: `发现新版本 v${r.latest}（当前 v${r.current}）`,
+            body: `<div class="stack tight">
+              <p class="m0">GitHub Releases 已发布 <b>${PS.esc(r.tag || `v${r.latest}`)}</b>（${PS.esc(r.publishedAt || '')}）。</p>
+              <p class="sub m0">点击下方按钮下载最新版 macOS DMG，或前往 Release 页面查看更新日志。</p>
+            </div>`,
+            foot: `<button class="btn" data-close>稍后</button><a class="btn" href="${PS.esc(r.releaseUrl)}" target="_blank" rel="noopener">查看 Release ↗</a>${r.downloadUrl ? `<a class="btn primary" href="${PS.esc(r.downloadUrl)}" target="_blank" rel="noopener">下载新版 DMG ↗</a>` : ''}`,
+          });
+        } else {
+          PS.toast(`当前已是最新版 v${r.current} ✓`, 'good');
+        }
+      } catch (err) {
+        PS.toast(err.message || '检查更新失败', 'warn');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = old;
+      }
+    };
   };
 
   // ==================== 3. 知识库（Obsidian 接入文件夹总览与检索，取代零散「说过的话」） ====================

@@ -34,10 +34,21 @@
 }
 .top-dock-row > * { pointer-events: auto; }
 .top-left { display: flex; align-items: center; gap: 8px; justify-self: start; min-width: 0; }
-:root.macos-app .top-left { padding-left: 68px; }
-:root.macos-app .top-dock { padding-top: 10px; }
+:root.macos-app .top-left { padding-left: 68px; transition: padding-left 220ms ease; }
+:root.macos-app.macos-fullscreen .top-left { padding-left: 0; }
+:root.macos-app .top-dock { padding-top: 10px; -webkit-user-select: none; user-select: none; }
 .top-center { justify-self: center; }
 .top-right { display: flex; align-items: center; gap: 7px; justify-self: end; }
+
+@media (max-width: 1120px) {
+  .top-dock { padding: 10px 14px 6px; }
+  .top-dock-row { gap: 8px; }
+  .lg-brand { padding: 0 10px 0 8px; height: 38px; }
+  .lg-brand b { font-size: 13px; }
+  .lg-pill { height: 42px; }
+  .lg-tab { height: 34px; padding: 0 11px; font-size: 12.5px; gap: 4px; }
+  .lg-btn { height: 36px; padding: 0 10px; }
+}
 
 /* 通用毛玻璃岛屿材质 */
 .lg-island {

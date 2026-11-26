@@ -128,6 +128,7 @@
     const cur = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
     document.documentElement.dataset.theme = cur;
     try { localStorage.setItem('ps:theme', cur); } catch (e) {}
+    PS.nativePost?.({ action: 'theme', theme: cur });
     PS.toast(cur === 'dark' ? '已切换深色模式' : '已切换浅色模式');
   };
 
@@ -260,9 +261,47 @@
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); PS.cmdk(); }
   });
 
-  // 检测是否在原生 Mac App (WKWebView) 中运行，为红绿灯留出呼吸间距
-  if (/ParkStudioMacApp/.test(navigator.userAgent)) {
+  // 检测是否在原生 Mac App (WKWebView) 中运行，为红绿灯留出呼吸间距并接通顶栏拖拽 / 双击缩放 / Finder 选文件
+  PS.isMacApp = /ParkStudioMacApp/.test(navigator.userAgent);
+  PS.nativePost = function (payload) {
+    try {
+      window.webkit?.messageHandlers?.parkStudio?.postMessage(payload);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+  const pendingPickers = new Map();
+  window.__psNativePickResult = function (msg) {
+    if (!msg || !msg.id) return;
+    const resolve = pendingPickers.get(msg.id);
+    if (resolve) {
+      pendingPickers.delete(msg.id);
+      resolve(msg.path || '');
+    }
+  };
+  PS.pickNativePath = function ({ mode = 'file', exts = [] } = {}) {
+    if (!window.webkit?.messageHandlers?.parkStudio) return Promise.resolve('');
+    const id = `pk_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    return new Promise(resolve => {
+      pendingPickers.set(id, resolve);
+      PS.nativePost({ action: 'pickPath', requestId: id, mode, exts });
+    });
+  };
+  if (PS.isMacApp) {
     document.documentElement.classList.add('macos-app');
+    PS.nativePost({ action: 'theme', theme: document.documentElement.dataset.theme || 'dark' });
+    // 原生顶栏任意空白区域左键拖动窗口、双击放大/还原（避开按钮/链接/输入框/胶囊组件）
+    document.addEventListener('mousedown', e => {
+      if (e.button !== 0 || e.clientY > 64) return;
+      if (e.target.closest('button, a, input, select, textarea, label, [role="button"], .lg-pill, .lg-island, .lg-subbar, .lg-menu, .modal-box, .cmdk-box')) return;
+      e.preventDefault();
+      if (e.detail >= 2) {
+        PS.nativePost({ action: 'doubleClick' });
+      } else {
+        PS.nativePost({ action: 'drag' });
+      }
+    });
   }
 
   // 物理弹性滑块定位（不销毁顶栏 DOM，切 Tab 丝滑弹过去）

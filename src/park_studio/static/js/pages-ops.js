@@ -136,7 +136,10 @@
             <div class="sys-2col">
               <div>
                 <label class="sub" style="display:block;margin-bottom:4px">本地成片路径</label>
-                <input type="text" id="pkVideo" class="mono" value="${PS.esc(ep.videoPath || '')}" placeholder="~/Movies/ParkStudio/.../final/上传/视频.mp4">
+                <div class="row" style="gap:6px">
+                  <input type="text" id="pkVideo" class="mono grow" value="${PS.esc(ep.videoPath || '')}" placeholder="~/Movies/ParkStudio/.../final/上传/视频.mp4">
+                  ${PS.isMacApp ? '<button type="button" class="btn s" id="pickPkVideoBtn">选文件…</button>' : ''}
+                </div>
               </div>
               <div>
                 <label class="sub" style="display:block;margin-bottom:4px">计划发布时间（ISO）</label>
@@ -183,6 +186,10 @@
     `, 'mid');
 
     main.querySelector('#pkSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-pack'](); };
+    main.querySelector('#pickPkVideoBtn')?.addEventListener('click', async () => {
+      const p = await PS.pickNativePath({ mode: 'file', exts: ['mp4', 'mov', 'mkv'] });
+      if (p) main.querySelector('#pkVideo').value = p;
+    });
     const runLocalize = async btn => {
       const old = btn.innerHTML;
       btn.disabled = true; btn.textContent = 'AI 正在按平台本地化改写（含中→英）…';

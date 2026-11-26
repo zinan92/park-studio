@@ -220,8 +220,18 @@ def _row_cut(r) -> dict[str, Any]:
     }
 
 
+def _parse_ver_tuple(ver: str) -> tuple[int, ...]:
+    nums = []
+    for part in str(ver or "").lstrip("vV").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        nums.append(int(digits) if digits else 0)
+    return tuple(nums or [0])
+
+
 def create_app(db_file: Path | None = None) -> FastAPI:
-    app = FastAPI(title="Park Studio", version="0.1.2")
+    from . import __version__
+
+    app = FastAPI(title="Park Studio", version=__version__)
     conn = db.connect(db_file)
     db.init_db(conn)
 
@@ -230,12 +240,47 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         cfg = config.load_config()
         return {
             "ok": True,
-            "version": "0.1.2",
+            "version": __version__,
             "data_dir": str(config.data_dir()),
             "vault": vault.vault_status(cfg),
             "agents": ai.detect_agents(),
             "active_ai": {"backend": cfg.get("aiBackend"), "model": cfg.get("aiModel")},
         }
+
+    @app.get("/api/app/check-update")
+    def api_check_update() -> dict[str, Any]:
+        import httpx
+
+        url = "https://api.github.com/repos/zinan92/park-studio/releases/latest"
+        try:
+            resp = httpx.get(
+                url,
+                headers={"Accept": "application/vnd.github+json", "User-Agent": f"ParkStudio/{__version__}"},
+                timeout=6.0,
+            )
+            if resp.status_code != 200:
+                return {"ok": False, "current": __version__, "latest": __version__, "hasUpdate": False, "error": f"GitHub API HTTP {resp.status_code}"}
+            data = resp.json()
+            latest_tag = str(data.get("tag_name") or __version__).strip()
+            latest_clean = latest_tag.lstrip("vV")
+            has_update = _parse_ver_tuple(latest_clean) > _parse_ver_tuple(__version__)
+            dmg_url = ""
+            for asset in data.get("assets") or []:
+                if str(asset.get("name") or "").endswith(".dmg"):
+                    dmg_url = str(asset.get("browser_download_url") or "")
+                    break
+            return {
+                "ok": True,
+                "current": __version__,
+                "latest": latest_clean,
+                "tag": latest_tag,
+                "hasUpdate": has_update,
+                "releaseUrl": str(data.get("html_url") or "https://github.com/zinan92/park-studio/releases/latest"),
+                "downloadUrl": dmg_url,
+                "publishedAt": str(data.get("published_at") or "")[:10],
+            }
+        except Exception as exc:
+            return {"ok": False, "current": __version__, "latest": __version__, "hasUpdate": False, "error": str(exc)}
 
     @app.get("/api/bootstrap")
     def bootstrap() -> dict[str, Any]:

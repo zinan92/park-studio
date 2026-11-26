@@ -10,12 +10,25 @@ echo "==> 清理并准备打包目录 $DIST"
 rm -rf "$APP" "$DMG"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/backend"
 
-echo "==> 编译纯原生 Swift 桌面端 (Apple WKWebView + 透明融合标题栏)"
-swiftc -O \
-  -framework Cocoa \
-  -framework WebKit \
-  "$ROOT/desktop/macos/ParkStudioApp.swift" \
-  -o "$APP/Contents/MacOS/ParkStudio"
+echo "==> 编译纯原生 Swift 桌面端 (Universal Binary: arm64 + x86_64 · Apple WKWebView)"
+TMPBIN="$(mktemp -d)"
+if swiftc -O -target arm64-apple-macos13.0 -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers \
+     "$ROOT/desktop/macos/ParkStudioApp.swift" -o "$TMPBIN/ParkStudio-arm64" 2>/dev/null \
+   && swiftc -O -target x86_64-apple-macos13.0 -framework Cocoa -framework WebKit -framework UniformTypeIdentifiers \
+     "$ROOT/desktop/macos/ParkStudioApp.swift" -o "$TMPBIN/ParkStudio-x86_64" 2>/dev/null \
+   && command -v lipo >/dev/null 2>&1; then
+  lipo -create "$TMPBIN/ParkStudio-arm64" "$TMPBIN/ParkStudio-x86_64" -output "$APP/Contents/MacOS/ParkStudio"
+  echo "  ✓ 已生成 Universal 通用二进制 (Apple Silicon + Intel)"
+else
+  swiftc -O \
+    -framework Cocoa \
+    -framework WebKit \
+    -framework UniformTypeIdentifiers \
+    "$ROOT/desktop/macos/ParkStudioApp.swift" \
+    -o "$APP/Contents/MacOS/ParkStudio"
+  echo "  ✓ 已生成本机架构二进制"
+fi
+rm -rf "$TMPBIN"
 
 echo "==> 嵌入后端源码与静态资源"
 cp -R "$ROOT/src/park_studio" "$APP/Contents/Resources/backend/"

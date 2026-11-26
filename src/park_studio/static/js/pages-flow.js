@@ -1410,11 +1410,20 @@
           </div>
           <div class="sys-2col">
             <div><label class="sub" style="display:block;margin-bottom:4px">视频标题（将用于生成统一工程目录名）</label><input type="text" id="ciTitle" value="${PS.esc(cp.title || '')}" placeholder="如：AI 时代怎么搭本地内容生产线"></div>
-            <div><label class="sub" style="display:block;margin-bottom:4px">本机原片路径（.mp4 / .mov）</label><input type="text" id="ciVideo" class="mono" value="${PS.esc(cp.sourceFile || '')}" placeholder="/Volumes/.../raw.mov 或 ~/Movies/.../raw.mp4"></div>
+            <div>
+              <label class="sub" style="display:block;margin-bottom:4px">本机原片路径（.mp4 / .mov）</label>
+              <div class="row" style="gap:6px">
+                <input type="text" id="ciVideo" class="mono grow" value="${PS.esc(cp.sourceFile || '')}" placeholder="/Volumes/.../raw.mov 或 ~/Movies/.../raw.mp4">
+                ${PS.isMacApp ? '<button type="button" class="btn s" id="pickVideoBtn">选文件…</button>' : ''}
+              </div>
+            </div>
           </div>
           <div>
             <label class="sub" style="display:block;margin-bottom:4px">可选：剪映导出的 .srt 字幕路径（高级动效模式可直接毫秒级导入，免重新转写）</label>
-            <input type="text" id="ciSrt" class="mono" value="${PS.esc(cp.srtPath || '')}" placeholder="留空则在下方点「本机 mlx-whisper 离线转写」">
+            <div class="row" style="gap:6px">
+              <input type="text" id="ciSrt" class="mono grow" value="${PS.esc(cp.srtPath || '')}" placeholder="留空则在下方点「本机 mlx-whisper 离线转写」">
+              ${PS.isMacApp ? '<button type="button" class="btn s" id="pickSrtBtn">选文件…</button>' : ''}
+            </div>
           </div>
           <div class="row" style="flex-wrap:wrap;gap:8px">
             <button class="btn" id="ciLoadBtn">1. 校验并载入媒体</button>
@@ -1616,6 +1625,14 @@
     });
 
     // Step 1: 导入原片/SRT + 后台离线转写
+    main.querySelector('#pickVideoBtn')?.addEventListener('click', async () => {
+      const p = await PS.pickNativePath({ mode: 'file', exts: ['mp4', 'mov', 'mkv', 'm4v'] });
+      if (p) main.querySelector('#ciVideo').value = p;
+    });
+    main.querySelector('#pickSrtBtn')?.addEventListener('click', async () => {
+      const p = await PS.pickNativePath({ mode: 'file', exts: ['srt'] });
+      if (p) main.querySelector('#ciSrt').value = p;
+    });
     const readyProjs = (PS.S.projects?.projects || []).filter(p => p.videoPath).slice(0, 6);
     main.querySelectorAll('[data-pick-proj]').forEach(b => b.onclick = () => {
       const p = readyProjs[+b.dataset.pickProj];
