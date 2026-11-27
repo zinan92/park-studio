@@ -208,26 +208,45 @@
 
         <div style="border-top:1px solid var(--line-soft);padding-top:12px" class="stack tight">
           <div class="row" style="flex-wrap:wrap;gap:8px">
-            <b style="font-size:13.5px">分平台文案与中→英本地化预览（当前已启用 ${PS.activePlats().length} 个平台）</b>
-            <span class="sub" style="font-size:12px">国内平台默认简体中文，YouTube / X / TikTok / IG / Threads / LinkedIn / Meta 默认改写为地道英文</span>
+            <b style="font-size:13.5px">③ 分平台语言 & 载体策略（当前已启用 ${PS.activePlats().length} 个平台）</b>
+            <span class="sub" style="font-size:12px">点击小标签可自由切 <code>ZH / EN / 双语</code> 和 <code>🎬 视频 / 🖼️ 图文 / 📝 纯文字</code>（海外图文/文字绝不误传中文口播视频）</span>
             <span class="grow"></span>
-            <button class="btn s" id="localizeCopyBtn2">${PS.icon('spark', 'sm')}AI 一键生成各平台专属文案</button>
+            <button class="btn s" id="localizeCopyBtn2">${PS.icon('spark', 'sm')}AI 按策略生成各平台内容</button>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">
+          ${ep.publishJson?.en_card_path ? `<div class="row" style="padding:9px 12px;border-radius:10px;background:var(--sunk);gap:12px">
+            <img src="/api/media/stream?path=${encodeURIComponent(ep.publishJson.en_card_path)}&t=${Date.now()}" alt="English Visual Card" style="width:68px;height:85px;object-fit:cover;border-radius:7px;background:#111;flex:none">
+            <div class="min0 grow">
+              <div class="row" style="gap:6px"><span class="pill accent">EN 图文卡 ✓</span><b style="font-size:13px">已自动生成纯英文杂志图文卡片（供 IG / Meta 独立发布，不含中文口播）</b></div>
+              <div class="sub mono clip1" style="font-size:11px;margin-top:4px">${PS.esc(ep.publishJson.en_card_path)}</div>
+            </div>
+          </div>` : ''}
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:10px">
             ${PS.activePlats().map(pid => {
               const p = PS.PLATFORMS[pid];
               const pCopy = (ep.publishJson?.platforms || {})[pid];
-              const defLang = ['douyin', 'xhs', 'bilibili', 'channels', 'wechat'].includes(pid) ? 'zh' : 'en';
-              const curLang = pCopy?.lang || defLang;
+              const defStrat = {
+                douyin: { lang: 'zh', format: 'video' }, xhs: { lang: 'zh', format: 'video' },
+                bilibili: { lang: 'zh', format: 'video' }, channels: { lang: 'zh', format: 'video' },
+                youtube: { lang: 'zh', format: 'video' }, wechat: { lang: 'zh', format: 'image_text' },
+                instagram: { lang: 'en', format: 'image_text' }, meta: { lang: 'en', format: 'image_text' },
+                tiktok: { lang: 'en', format: 'image_text' }, linkedin: { lang: 'en', format: 'text' },
+                x: { lang: 'en', format: 'text' }, threads: { lang: 'en', format: 'text' },
+              }[pid] || { lang: 'en', format: 'text' };
+              const savedStrat = (PS.S.settings.platformStrategy || {})[pid] || defStrat;
+              const curLang = savedStrat.lang || defStrat.lang;
+              const curFmt = savedStrat.format || defStrat.format;
+              const langLabel = curLang === 'en' ? 'EN 英文' : curLang === 'bilingual' ? '双语' : 'ZH 中文';
+              const fmtLabel = curFmt === 'video' ? '🎬 视频' : curFmt === 'image_text' ? '🖼️ 图文' : '📝 纯文字';
               return `<div class="card stack tight" style="padding:11px 13px;background:var(--sunk);border:0">
-                <div class="row" style="gap:6px">
+                <div class="row" style="gap:5px;flex-wrap:wrap">
                   ${PS.plogo(pid, 18)}<b style="font-size:13px">${p.name}</b>
-                  <span class="pill ${curLang === 'en' ? 'accent' : 'info'}" style="font-size:10.5px;padding:1px 6px">${curLang === 'en' ? 'EN 英文' : 'ZH 中文'}</span>
+                  <button type="button" class="pill ${curLang === 'en' ? 'accent' : 'info'}" data-tog-lang="${pid}" title="点击切换该平台语言：ZH / EN / 双语" style="font-size:10.5px;padding:1px 6px;border:0;cursor:pointer">${langLabel}</button>
+                  <button type="button" class="pill" data-tog-fmt="${pid}" title="点击切换该平台载体：视频 / 图文 / 纯文字（选图文或纯文字时绝不上传中文口播视频）" style="font-size:10.5px;padding:1px 6px;border:0;cursor:pointer">${fmtLabel}</button>
                   <span class="grow"></span>
-                  ${pCopy ? '<span class="pill good" style="font-size:10.5px;padding:1px 6px">已适配</span>' : '<span class="sub" style="font-size:11px">沿用原稿</span>'}
+                  ${pCopy ? '<span class="pill good" style="font-size:10px;padding:1px 5px">已适配</span>' : '<span class="sub" style="font-size:10.5px">原稿</span>'}
                 </div>
                 <div style="font-size:12.5px;font-weight:600;line-height:1.4">${PS.esc(pCopy?.title || ep.publishJson?.title || ep.title || '')}</div>
-                <div class="sub clip2" style="font-size:12px;line-height:1.5">${PS.esc(pCopy?.description || ep.publishJson?.description || '点击上方「AI 一键生成各平台专属文案」自动改写')}</div>
+                <div class="sub clip2" style="font-size:12px;line-height:1.5">${PS.esc(pCopy?.description || ep.publishJson?.description || '点击「AI 按策略生成各平台内容」自动改写')}</div>
                 ${(pCopy?.tags || []).length ? `<div class="sub mono clip1" style="font-size:11px;color:var(--accent)">${pCopy.tags.map(t => `#${PS.esc(t)}`).join(' ')}</div>` : ''}
               </div>`;
             }).join('')}
@@ -288,6 +307,31 @@
     });
     main.querySelector('#localizeCopyBtn')?.addEventListener('click', e => runLocalize(e.currentTarget));
     main.querySelector('#localizeCopyBtn2')?.addEventListener('click', e => runLocalize(e.currentTarget));
+    const savePlatStrat = async (pid, patch) => {
+      const curMap = { ...(PS.S.settings.platformStrategy || {}) };
+      curMap[pid] = { ...(curMap[pid] || {}), ...patch };
+      PS.S.settings.platformStrategy = curMap;
+      PS.save();
+      await PS.api('PUT', '/api/settings', { platformStrategy: { [pid]: curMap[pid] } }).catch(() => {});
+      PS.pages['pub-pack']();
+    };
+    const LANG_CYCLE = ['zh', 'en', 'bilingual'];
+    const FMT_CYCLE = ['video', 'image_text', 'text'];
+    main.querySelectorAll('[data-tog-lang]').forEach(b => b.onclick = () => {
+      const pid = b.dataset.togLang;
+      const cur = (PS.S.settings.platformStrategy?.[pid]?.lang) || (['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'wechat'].includes(pid) ? 'zh' : 'en');
+      const next = LANG_CYCLE[(LANG_CYCLE.indexOf(cur) + 1) % LANG_CYCLE.length];
+      savePlatStrat(pid, { lang: next });
+      PS.toast(`${PS.PLATFORMS[pid].name} 语言已切换为 ${next.toUpperCase()}（写入 config.yaml）`, 'good');
+    });
+    main.querySelectorAll('[data-tog-fmt]').forEach(b => b.onclick = () => {
+      const pid = b.dataset.togFmt;
+      const cur = (PS.S.settings.platformStrategy?.[pid]?.format) || (['douyin', 'xhs', 'bilibili', 'channels', 'youtube'].includes(pid) ? 'video' : ['instagram', 'meta', 'tiktok', 'wechat'].includes(pid) ? 'image_text' : 'text');
+      const next = FMT_CYCLE[(FMT_CYCLE.indexOf(cur) + 1) % FMT_CYCLE.length];
+      savePlatStrat(pid, { format: next });
+      const lab = next === 'video' ? '🎬 视频' : next === 'image_text' ? '🖼️ 图文（不传中文视频）' : '📝 纯文字（不传视频）';
+      PS.toast(`${PS.PLATFORMS[pid].name} 发布载体已切为：${lab}`, 'good');
+    });
     const runCoverGen = async (btn, mode) => {
       const old = btn.innerHTML;
       btn.disabled = true; btn.textContent = mode === 'agent' ? '剪辑 Agent 精做封面中…' : '本地极速出图中…';
@@ -395,9 +439,17 @@
               + (t.hasScreenshot ? `<button class="btn s" data-shot="${pid}">存档</button>` : `<button class="btn s" data-fill="${pid}">重填</button>`);
           }
 
+          const stMap = PS.S.settings.platformStrategy || {};
+          const pStrat = stMap[pid] || {
+            lang: ['douyin', 'xhs', 'bilibili', 'channels', 'youtube', 'wechat'].includes(pid) ? 'zh' : 'en',
+            format: ['douyin', 'xhs', 'bilibili', 'channels', 'youtube'].includes(pid) ? 'video' : ['instagram', 'meta', 'tiktok', 'wechat'].includes(pid) ? 'image_text' : 'text',
+          };
+          const stratTag = `${(pStrat.lang || 'zh').toUpperCase()} · ${pStrat.format === 'video' ? '🎬 视频' : pStrat.format === 'image_text' ? '🖼️ 图文' : '📝 纯文字'}`;
+
           return `<div class="pub-card ${t.state}">
             <div class="row">
               ${PS.plogo(pid, 22)}<b>${p.name}</b>
+              <span class="pill" style="font-size:10px;padding:1px 6px">${stratTag}</span>
               <span class="grow"></span>
               <span class="pill ${sm.cls}">${sm.label}</span>
             </div>

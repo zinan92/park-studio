@@ -24,6 +24,20 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "teardownCustomPrompt": "",
     "onboardingDone": False,
     "uiLang": "auto",               # auto | zh | en
+    "platformStrategy": {
+        "douyin":    {"lang": "zh", "format": "video"},
+        "xhs":       {"lang": "zh", "format": "video"},
+        "bilibili":  {"lang": "zh", "format": "video"},
+        "channels":  {"lang": "zh", "format": "video"},
+        "youtube":   {"lang": "zh", "format": "video"},
+        "wechat":    {"lang": "zh", "format": "image_text"},
+        "instagram": {"lang": "en", "format": "image_text"},
+        "meta":      {"lang": "en", "format": "image_text"},
+        "linkedin":  {"lang": "en", "format": "text"},
+        "x":         {"lang": "en", "format": "text"},
+        "threads":   {"lang": "en", "format": "text"},
+        "tiktok":    {"lang": "en", "format": "image_text"},
+    },
     "obsidianPath": "~/Documents/Obsidian",
     "newsletterItemsPath": "",
     "obsidianFolders": {

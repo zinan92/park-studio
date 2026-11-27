@@ -135,3 +135,58 @@ def test_v050_autopilot_from_video_end_to_end(tmp_path: Path, monkeypatch) -> No
     assert st["result"]["titlesCount"] == 6
     assert st["result"]["hasCovers"] is True
     assert st["result"]["localizedCount"] >= 2
+
+
+def test_v051_platform_strategy_defaults_and_english_visual_card(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    proj_root = tmp_path / "exports"
+    cfg = config.save_config({"obsidianPath": str(tmp_path / "empty"), "projectRoot": str(proj_root)})
+
+    # 校验默认矩阵：YouTube 发中文视频；IG/Meta 发英文图文；LinkedIn/X/Threads 发英文纯文字（均不传中文视频）
+    assert publisher.platform_strategy_for("youtube", cfg) == {"lang": "zh", "format": "video"}
+    assert publisher.platform_strategy_for("instagram", cfg) == {"lang": "en", "format": "image_text"}
+    assert publisher.platform_strategy_for("meta", cfg) == {"lang": "en", "format": "image_text"}
+    assert publisher.platform_strategy_for("linkedin", cfg) == {"lang": "en", "format": "text"}
+
+    monkeypatch.setattr(
+        ai,
+        "run_prompt",
+        lambda prompt, **kw: {
+            "text": json.dumps(
+                {
+                    "youtube": {"lang": "zh", "format": "video", "title": "我用本地开源中控跑通12平台", "description": "中文视频简介", "tags": ["AI工作流"]},
+                    "instagram": {
+                        "lang": "en", "format": "image_text",
+                        "title": "Why Solo Builders Are Leaving SaaS",
+                        "description": "3 lessons from shipping a local Creator OS.",
+                        "tags": ["SoloFounder", "BuildInPublic"],
+                        "card_headline": "Why Solo Builders Leave SaaS",
+                        "card_bullets": ["Zero monthly API tax", "100% local SQLite & FFmpeg", "12 platforms from one hub"],
+                    },
+                    "linkedin": {
+                        "lang": "en", "format": "text",
+                        "title": "Running 12 content platforms solo without SaaS bloat",
+                        "description": "Here is the exact local architecture we shipped.",
+                        "tags": ["OpenSource", "CreatorEconomy"],
+                    },
+                },
+                ensure_ascii=False,
+            ),
+            "backend": "gemini-api",
+            "model": "gemini-2.5-flash",
+        },
+    )
+
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+    ep_id = client.get("/api/publish/episodes").json()["episodes"][0]["id"]
+    res = client.post(f"/api/publish/{ep_id}/localize", json={"platforms": ["youtube", "instagram", "linkedin"]})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["platforms"]["youtube"]["lang"] == "zh"
+    assert data["platforms"]["youtube"]["format"] == "video"
+    assert data["platforms"]["instagram"]["lang"] == "en"
+    assert data["platforms"]["instagram"]["format"] == "image_text"
+    assert data["platforms"]["linkedin"]["format"] == "text"
+    if cutter._which("ffmpeg"):
+        assert data["enCardPath"] and Path(data["enCardPath"]).is_file()
+

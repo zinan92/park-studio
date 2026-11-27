@@ -251,19 +251,32 @@ def _copy_for_platform(ep: dict[str, Any], pid: str) -> tuple[str, str, list[str
 
 
 PLATFORM_LOCALIZE_PROFILES: dict[str, dict[str, str]] = {
-    "douyin": {"lang": "zh", "style": "抖音短视频：标题≤28字强钩子反差，正文简短口语带互动提问，3-5个中文话题"},
-    "xhs": {"lang": "zh", "style": "小红书：标题≤20字带痛点/数字，正文分点易扫读+收藏引导，4-6个精准中文标签"},
-    "bilibili": {"lang": "zh", "style": "B站：信息密度高的清晰标题≤45字，简介含核心看点与时间/工具说明，3-5个中文标签"},
-    "channels": {"lang": "zh", "style": "微信视频号：克制真诚的转发友好口吻，标题≤30字，正文1-3句干货总结，3-4个标签"},
-    "wechat": {"lang": "zh", "style": "微信公众号：标题有判断力与点击欲，导语清晰概括价值，适合图文/视频号联动"},
-    "youtube": {"lang": "en", "style": "YouTube (idiomatic English): searchable punchy title <=90 chars, structured description with key takeaways & CTA, 4-6 English tags"},
-    "x": {"lang": "en", "style": "X / Twitter (idiomatic English): sharp 1-line hook + concise punchy post <=260 chars total, max 1-2 natural hashtags"},
-    "tiktok": {"lang": "en", "style": "TikTok (idiomatic English): curiosity-gap short caption <=150 chars, casual creator tone, 4-5 trending English hashtags"},
-    "instagram": {"lang": "en", "style": "Instagram Reels (idiomatic English): strong opening line + scannable 2-3 line value caption + save/comment CTA, 5-6 English hashtags"},
-    "threads": {"lang": "en", "style": "Threads (idiomatic English): conversational builder-to-builder hot take <=300 chars, zero corporate fluff, 0-2 tags"},
-    "linkedin": {"lang": "en", "style": "LinkedIn (idiomatic English): clear insight hook + 3-4 crisp bullet takeaways + thoughtful closing question for builders/founders, 3-4 professional hashtags"},
-    "meta": {"lang": "en", "style": "Meta Business Suite / Facebook & IG (idiomatic English): engaging accessible hook + 2-3 sentence summary, 3-5 English hashtags"},
+    "douyin": {"lang": "zh", "format": "video", "style": "抖音短视频：标题≤28字强钩子反差，正文简短口语带互动提问，3-5个中文话题"},
+    "xhs": {"lang": "zh", "format": "video", "style": "小红书：标题≤20字带痛点/数字，正文分点易扫读+收藏引导，4-6个精准中文标签"},
+    "bilibili": {"lang": "zh", "format": "video", "style": "B站：信息密度高的清晰标题≤45字，简介含核心看点与工具说明，3-5个中文标签"},
+    "channels": {"lang": "zh", "format": "video", "style": "微信视频号：克制真诚的转发友好口吻，标题≤30字，正文1-3句干货总结，3-4个标签"},
+    "wechat": {"lang": "zh", "format": "image_text", "style": "微信公众号图文：标题有判断力与点击欲，正文提炼为结构清晰的图文长帖"},
+    "youtube": {"lang": "zh", "format": "video", "style": "YouTube（默认面向华语观众发中文视频）：高搜索性中文主标题≤45字（可夹关键英文技术词），清晰中文简介+核心看点+中英混合标签"},
+    "x": {"lang": "en", "format": "text", "style": "X / Twitter (standalone English text post, DO NOT mention watching a Chinese video): sharp 1-line hook + punchy builder insight <=260 chars, 1-2 natural hashtags"},
+    "tiktok": {"lang": "en", "format": "image_text", "style": "TikTok (standalone English visual/photo post): curiosity-gap short caption <=150 chars + 4-5 English hashtags"},
+    "instagram": {"lang": "en", "format": "image_text", "style": "Instagram (standalone English visual card / carousel post, DO NOT upload or reference Chinese-speaking video): strong opening hook + scannable 3-bullet value caption + save CTA, 5-6 English hashtags"},
+    "threads": {"lang": "en", "format": "text", "style": "Threads (standalone English conversational post, no video): candid builder hot take <=300 chars, zero corporate fluff, 0-2 tags"},
+    "linkedin": {"lang": "en", "format": "text", "style": "LinkedIn (standalone English text/thought-leadership post, DO NOT mention Chinese video): sharp insight hook + 3-4 crisp bullet takeaways from the content + thoughtful question for founders/builders, 3-4 professional hashtags"},
+    "meta": {"lang": "en", "format": "image_text", "style": "Meta Business Suite / Facebook & IG (standalone English visual post, no Chinese video): engaging hook + 2-3 sentence clear summary, 3-5 English hashtags"},
 }
+
+
+def platform_strategy_for(pid: str, cfg: dict[str, Any] | None = None) -> dict[str, str]:
+    cfg = cfg or config.load_config()
+    base = PLATFORM_LOCALIZE_PROFILES.get(pid, {"lang": "en", "format": "text"})
+    over = ((cfg.get("platformStrategy") or {}).get(pid) or {})
+    lang = str(over.get("lang") or base.get("lang") or "en").lower()
+    fmt = str(over.get("format") or base.get("format") or "video").lower()
+    if lang not in ("zh", "en", "bilingual"):
+        lang = base.get("lang", "en")
+    if fmt not in ("video", "image_text", "text"):
+        fmt = base.get("format", "video")
+    return {"lang": lang, "format": fmt}
 
 
 def localize_episode_copy(
@@ -274,14 +287,16 @@ def localize_episode_copy(
     lang_overrides: dict[str, str] | None = None,
     cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """用本机 AI 一次把原稿标题与正文按各平台语言（中/英）与口吻做本地化改写，写入 publish.json.platforms。"""
+    """用本机 AI 一次把原稿/逐字稿按各平台「语言（中/英/双语）× 载体（视频/图文/纯文字）」做本地化改写，写入 publish.json.platforms。"""
+    from . import covers
+
     ep = get_episode(conn, episode_id)
     if not ep:
         raise ValueError("找不到该发布期次")
     cfg = cfg or config.load_config()
     pj = dict(ep.get("publishJson") or {})
     src_title = str(pj.get("title") or ep.get("title") or "").strip()
-    src_desc = str(pj.get("description") or src_title).strip()
+    src_desc = _resolve_episode_transcript(conn, ep, explicit=str(pj.get("transcript") or pj.get("description") or ""))
     src_tags = pj.get("tags") or []
 
     if target_platforms:
@@ -294,25 +309,37 @@ def localize_episode_copy(
 
     overrides = lang_overrides or {}
     plat_lines = []
-    target_langs: dict[str, str] = {}
+    target_strats: dict[str, dict[str, str]] = {}
+    need_en_card = False
     for pid in plats:
-        prof = PLATFORM_LOCALIZE_PROFILES.get(pid, {"lang": "en", "style": "Natural creator style"})
-        lang = str(overrides.get(pid) or prof["lang"]).lower()
-        if lang not in ("zh", "en"):
-            lang = prof["lang"]
-        target_langs[pid] = lang
-        lang_hint = "English (native, idiomatic transcreation — NEVER literal word-for-word translation)" if lang == "en" else "简体中文（地道创作者口吻，自然不生硬）"
-        plat_lines.append(f'- "{pid}": 语言={lang_hint}；风格要求={prof["style"]}')
+        prof = PLATFORM_LOCALIZE_PROFILES.get(pid, {"lang": "en", "format": "text", "style": "Natural creator style"})
+        strat = platform_strategy_for(pid, cfg)
+        if overrides.get(pid) in ("zh", "en", "bilingual"):
+            strat["lang"] = str(overrides[pid])
+        target_strats[pid] = strat
+        if strat["lang"] == "en" and strat["format"] == "image_text":
+            need_en_card = True
+        lang_hint = (
+            "English (native, idiomatic transcreation — NEVER literal translation, zero Chinese characters)"
+            if strat["lang"] == "en"
+            else ("中英双语（中文主干 + 英文精炼摘要/关键词）" if strat["lang"] == "bilingual" else "简体中文（地道创作者口吻，自然不生硬）")
+        )
+        fmt_hint = (
+            "配视频发布的标题与简介"
+            if strat["format"] == "video"
+            else ("独立图文帖（不传中文视频，请把核心干货提炼为可独立阅读的图文帖，并额外输出英文卡片标题 card_headline 和 3 条要点 card_bullets）" if strat["format"] == "image_text" else "独立纯文字帖（不传视频，把核心观点写成能独立传播的文字帖，绝不写“看上面视频”）")
+        )
+        plat_lines.append(f'- "{pid}": 语言={lang_hint}；载体={fmt_hint}；风格={prof["style"]}')
 
     prompt = (
         "你是一位精通中英文跨平台内容分发的资深创作者与本地化编辑。\n"
         f"原始标题：{src_title}\n"
-        f"原始正文/简介：\n{src_desc[:3000]}\n"
+        f"原始逐字稿 / 正文内容：\n{src_desc[:3600]}\n"
         f"原始标签：{', '.join(str(t) for t in src_tags[:10]) or '无'}\n\n"
-        "请为下面每个目标平台生成专属本地化版本（注意：英文平台必须改写成地道英文表达，不要直译腔，不要夹杂中文）：\n"
+        "请为下面每个目标平台生成专属版本（英文纯文字/图文平台必须写成可独立阅读的地道英文内容，绝不提及中文口播视频）：\n"
         + "\n".join(plat_lines)
-        + "\n\n严格只返回一个 JSON 对象，key 必须为上面列出的平台 ID，每个 value 格式为：\n"
-        '{"lang":"en|zh","title":"平台标题","description":"平台正文/简介","tags":["不带#号的标签1","标签2"]}'
+        + "\n\n严格只返回一个 JSON 对象，key 为上面列出的平台 ID，每个 value 格式为：\n"
+        '{"lang":"en|zh|bilingual","format":"video|image_text|text","title":"平台标题","description":"平台正文/简介","tags":["不带#号的标签1","标签2"],"card_headline":"(仅图文平台需要，简短卡片大字)","card_bullets":["(仅图文平台需要，要点1)","要点2","要点3"]}'
     )
     res = ai.run_prompt(prompt, cfg=cfg, timeout=120)
     parsed = ai.extract_json_block(res["text"])
@@ -321,6 +348,7 @@ def localize_episode_copy(
 
     plat_map = dict(pj.get("platforms") or {})
     localized_count = 0
+    card_seed: tuple[str, list[str]] | None = None
     for pid in plats:
         item = parsed.get(pid)
         if not isinstance(item, dict):
@@ -331,20 +359,39 @@ def localize_episode_copy(
         if isinstance(raw_tags, str):
             raw_tags = [x.strip() for x in raw_tags.replace("，", ",").split(",") if x.strip()]
         tags = [str(t).lstrip("#").strip() for t in raw_tags if str(t).strip()][:8]
+        strat = target_strats[pid]
         if title or desc:
-            eff_lang = str(item.get("lang") or target_langs[pid]).lower()
+            eff_lang = str(item.get("lang") or strat["lang"]).lower()
             fallback_title = (desc.splitlines()[0][:84] if eff_lang == "en" and desc else src_title)
+            c_head = str(item.get("card_headline") or "").strip()
+            c_bul = [str(x).strip() for x in (item.get("card_bullets") or []) if str(x).strip()][:3]
+            if eff_lang == "en" and strat["format"] == "image_text" and not card_seed:
+                card_seed = (c_head or title or fallback_title, c_bul)
             plat_map[pid] = {
                 **(plat_map.get(pid) or {}),
                 "lang": eff_lang,
+                "format": strat["format"],
                 "title": title or fallback_title,
                 "description": desc or title or src_desc,
                 "tags": tags,
+                **({"card_headline": c_head, "card_bullets": c_bul} if (c_head or c_bul) else {}),
             }
             localized_count += 1
 
     if localized_count == 0:
         raise ai.AIError("未能解析出任何平台的适配文案，请重试")
+
+    # 若启用了英文图文平台（如 IG / Meta），顺手自动生成 1 张纯英文杂志图文卡片 PNG（绝不传中文口播视频）
+    en_card_path = str(pj.get("en_card_path") or "")
+    if need_en_card and card_seed:
+        try:
+            _ep_dir, up_dir = covers._target_upload_dir(ep, cfg)
+            made = covers.generate_english_visual_card(up_dir, headline=card_seed[0], bullets=card_seed[1])
+            if made:
+                en_card_path = made
+                pj["en_card_path"] = en_card_path
+        except Exception:
+            pass
 
     pj["platforms"] = plat_map
     packed = pack_episode(conn, episode_id, publish_json=pj)
@@ -353,6 +400,7 @@ def localize_episode_copy(
         "ok": True,
         "localized": localized_count,
         "platforms": plat_map,
+        "enCardPath": en_card_path,
         "episode": packed["episode"],
         "path": packed["path"],
         "backend": res["backend"],
@@ -726,11 +774,37 @@ async def fill_platform(
             else:
                 return _fail_login("公众号尚未登录（未检测到 token），请扫码后重试")
 
-        # 1. 如绑定了本地视频文件，等待上传框挂载并通过原生 CDP setFileInputFiles 自动注入（支持穿透 Shadow DOM）
-        video_required_plats = {"douyin", "xhs", "bilibili", "channels", "youtube", "tiktok", "instagram", "meta"}
+        # 1. 按当前平台的载体策略（video / image_text / text）决定上传视频、上传英文图文卡，还是纯文字发帖（绝不把中文口播视频错传给英文图文/文字平台！）
+        strat = platform_strategy_for(pid, cfg)
+        fmt = strat["format"]
+        pj_cur = ep.get("publishJson") or {}
+        en_card_raw = str(pj_cur.get("en_card_path") or "").strip()
+        en_card_file = Path(en_card_raw).expanduser() if en_card_raw else None
+        has_en_card = bool(en_card_file and en_card_file.is_file())
+
+        media_to_upload: Path | None = None
+        media_kind = "none"
+        if fmt == "video" and has_video and video_file is not None and pid != "wechat":
+            media_to_upload = video_file
+            media_kind = "video"
+        elif fmt == "image_text" and pid != "wechat":
+            if strat["lang"] == "en" and has_en_card and en_card_file is not None:
+                media_to_upload = en_card_file
+                media_kind = "image"
+            elif has_cover_v and cover_v_file is not None:
+                media_to_upload = cover_v_file
+                media_kind = "image"
+            elif has_cover_h and cover_h_file is not None:
+                media_to_upload = cover_h_file
+                media_kind = "image"
+
+        video_required_plats = {pid} if (fmt == "video" and pid != "wechat") else set()
+        image_required_plats = {pid} if (fmt == "image_text" and pid in ("instagram", "meta", "tiktok")) else set()
         uploaded_ok = False
         text_filled_ok = False
-        if has_video and video_file is not None and pid != "wechat":
+        if fmt == "text":
+            filled_notes.append(f"纯文字模式（{strat['lang'].upper()} · 不传视频）")
+        elif media_to_upload is not None:
             sels = ("input[type=file]",) if pid in ("youtube", "tiktok", "instagram", "meta", "linkedin") else (
                 "input.upload-input",
                 "input[type=file][accept*='video']",
@@ -740,7 +814,6 @@ async def fill_platform(
             )
             for sel in sels:
                 if not await _wait_for_selector(client, sid, sel, timeout_s=6.0):
-                    # 二次检查是否发生了延迟登录跳转
                     try:
                         cur_href = str(await client.evaluate(sid, "location.href") or "")
                         if _is_login_url(cur_href):
@@ -749,15 +822,16 @@ async def fill_platform(
                         pass
                     continue
                 try:
-                    if await client.set_file_input(sid, sel, [str(video_file)]):
-                        filled_notes.append(f"已自动选片 {video_file.name}")
+                    if await client.set_file_input(sid, sel, [str(media_to_upload)]):
+                        tag_lbl = "已自动传英文图文卡" if media_kind == "image" else "已自动选片"
+                        filled_notes.append(f"{tag_lbl} {media_to_upload.name}")
                         uploaded_ok = True
                         await asyncio.sleep(5.0 if pid in ("youtube", "tiktok", "meta") else 3.5)
                         break
                 except Exception:
                     continue
             if not uploaded_ok:
-                filled_notes.append("未找到视频上传框或选片未生效")
+                filled_notes.append("未找到媒体上传框或上传未生效")
         elif pid in video_required_plats:
             filled_notes.append("未在「发布 → 打包」绑定本地 .mp4（视频平台需先选片才会出现标题和文案框）")
 
@@ -863,12 +937,12 @@ async def fill_platform(
         except Exception:
             shot_path = None
 
-    # 4. 严格验证门禁：绝不报「假成功」——视频平台必须上传且回填文本成功，图文平台必须正文填入成功！
+    # 4. 严格验证门禁：绝不报「假成功」——视频模式须传视频+填文本，图文模式须传图+填文本，纯文字模式须填入正文！
     verified = False
-    if pid in video_required_plats:
+    if pid in video_required_plats or pid in image_required_plats:
         verified = bool(uploaded_ok and text_filled_ok)
     else:
-        verified = bool(text_filled_ok or uploaded_ok)
+        verified = bool(text_filled_ok)
 
     ts = db.now_iso()
     pname = platforms.PLATFORM_SPECS[pid]["name"]
@@ -877,7 +951,11 @@ async def fill_platform(
         detail = " · ".join(filled_notes) + " · 请在专用 Chrome 核对后亲自点「发布」"
     else:
         final_state = "failed"
-        miss_why = "视频未成功上传" if (pid in video_required_plats and not uploaded_ok) else "未检测到标题/文案输入框或写入失败"
+        miss_why = (
+            "视频未成功上传"
+            if (pid in video_required_plats and not uploaded_ok)
+            else ("英文图文卡未成功上传" if (pid in image_required_plats and not uploaded_ok) else "未检测到标题/文案输入框或写入失败")
+        )
         detail = f"填表未通过校验（{miss_why}）：" + " · ".join(filled_notes)
 
     conn.execute(

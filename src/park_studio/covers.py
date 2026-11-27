@@ -147,6 +147,65 @@ def generate_local_covers(
     return {"ok": True, "mode": "local", "covers": outputs, "uploadDir": str(upload_dir), "usedDrawtext": can_drawtext}
 
 
+def generate_english_visual_card(
+    upload_dir: Path,
+    *,
+    headline: str,
+    bullets: list[str] | None = None,
+    subtitle: str = "Notes from a Solo Builder",
+) -> str:
+    """为 Instagram / Meta / LinkedIn 生成纯英文杂志风图文卡片 PNG（1080×1350，绝不含中文口播视频）。"""
+    ff = cutter._which("ffmpeg")
+    if not ff:
+        return ""
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    out_png = upload_dir / "英文图文卡（IG、Meta、LinkedIn）.png"
+    font_file = _pick_font_file()
+    can_drawtext = bool(font_file) and _has_drawtext(ff)
+    w, h = 1080, 1350
+    clean_head = _wrap_headline(headline or "Creator Notes", 22)
+    clean_bullets = [str(b).strip()[:76] for b in (bullets or []) if str(b).strip()][:3]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        vf_parts = [
+            f"drawbox=x=72:y=96:w=110:h=10:color=0x5E6AD2@0.95:t=fill",
+            f"drawbox=x=72:y={h - 140}:w={w - 144}:h=2:color=white@0.15:t=fill",
+        ]
+        if can_drawtext:
+            esc_font = font_file.replace(":", "\\:")
+            h_file = tmp_dir / "en_head.txt"
+            h_file.write_text(clean_head, encoding="utf-8")
+            vf_parts.append(
+                f"drawtext=fontfile='{esc_font}':textfile='{str(h_file).replace(':', '\\:')}':"
+                "fontcolor=white:fontsize=68:line_spacing=20:x=72:y=148"
+            )
+            cur_y = 470
+            for idx, b in enumerate(clean_bullets, 1):
+                b_file = tmp_dir / f"en_b{idx}.txt"
+                b_file.write_text(f"{idx}. {_wrap_headline(b, 32)}", encoding="utf-8")
+                vf_parts.append(
+                    f"drawtext=fontfile='{esc_font}':textfile='{str(b_file).replace(':', '\\:')}':"
+                    f"fontcolor=0xD8DCE8:fontsize=38:line_spacing=14:x=72:y={cur_y}"
+                )
+                cur_y += 205
+            s_file = tmp_dir / "en_sub.txt"
+            s_file.write_text((subtitle or "Park Studio").strip()[:50], encoding="utf-8")
+            vf_parts.append(
+                f"drawtext=fontfile='{esc_font}':textfile='{str(s_file).replace(':', '\\:')}':"
+                f"fontcolor=0x8A919E:fontsize=30:x=72:y={h - 108}"
+            )
+        argv = [
+            ff, "-nostdin", "-hide_banner", "-y",
+            "-f", "lavfi", "-i", f"color=c=0x12141A:s={w}x{h}:d=1",
+            "-vf", ",".join(vf_parts), "-frames:v", "1", str(out_png),
+        ]
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=25, check=False)
+        if done.returncode == 0 and out_png.is_file():
+            return str(out_png)
+    return ""
+
+
 def generate_episode_covers(
     conn,
     episode_id: int,
