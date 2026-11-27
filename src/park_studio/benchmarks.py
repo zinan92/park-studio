@@ -552,3 +552,89 @@ def ai_teardown_benchmark(
         "backend": res["backend"],
         "model": res["model"],
     }
+
+
+def _clean_vtt_or_srt(raw: str) -> str:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for ln in (raw or "").splitlines():
+        s = ln.strip()
+        if not s or s.startswith(("WEBVTT", "Kind:", "Language:", "NOTE")) or "-->" in s or s.isdigit():
+            continue
+        s = re.sub(r"<[^>]+>", "", s).strip()
+        if s and s not in seen:
+            seen.add(s)
+            lines.append(s)
+    return "\n".join(lines)
+
+
+def fetch_url_transcript(url: str, *, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """通过本机 yt-dlp 从任意 YouTube / B 站 / 抖音 / X 视频链接自动提取标题、作者与字幕（无字幕时自动下载音频走本机 Whisper）。"""
+    import subprocess
+    import sys
+    import tempfile
+    from . import cutter, deps
+
+    clean_url = (url or "").strip()
+    if not clean_url.startswith("http"):
+        raise ValueError("请输入完整的视频链接（https:// 开头）")
+
+    yt_bin = deps._which("yt-dlp")
+    base_cmd = [yt_bin] if yt_bin else [sys.executable, "-m", "yt_dlp"]
+    env = deps._env()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        meta_proc = subprocess.run(
+            [*base_cmd, "--no-playlist", "--dump-single-json", "--skip-download", clean_url],
+            capture_output=True, text=True, timeout=40, env=env, check=False,
+        )
+        if meta_proc.returncode != 0:
+            err = (meta_proc.stderr or meta_proc.stdout or "yt-dlp 无法解析该链接").strip()[-240:]
+            raise RuntimeError(f"yt-dlp 抓取失败（请确认已安装 yt-dlp 且链接可访问）：{err}")
+        try:
+            info = json.loads(meta_proc.stdout)
+        except Exception as exc:
+            raise RuntimeError("yt-dlp 返回元数据无法解析") from exc
+
+        title = str(info.get("title") or "").strip() or "未命名对标视频"
+        author = str(info.get("uploader") or info.get("channel") or "").strip()
+        desc = str(info.get("description") or "").strip()
+
+        # 优先尝试拉官方/自动字幕（零下载视频，3 秒完成）
+        subprocess.run(
+            [
+                *base_cmd, "--no-playlist", "--skip-download",
+                "--write-subs", "--write-auto-subs",
+                "--sub-langs", "zh.*,zh-Hans,zh-CN,en.*,en",
+                "-o", str(tmp_dir / "sub.%(ext)s"),
+                clean_url,
+            ],
+            capture_output=True, text=True, timeout=40, env=env, check=False,
+        )
+        transcript = ""
+        for sub_file in sorted(tmp_dir.glob("sub.*")):
+            if sub_file.suffix.lower() in (".vtt", ".srt"):
+                txt = _clean_vtt_or_srt(sub_file.read_text(encoding="utf-8", errors="replace"))
+                if len(txt) > len(transcript):
+                    transcript = txt
+
+        # 若无外挂字幕且本机有 whisper，则下载音轨做本机离线转写
+        if not transcript and cutter.check_env(cfg).get("transcribe"):
+            audio_tpl = str(tmp_dir / "audio.%(ext)s")
+            dl = subprocess.run(
+                [*base_cmd, "--no-playlist", "-f", "bestaudio/best", "-o", audio_tpl, clean_url],
+                capture_output=True, text=True, timeout=90, env=env, check=False,
+            )
+            if dl.returncode == 0:
+                audio_files = [p for p in tmp_dir.glob("audio.*") if p.is_file()]
+                if audio_files:
+                    try:
+                        tr_plan = cutter.transcribe_video(audio_files[0], cfg=cfg)
+                        transcript = "\n".join(str(x.get("text") or "") for x in tr_plan.get("lines") or [])
+                    except Exception:
+                        pass
+
+        if not transcript:
+            transcript = desc[:4500]
+        return {"title": title, "author": author, "url": clean_url, "transcript": transcript[:6000]}

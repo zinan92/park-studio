@@ -14,6 +14,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "cutAgentBackend": "inherit",   # inherit（跟随全局）| gemini | claude | codex | custom
     "cutAgentModel": "",            # 独立剪辑 Agent 模型（留空跟随该引擎默认）
     "cutAgentCmd": "",              # 自定义剪辑 CLI / Skill 命令（选 custom 时使用）
+    "cutAgentAllowExec": False,     # 是否授权剪辑 Agent 在当前视频工程目录内读写文件并执行剪辑/封面脚本
     "apiBaseUrl": "https://api.deepseek.com/v1",
     "apiKey": "",
     "apiModel": "deepseek-chat",

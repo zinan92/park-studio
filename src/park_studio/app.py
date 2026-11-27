@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ai, benchmarks, cdp, config, cutter, daemon, dailies, db, materials, metrics, platforms, projects, publisher, studiopos, vault
+from . import ai, benchmarks, cdp, config, covers, cutter, daemon, dailies, db, deps, materials, metrics, platforms, projects, publisher, studiopos, vault
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -168,6 +168,8 @@ class OnboardingCompleteReq(BaseModel):
     platforms: list[str]
     aiBackend: str | None = None
     aiModel: str | None = None
+    cutAgentBackend: str | None = None
+    cutAgentAllowExec: bool | None = None
 
 
 class LocalizePublishReq(BaseModel):
@@ -178,6 +180,32 @@ class LocalizePublishReq(BaseModel):
 class TranslateSrtReq(BaseModel):
     target_lang: str = "en"
     bilingual: bool = False
+
+
+class DepsInstallReq(BaseModel):
+    targets: list[str] | None = None
+
+
+class CoverGenReq(BaseModel):
+    mode: str = "local"
+    headline: str = ""
+    subtitle: str = ""
+    style_hint: str = ""
+    frame_ratio: float = 0.28
+
+
+class BenchmarkUrlReq(BaseModel):
+    url: str
+    mode: str = ""
+    modules: list[str] | None = None
+    custom_prompt: str = ""
+
+
+class ReviewNextTopicsReq(BaseModel):
+    title: str
+    views: int = 0
+    multiple: float = 0.0
+    platform: str = "douyin"
 
 
 class KbFoldersReq(BaseModel):
@@ -367,7 +395,54 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "kb": vault.list_kb_folders(cfg),
             "materials": materials.get_materials(kind="image", limit=24, cfg=cfg),
             "cutEnv": cutter.check_env(cfg),
+            "deps": deps.check_all_deps(),
         }
+
+    @app.get("/api/deps")
+    def api_deps() -> dict[str, Any]:
+        return deps.check_all_deps()
+
+    @app.post("/api/deps/install")
+    def api_deps_install(req: DepsInstallReq | None = None) -> dict[str, Any]:
+        targets = req.targets if req else None
+
+        def run_install(log_fn) -> dict[str, Any]:
+            return deps.install_deps(targets, log=log_fn)
+
+        job = cutter.JOBS.start("install_deps", "一键安装本地依赖", run_install)
+        return {"ok": True, "job": job}
+
+    @app.get("/api/media/stream")
+    def api_media_stream(path: str) -> FileResponse:
+        """安全流式读取本机视频/封面预览（严格限定在 projectRoot / ~/.park-studio/projects 或当前绑定的媒体文件内）。"""
+        raw = (path or "").strip()
+        if not raw:
+            raise HTTPException(400, "path 不能为空")
+        target = Path(raw).expanduser().resolve()
+        if not target.is_file():
+            raise HTTPException(404, "媒体文件不存在")
+        cfg = config.load_config()
+        allowed_roots = [
+            projects.project_root(cfg).resolve(),
+            config.projects_dir().resolve(),
+        ]
+        allowed_exact: set[Path] = set()
+        for r in conn.execute("SELECT source_file FROM cut_projects WHERE source_file != ''").fetchall():
+            try:
+                allowed_exact.add(Path(r["source_file"]).expanduser().resolve())
+            except Exception:
+                pass
+        for r in conn.execute("SELECT video_path, cover_v_path, cover_h_path FROM publish_episodes").fetchall():
+            for col in ("video_path", "cover_v_path", "cover_h_path"):
+                if r[col]:
+                    try:
+                        allowed_exact.add(Path(r[col]).expanduser().resolve())
+                    except Exception:
+                        pass
+        ok_root = any(root in target.parents or target == root for root in allowed_roots)
+        if not ok_root and target not in allowed_exact:
+            raise HTTPException(403, "只允许预览当前工程目录或已绑定的视频与封面文件")
+        return FileResponse(target)
 
     # ---------- AI 日报按期/按条解析（对齐 xuanti 工作台） ----------
     @app.get("/api/source/newsletter")
@@ -469,6 +544,29 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         except ai.AIError as exc:
             raise HTTPException(502, str(exc)) from exc
         return {**res, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg)}
+
+    @app.post("/api/benchmarks/from-url")
+    def api_benchmark_from_url(req: BenchmarkUrlReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        try:
+            fetched = benchmarks.fetch_url_transcript(req.url, cfg=cfg)
+            res = benchmarks.ai_teardown_benchmark(
+                conn,
+                title=fetched["title"],
+                author=fetched["author"],
+                url=fetched["url"],
+                transcript=fetched["transcript"],
+                positioning_text=_positioning_text(),
+                mode=req.mode,
+                modules=req.modules,
+                custom_prompt=req.custom_prompt,
+                cfg=cfg,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except (RuntimeError, ai.AIError) as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {**res, "fetched": fetched, "benchmarks": benchmarks.list_benchmarks(conn, cfg=cfg)}
 
     # ---------- 视觉素材库（四大类：图片 / 视频动效 / 做视频 / 视频案例 2,656+） ----------
     @app.get("/api/materials")
@@ -841,21 +939,70 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             job = cutter.JOBS.start("render_rough", f"一键粗剪渲染 · {row['title'][:20]}", run_rough)
             return {"ok": True, "job": job}
 
-        # 高级动效模式：导出 worktable.json + 后台触发独立剪辑 Agent
+        # 高级动效模式：导出 worktable.json 到标准工程目录，若已授权则真执行剪辑 Agent 产出 MP4 + 自动落盘
         wt = export_worktable(cut_id)
+        allow_exec = bool(cfg.get("cutAgentAllowExec"))
 
         def run_motion_agent(log_fn) -> dict[str, Any]:
             wt_path = wt["path"]
-            log_fn(f"已导出标准镜头表：{wt_path}")
+            ep_dir = projects.scaffold_episode_dir(row["title"] or f"EP{row['episode']}", cfg=cfg)
+            upload_dir = ep_dir / "final" / "上传"
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            analysis_wt = ep_dir / "analysis" / "worktable.json"
+            analysis_wt.parent.mkdir(parents=True, exist_ok=True)
+            analysis_wt.write_text(json.dumps(wt["payload"], ensure_ascii=False, indent=2), encoding="utf-8")
+
+            log_fn(f"已导出标准镜头表：{analysis_wt}")
             cut_backend = str(cfg.get("cutAgentBackend") or "inherit")
-            log_fn(f"正在通过独立剪辑 Agent（{cut_backend}）执行高级动效方案…")
+
+            if allow_exec:
+                log_fn(f"已获得本地执行授权，正在拉起剪辑 Agent（{cut_backend}）在工程目录中真正执行剪辑与动效渲染…")
+                target_mp4 = upload_dir / "视频（全平台）.mp4"
+                prompt = (
+                    f"你是全能视频剪辑与动效 Agent。请直接在当前工作目录（{ep_dir}）中完成这期视频的实际剪辑与渲染：\n"
+                    f"1. 原片路径：{vp}\n"
+                    f"2. 标准镜头表与 Hook 方案：{analysis_wt}（请先读取该 JSON）\n"
+                    f"3. 是否烧录字幕：{burn_subs}\n"
+                    f"4. 请使用本机 ffmpeg / Python / Remotion 等工具真正执行剪辑、去停顿、按镜头表叠加大字动效/数据卡/转场、统一响度 -16 LUFS 并加上 -movflags +faststart；\n"
+                    f"5. 最终成片必须直接输出为：{target_mp4}\n"
+                    f"6. 顺手从成片中生成 3 张高转化封面 PNG 放到 `final/上传/`（竖封面/横封面/16比9封面，若时间紧可先保证成片落盘）。\n"
+                    "完成后汇报输出文件路径、时长与执行摘要。"
+                )
+                res = ai.run_agent_execute(prompt, cwd=ep_dir, cfg=cfg, timeout=360)
+                log_fn(f"剪辑 Agent 执行完毕（{res['backend']}/{res['model']}），正在扫描 final/上传/ 成片…")
+                mp4s = sorted(upload_dir.glob("*.mp4"), key=lambda p: p.stat().st_mtime, reverse=True)
+                out_payload: dict[str, Any] = {
+                    "worktablePath": str(analysis_wt),
+                    "agentReply": res["text"],
+                    "backend": res["backend"],
+                    "model": res["model"],
+                    "executed": True,
+                    "folder": str(ep_dir),
+                }
+                if mp4s:
+                    c2 = db.connect(db_file)
+                    try:
+                        imp = publisher.import_from_project_dir(c2, str(ep_dir), cfg=cfg)
+                        c2.execute("UPDATE cut_projects SET status='done', updated_at=? WHERE id=?", (db.now_iso(), cut_id))
+                        c2.commit()
+                        _save_cut_meta(c2, cut_id, {"outputPath": str(mp4s[0]), "publishFolder": str(ep_dir)})
+                        out_payload["videoPath"] = str(mp4s[0])
+                        out_payload["publishEpisode"] = imp["episode"]
+                        log_fn(f"✓ 检测到新渲染成片：{mp4s[0].name}，已自动导入发布工作台！")
+                    finally:
+                        c2.close()
+                else:
+                    log_fn("提示：Agent 已完成回复，但未在 final/上传/ 检测到新 .mp4（可在下方查看执行回执或改用一键粗剪）。")
+                return out_payload
+
+            log_fn(f"未开启本地执行授权，正在以只读规划模式调用剪辑 Agent（{cut_backend}）…")
             prompt = (
                 f"请读取 {wt_path} 中的 Hook 与镜头表（Spec Table），原片路径为 {vp}，"
                 f"字幕烧录={burn_subs}。请输出剪辑执行计划与下一步命令（成片请输出到统一工程目录 final/上传/）。"
             )
             res = ai.run_cut_prompt(prompt, cfg=cfg, timeout=180)
-            log_fn(f"独立剪辑 Agent 执行完毕（{res['backend']}/{res['model']}）")
-            return {"worktablePath": wt_path, "agentReply": res["text"], "backend": res["backend"], "model": res["model"]}
+            log_fn(f"剪辑规划完成（{res['backend']}/{res['model']}）。如需让 Agent 直接动手剪出成片，请在「系统 → 独立剪辑 Agent」开启本地执行授权。")
+            return {"worktablePath": wt_path, "agentReply": res["text"], "backend": res["backend"], "model": res["model"], "executed": False}
 
         job = cutter.JOBS.start("render_motion", f"高级动效 Agent · {row['title'][:20]}", run_motion_agent)
         return {"ok": True, "job": job}
@@ -955,6 +1102,10 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             patch["aiBackend"] = req.aiBackend
         if req.aiModel is not None:
             patch["aiModel"] = req.aiModel
+        if req.cutAgentBackend:
+            patch["cutAgentBackend"] = req.cutAgentBackend
+        if req.cutAgentAllowExec is not None:
+            patch["cutAgentAllowExec"] = bool(req.cutAgentAllowExec)
         cfg = config.save_config(patch)
         names = "、".join(platforms.PLATFORM_SPECS[p]["name"] for p in enabled) or "暂不启用平台"
         db.log_event(conn, "引导", f"{len(enabled)}/{len(platforms.PLAT_ORDER)} 平台", "完成平台按需选择", names[:60])
@@ -990,6 +1141,61 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "reply": res["text"][:120],
             "latencyMs": ms,
         }
+
+    @app.post("/api/ai/draft")
+    def ai_draft(req: AIRequest) -> dict[str, Any]:
+        if not req.title.strip():
+            raise HTTPException(400, "先填写选题标题再扩写初稿")
+        prompt = (
+            f"{_positioning_text()}\n\n"
+            f"创作者真实原话库（绝不编造虚假案例）：\n{_said_text()}\n\n"
+            f"选题标题：{req.title}\n已有零散想法/大纲：\n{req.body[:1500] or '无，请直接按标题起草'}\n\n"
+            "请写一篇 700–1100 字的短视频口播初稿，要求：\n"
+            "1. 前 3 秒直接抛强反差结论或痛点，绝不寒暄；\n"
+            "2. 像真人在镜头前聊天，短句为主，逻辑推进清晰（痛点 → 核心观点 → 2-3 个具体拆解/实操步骤 → 结尾行动号召）；\n"
+            "3. 需要创作者补自己真实数字/截图的地方用【待填：...】标出。\n"
+            "直接输出完整口播正文，不要加额外客套话。"
+        )
+        try:
+            res = ai.run_prompt(prompt)
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        body_txt = res["text"].strip()
+        if req.topic_id and body_txt:
+            conn.execute("UPDATE topics SET body=?, stage='写', updated_at=? WHERE id=?", (body_txt, db.now_iso(), req.topic_id))
+            conn.commit()
+        db.log_event(conn, "AI", f"{res['backend']}/{res['model']}", "一键扩写口播初稿", f"{len(body_txt)} 字")
+        return {"body": body_txt, "backend": res["backend"], "model": res["model"]}
+
+    @app.post("/api/review/next-topics")
+    def api_review_next_topics(req: ReviewNextTopicsReq) -> dict[str, Any]:
+        if not req.title.strip():
+            raise HTTPException(400, "作品标题不能为空")
+        prompt = (
+            f"{_positioning_text()}\n\n"
+            f"这条已发作品跑出了好成绩：\n"
+            f"- 标题：{req.title}\n- 平台：{req.platform}\n- 实测播放：{req.views}\n- 平时倍数：{req.multiple}×\n\n"
+            "请复盘它为什么打中观众，并立刻反推出 3 个最值得连拍的下一期续集/衍生选题（换角度深挖或打反面痛点，绝不重复旧内容）。\n"
+            '严格只返回一个 JSON 数组（3 项），每项格式：{"title":"吸引点击的短视频标题","angle":"切入角度与为什么接得住上期流量(<=50字)","hook":"前5秒可直接开口念的开头句(<=80字)"}'
+        )
+        try:
+            res = ai.run_prompt(prompt)
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        parsed = ai.extract_json_block(res["text"])
+        items: list[dict[str, str]] = []
+        if isinstance(parsed, list):
+            for x in parsed[:3]:
+                if isinstance(x, dict) and str(x.get("title") or "").strip():
+                    items.append({
+                        "title": str(x.get("title") or "").strip(),
+                        "angle": str(x.get("angle") or "").strip(),
+                        "hook": str(x.get("hook") or "").strip(),
+                    })
+        if not items:
+            raise HTTPException(502, "AI 未能返回结构化续集选题，请重试")
+        db.log_event(conn, "复盘", f"{res['backend']}/{res['model']}", "爆款反推续集选题", f"产出 {len(items)} 个")
+        return {"ok": True, "topics": items, "backend": res["backend"], "model": res["model"]}
 
     @app.post("/api/ai/hooks")
     def ai_hooks(req: AIRequest) -> dict[str, Any]:
@@ -1300,6 +1506,27 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/publish/{episode_id}/generate-covers")
+    def api_publish_generate_covers(episode_id: int, req: CoverGenReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        r = req or CoverGenReq()
+        try:
+            res = covers.generate_episode_covers(
+                conn,
+                episode_id,
+                mode=r.mode or "local",
+                headline=r.headline,
+                subtitle=r.subtitle,
+                style_hint=r.style_hint,
+                frame_ratio=r.frame_ratio,
+                cfg=cfg,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except (RuntimeError, ai.AIError) as exc:
             raise HTTPException(502, str(exc)) from exc
         return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
 

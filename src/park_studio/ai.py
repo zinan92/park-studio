@@ -318,3 +318,114 @@ def run_cut_prompt(
         "aiModel": str(cfg.get("cutAgentModel") or "").strip(),
     }
     return run_prompt(prompt, system=system, cfg=override, timeout=timeout, runner=runner)
+
+
+def run_agent_execute(
+    prompt: str,
+    *,
+    cwd: Path,
+    cfg: dict[str, Any] | None = None,
+    timeout: int = 360,
+    runner: Any = subprocess.run,
+) -> dict[str, Any]:
+    """在用户显式授权（cutAgentAllowExec=True）下，以 workspace-write 权限在当前期次工程目录中执行真实剪辑/封面生成任务。"""
+    cfg = cfg or config.load_config()
+    if not cfg.get("cutAgentAllowExec"):
+        raise AIError("尚未授权剪辑 Agent 执行本地文件操作。请在「系统 → 独立剪辑 Agent」或「引导设置」开启「允许剪辑 Agent 在工程目录内读写并执行脚本」。")
+
+    cut_backend = str(cfg.get("cutAgentBackend") or "inherit").strip().lower()
+    eff_backend = str(cfg.get("aiBackend") or "gemini").strip().lower() if cut_backend in ("", "inherit") else cut_backend
+    model = str(cfg.get("cutAgentModel") or (cfg.get("aiModel") if cut_backend in ("", "inherit") else "") or "").strip()
+
+    cwd = Path(cwd).expanduser().resolve()
+    cwd.mkdir(parents=True, exist_ok=True)
+    env = _env()
+
+    if cut_backend == "custom":
+        cmd_tpl = str(cfg.get("cutAgentCmd") or "").strip()
+        if not cmd_tpl:
+            raise AIError("独立剪辑 Agent 选了「自定义命令」，但未填写 CLI 命令")
+        cmd = cmd_tpl.replace("{dir}", str(cwd)).replace("{worktable}", str(cwd / "analysis" / "worktable.json"))
+        done = runner(cmd, input=prompt, shell=True, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, env=env, check=False)
+        if done.returncode != 0:
+            raise AIError(f"自定义剪辑命令执行失败：{(done.stderr or done.stdout or '').strip()[-280:]}")
+        return {"text": (done.stdout or "").strip(), "backend": "custom", "model": cmd.split()[0], "executed": True}
+
+    if eff_backend in ("api", "gemini-api"):
+        raise AIError(
+            "纯 API 模式（Gemini API / 可选 API）只能生成文本方案，无法直接执行本机剪辑脚本。"
+            "请在「系统 → 独立剪辑 Agent」指定本机 CLI（Claude Code / Codex / Gemini CLI / Antigravity）以开启真剪辑与自动做封面。"
+        )
+
+    if eff_backend == "claude":
+        binary = _which("claude")
+        if not binary and runner is subprocess.run:
+            raise AIError("本机未检测到 claude CLI，请先安装并运行 claude 登录")
+        argv = [
+            binary or "claude",
+            "-p", prompt,
+            "--output-format", "text",
+            "--allowedTools", "Bash,Read,Write,Edit",
+        ]
+        if model and not model.lower().startswith("gemini") and model.lower() != "neon":
+            argv += ["--model", model]
+        done = runner(argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, env=env, check=False)
+        if done.returncode != 0:
+            raise AIError(f"Claude Code 剪辑执行失败：{(done.stderr or done.stdout or '').strip()[-280:]}")
+        return {"text": (done.stdout or "").strip() or "Claude Code 执行完成", "backend": "claude", "model": model or "default", "executed": True}
+
+    if eff_backend == "codex":
+        binary = _which("codex")
+        if not binary and runner is subprocess.run:
+            raise AIError("本机未检测到 codex CLI，请先安装并运行 codex login")
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp:
+            out_path = tmp.name
+        try:
+            argv = [
+                binary or "codex",
+                "exec",
+                "--skip-git-repo-check",
+                "-s", "workspace-write",
+                "-C", str(cwd),
+                "-o", out_path,
+            ]
+            if model and not model.lower().startswith("gemini") and model.lower() != "neon":
+                argv += ["-m", model]
+            argv += ["--ephemeral", "-"]
+            done = runner(argv, input=prompt, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, env=env, check=False)
+            if done.returncode != 0:
+                raise AIError(f"Codex 剪辑执行失败：{(done.stderr or done.stdout or '').strip()[-280:]}")
+            text = Path(out_path).read_text(encoding="utf-8", errors="replace").strip() if Path(out_path).is_file() else ""
+            if not text:
+                text = (done.stdout or "").strip() or "Codex 执行完成"
+            return {"text": text, "backend": "codex", "model": model or "default", "executed": True}
+        finally:
+            try:
+                Path(out_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    if eff_backend == "gemini":
+        binary = _which("gemini")
+        if not binary and runner is subprocess.run:
+            raise AIError("本机未检测到 gemini CLI，请先安装或将剪辑 Agent 切换为 Claude Code / Codex")
+        argv = [binary or "gemini"]
+        if model:
+            argv += ["-m", model]
+        argv += ["--yolo", "-p", prompt, "-o", "text"]
+        done = runner(argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, env=env, check=False)
+        if done.returncode != 0:
+            raise AIError(f"Gemini CLI 剪辑执行失败：{(done.stderr or done.stdout or '').strip()[-280:]}")
+        return {"text": _clean_cli_output(done.stdout) or "Gemini CLI 执行完成", "backend": "gemini", "model": model or "default", "executed": True}
+
+    if eff_backend == "agy":
+        binary = _which("agy")
+        if not binary and runner is subprocess.run:
+            raise AIError("本机未检测到 agy CLI，请安装 Antigravity CLI 或改用 Claude Code / Codex")
+        argv = build_agy_argv(prompt, model=model)
+        done = runner(argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout, env=env, check=False)
+        if done.returncode != 0:
+            raise AIError(f"Antigravity CLI 剪辑执行失败：{(done.stderr or done.stdout or '').strip()[-280:]}")
+        return {"text": _clean_cli_output(done.stdout) or "Antigravity CLI 执行完成", "backend": "agy", "model": model or "default", "executed": True}
+
+    raise AIError(f"不支持的剪辑执行引擎：{eff_backend}")

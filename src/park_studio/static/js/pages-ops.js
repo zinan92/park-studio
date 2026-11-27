@@ -152,6 +152,32 @@
 
         <div style="border-top:1px solid var(--line-soft);padding-top:12px" class="stack tight">
           <div class="row" style="flex-wrap:wrap;gap:8px">
+            <b style="font-size:13.5px">封面工坊 · 一键生成 3 比例封面（9:16 竖 / 4:3 横 / 16:9 横）</b>
+            <span class="sub" style="font-size:12px">自动保存到 <code>final/上传/</code>，不用跳去 Canva / PS</span>
+            <span class="grow"></span>
+            <button class="btn s" id="genCoverLocalBtn">⚡ 1 秒本地抽帧出 3 张封面</button>
+            <button class="btn primary s" id="genCoverAgentBtn">${PS.icon('spark', 'sm')}让剪辑 Agent 精做封面</button>
+          </div>
+          <div class="sys-2col">
+            <input type="text" id="covHeadlineIn" value="${PS.esc(ep.publishJson?.title || ep.title || '')}" placeholder="封面主标题（大字，建议 12–24 字）">
+            <input type="text" id="covSubtitleIn" value="" placeholder="可选副标题 / 卖点标签（如：全流程开源 · 零 API 费）">
+          </div>
+          ${(ep.coverVPath || ep.coverHPath || ep.publishJson?.cover_169_path) ? `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:4px">
+              ${[
+                ['9:16 竖封面（抖音/视频号）', ep.coverVPath || ep.publishJson?.cover_v_path],
+                ['4:3 横封面（小红书/抖音）', ep.publishJson?.cover_h_path || ep.coverHPath],
+                ['16:9 封面（B站/YouTube）', ep.publishJson?.cover_169_path || ep.coverHPath],
+              ].filter(([, p]) => !!p).map(([label, p]) => `<div class="card stack tight" style="padding:8px;background:var(--sunk);border:0">
+                <span class="sub" style="font-size:11px;font-weight:600">${label}</span>
+                <img src="/api/media/stream?path=${encodeURIComponent(p)}&t=${Date.now()}" alt="${label}" style="width:100%;max-height:160px;object-fit:cover;border-radius:7px;background:#111" onerror="this.style.display='none'">
+              </div>`).join('')}
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="border-top:1px solid var(--line-soft);padding-top:12px" class="stack tight">
+          <div class="row" style="flex-wrap:wrap;gap:8px">
             <b style="font-size:13.5px">分平台文案与中→英本地化预览（当前已启用 ${PS.activePlats().length} 个平台）</b>
             <span class="sub" style="font-size:12px">国内平台默认简体中文，YouTube / X / TikTok / IG / Threads / LinkedIn / Meta 默认改写为地道英文</span>
             <span class="grow"></span>
@@ -205,6 +231,25 @@
     };
     main.querySelector('#localizeCopyBtn')?.addEventListener('click', e => runLocalize(e.currentTarget));
     main.querySelector('#localizeCopyBtn2')?.addEventListener('click', e => runLocalize(e.currentTarget));
+    const runCoverGen = async (btn, mode) => {
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = mode === 'agent' ? '剪辑 Agent 精做封面中…' : '本地极速出图中…';
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/generate-covers`, {
+          mode,
+          headline: main.querySelector('#covHeadlineIn')?.value.trim() || ep.title || '',
+          subtitle: main.querySelector('#covSubtitleIn')?.value.trim() || '',
+        });
+        applyPubRes(res);
+        PS.toast(mode === 'agent' ? `剪辑 Agent 已生成 3 比例封面并写入 final/上传/ ✓` : '1 秒本地生成 3 比例封面完成 ✓', 'good');
+        PS.pages['pub-pack']();
+      } catch (err) {
+        PS.toast(err.message || '封面生成失败', 'warn');
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    };
+    main.querySelector('#genCoverLocalBtn')?.addEventListener('click', e => runCoverGen(e.currentTarget, 'local'));
+    main.querySelector('#genCoverAgentBtn')?.addEventListener('click', e => runCoverGen(e.currentTarget, 'agent'));
     main.querySelector('#rescanProj').onclick = async e => {
       const btn = e.currentTarget; btn.disabled = true;
       try {
@@ -509,8 +554,8 @@
           <section class="card pad-0">
             <div class="card-h" style="padding:14px 16px 6px"><h3>抖音作品实测明细</h3><span class="sub">按发布时间倒序 · 来自专用 Chrome 实时拉取</span></div>
             <div class="tbl-wrap"><table class="tbl">
-              <thead><tr><th>标题</th><th>发布日</th><th class="n">时长</th><th class="n">播放</th><th class="n">倍数</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">转发</th></tr></thead>
-              <tbody>${dy.scatter.map(w => `<tr>
+              <thead><tr><th>标题</th><th>发布日</th><th class="n">时长</th><th class="n">播放</th><th class="n">倍数</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">反推下期</th></tr></thead>
+              <tbody>${dy.scatter.map((w, idx) => `<tr>
                 <td><a href="${PS.esc(w.url || '#')}" target="_blank" rel="noopener" style="font-weight:600">${PS.esc(w.title)}</a></td>
                 <td class="mono sub" style="font-size:12px">${PS.esc(w.published_at || '–')}</td>
                 <td class="n mono sub">${fmtDur(w.sec)}</td>
@@ -519,7 +564,7 @@
                 <td class="n">${PS.fmt(w.likes)}</td>
                 <td class="n">${PS.fmt(w.favorites)}</td>
                 <td class="n">${PS.fmt(w.comments)}</td>
-                <td class="n">${PS.fmt(w.shares)}</td>
+                <td class="n"><button type="button" class="btn s ${w.mult >= 3 ? 'primary' : ''}" data-next-idx="${idx}">反推选题</button></td>
               </tr>`).join('')}</tbody>
             </table></div>
           </section>
@@ -546,6 +591,10 @@
               ${Object.entries(ep.platforms || {}).map(([pid, pw]) => `<a class="pill" href="${PS.esc(pw.url || '#')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px">${PS.plogo(pid, 14)}${PS.PLATFORMS[pid]?.name || pid} <b>${PS.kfmt(pw.views)}</b></a>`).join('')}
             </div>
             ${ep.snapshots?.length ? `<div class="sub" style="font-size:11.5px">快照记录：${ep.snapshots.map(s => `${s.day}（第 ${s.age} 天 · ${PS.kfmt(s.views)}）`).join(' → ')}</div>` : ''}
+            <div class="row" style="padding-top:6px;border-top:1px solid var(--line-soft)">
+              <span class="grow"></span>
+              <button type="button" class="btn s" data-next-ep="${PS.esc(ep.title)}" data-next-views="${ep.views || 0}">${PS.icon('spark', 'sm')}爆款反推下期 3 选题</button>
+            </div>
           </div>`).join('')}
         </div>`;
       }
@@ -572,6 +621,63 @@
     main.querySelector('#copyWeeklyBtn')?.addEventListener('click', () => {
       navigator.clipboard?.writeText(an.weeklyReport || '');
       PS.toast('周报已复制到剪贴板', 'good');
+    });
+
+    const openNextTopicsFlow = async (btn, payload) => {
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'AI 反推中…';
+      try {
+        const res = await PS.api('POST', '/api/review/next-topics', payload);
+        const list = res.topics || [];
+        PS.modal({
+          title: `爆款反推下期 3 个续集选题（基于：${payload.title.slice(0, 22)}）`,
+          wide: true,
+          body: `<div class="stack tight">${list.map((it, i) => `<div class="card stack tight" style="background:var(--sunk);border:0;padding:12px 14px">
+            <div class="row" style="gap:8px">
+              <span class="pill accent">续集 #${i + 1}</span>
+              <b style="font-size:14px">${PS.esc(it.title)}</b>
+              <span class="grow"></span>
+              <button type="button" class="btn primary s" data-add-next="${i}">+ 加入选题池</button>
+            </div>
+            ${it.angle ? `<div class="sub" style="font-size:12.5px"><b>切入角度：</b>${PS.esc(it.angle)}</div>` : ''}
+            ${it.hook ? `<blockquote style="margin:4px 0 0;padding:7px 10px;border-left:3px solid var(--accent);background:var(--surface);border-radius:6px;font-size:13px">“${PS.esc(it.hook)}”</blockquote>` : ''}
+          </div>`).join('')}</div>`,
+          foot: `<button class="btn" data-close>关闭</button><button class="btn primary" id="addAllNextBtn">全部加入选题池</button>`,
+          onOpen(mb, close) {
+            const addOne = async item => {
+              const bodyTxt = [item.hook ? `## 开场钩子\n${item.hook}` : '', item.angle ? `## 切入角度\n${item.angle}` : '', `反推自爆款：${payload.title}`].filter(Boolean).join('\n\n');
+              const created = await PS.api('POST', '/api/topics', { title: item.title, source_ref: '复盘爆款反推', body: bodyTxt });
+              PS.S.topics.unshift(created);
+              PS.save();
+            };
+            mb.querySelectorAll('[data-add-next]').forEach(b => b.onclick = async () => {
+              const item = list[+b.dataset.addNext];
+              if (!item) return;
+              b.disabled = true; b.textContent = '已加入 ✓';
+              await addOne(item);
+              PS.toast(`已加入选题池：${item.title.slice(0, 18)} ✓`, 'good');
+            });
+            mb.querySelector('#addAllNextBtn').onclick = async () => {
+              for (const item of list) await addOne(item);
+              close();
+              PS.toast(`已将 ${list.length} 个续集选题全部加入「选题池」 ✓`, 'good');
+              location.hash = '#pool';
+            };
+          },
+        });
+      } catch (err) {
+        PS.toast(err.message || '反推失败', 'warn');
+      } finally {
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    };
+    main.querySelectorAll('[data-next-idx]').forEach(b => b.onclick = () => {
+      const w = dy.scatter?.[+b.dataset.nextIdx];
+      if (!w) return;
+      openNextTopicsFlow(b, { title: w.title, views: w.views || 0, multiple: w.mult || 0, platform: 'douyin' });
+    });
+    main.querySelectorAll('[data-next-ep]').forEach(b => b.onclick = () => {
+      openNextTopicsFlow(b, { title: b.dataset.nextEp, views: +(b.dataset.nextViews || 0), multiple: 0, platform: 'all' });
     });
     main.querySelector('#revCollectBtn')?.addEventListener('click', async e => {
       const btn = e.currentTarget;

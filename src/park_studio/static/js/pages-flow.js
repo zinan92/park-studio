@@ -652,6 +652,7 @@
             <button class="${bmSort === 'latest' ? 'on' : ''}" data-bms="latest">最新</button>
           </div>
           <button class="btn" id="bmAddAccBtn">+ 添加对标账号</button>
+          <button class="btn" id="bmUrlTearBtn">${PS.icon('spark', 'sm')}贴链接一键拆解</button>
           <button class="btn primary" id="bmNewTearBtn">${PS.icon('spark', 'sm')}AI 拆解新视频</button>
           <a class="btn" href="#source">回日报</a>
         </div>
@@ -856,6 +857,50 @@
             close();
             PS.toast(`已添加对标账号「${name}」，点击「抓最新」即可抓取`, 'good');
             PS.pages.feed();
+          };
+        },
+      });
+    };
+
+    main.querySelector('#bmUrlTearBtn').onclick = () => {
+      PS.modal({
+        title: '粘贴任意视频链接 → 自动抓字幕 + 7 角度拆解',
+        wide: true,
+        body: `<div class="stack">
+          <div class="callout-warm" style="font-size:13px">支持 YouTube / B 站 / 抖音 / X 链接：本机 <code>yt-dlp</code> 自动拉字幕（无字幕时自动走本机 Whisper 转写），再按当前拆解模式生成完整报告。</div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">视频链接</label><input type="url" id="urlTearIn" placeholder="https://www.youtube.com/watch?v=... 或 https://www.bilibili.com/video/..."></div>
+          <div><label class="sub" style="display:block;margin-bottom:4px">拆解模式</label>
+            <select id="urlTearMode">${TEARDOWN_MODES.map(m => `<option value="${m.id}" ${m.id === tdMode ? 'selected' : ''}>${m.label}</option>`).join('')}</select>
+          </div>
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="urlTearRun">抓取字幕并拆解</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#urlTearRun').onclick = async e => {
+            const url = mb.querySelector('#urlTearIn').value.trim();
+            if (!url) return PS.toast('请先粘贴视频链接', 'warn');
+            const pickedMode = mb.querySelector('#urlTearMode').value;
+            e.currentTarget.disabled = true; e.currentTarget.textContent = '抓取字幕 & AI 拆解中…';
+            try {
+              const r = await PS.api('POST', '/api/benchmarks/from-url', {
+                url,
+                mode: pickedMode,
+                modules: pickedMode === 'custom' ? tdModules : null,
+                custom_prompt: pickedMode === 'custom' ? tdCustom : '',
+              });
+              PS.S.benchmarks = r.benchmarks;
+              bmSelId = r.id;
+              bmDetailCache.set(r.id, {
+                id: r.id, kind: 'db', title: r.fetched?.title || url, author: r.fetched?.author || 'AI 拆解',
+                platform: 'youtube', url, published: new Date().toISOString().slice(0, 10),
+                likes: 0, multiple: 0, mainline: r.mainline, whyHit: r.whyHit, body: r.body, structured: r.structured,
+              });
+              close();
+              PS.toast(`已从链接抓字幕并完成 ${r.mode} 拆解 ✓`, 'good');
+              PS.pages.feed();
+            } catch (err) {
+              PS.toast(err.message || '链接抓取或拆解失败', 'warn');
+              e.currentTarget.disabled = false; e.currentTarget.textContent = '抓取字幕并拆解';
+            }
           };
         },
       });
@@ -1152,9 +1197,10 @@
       </div>
 
       <div class="card stack">
-        <div class="row">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
           <b style="font-size:14px">② 口播全文</b>
           <span class="grow"></span>
+          <button class="btn s" id="aiDraftBtn">${PS.icon('spark', 'sm')}AI 一键扩写口播初稿</button>
           <button class="link-muted" id="openPrompter">打开提词器</button>
         </div>
         <input type="text" id="scTitle" value="${PS.esc(sc.title)}" style="font-weight:700">
@@ -1183,6 +1229,28 @@
       PS.save();
       PS.toast('草稿已写入本地 SQLite', 'good');
     };
+    main.querySelector('#aiDraftBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      const curTitle = main.querySelector('#scTitle').value.trim();
+      const curBody = main.querySelector('#scBody').value;
+      if (!curTitle) return PS.toast('请先填选题标题再扩写', 'warn');
+      btn.disabled = true; btn.textContent = 'AI 扩写初稿中…';
+      try {
+        const res = await PS.api('POST', '/api/ai/draft', { topic_id: PS.S.activeTopicId, title: curTitle, body: curBody });
+        if (res.body) {
+          sc.title = curTitle; sc.body = res.body;
+          const curT = PS.S.topics.find(x => x.id === PS.S.activeTopicId);
+          if (curT) { curT.title = curTitle; curT.body = res.body; }
+          PS.save();
+          PS.toast(`已由 ${res.backend}/${res.model} 扩写完整口播初稿 ✓`, 'good');
+          PS.pages.write(PS.S.activeTopicId);
+        }
+      } catch (err) {
+        PS.toast(err.message || '扩写失败', 'warn');
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    });
     main.querySelector('#aiHooksBtn')?.addEventListener('click', async e => {
       const btn = e.currentTarget;
       btn.disabled = true; btn.textContent = '本机 AI 生成中…';
@@ -1460,8 +1528,13 @@
           </div>
 
           <div class="card stack tight" style="max-height:62vh;overflow-y:auto">
+            ${cp.sourceFile && (cp.sourceFile.includes('/') || cp.sourceFile.startsWith('~')) ? `
+              <div style="margin-bottom:10px;border-radius:10px;overflow:hidden;background:#0D0E10">
+                <video id="cutPreviewVid" controls preload="metadata" style="width:100%;max-height:260px;display:block" src="/api/media/stream?path=${encodeURIComponent(cp.sourceFile)}"></video>
+              </div>
+            ` : ''}
             <div class="row" style="padding-bottom:8px;border-bottom:1px solid var(--line-soft)">
-              <b>逐字稿审阅（点右侧「剪/留」控制是否剪掉，点「Hook」把原话放到成片最前）</b>
+              <b>逐字稿审阅（点时间戳试听原片 · 点右侧「剪/留」控制剪辑 · 点「Hook」置顶开头）</b>
               <span class="grow"></span>
               <span class="sub" style="font-size:12px">已自动标出说错重来 / 语气词</span>
             </div>
@@ -1469,7 +1542,7 @@
               const dropped = dropIdx.includes(l.i);
               const hooked = hookIdx.includes(l.i);
               return `<div class="row" style="padding:7px 10px;border-radius:8px;background:${hooked ? 'var(--accent-soft)' : dropped ? 'var(--sunk)' : 'transparent'};opacity:${dropped ? '.52' : '1'};gap:8px;align-items:flex-start">
-                <span class="mono sub" style="font-size:11.5px;min-width:44px;margin-top:2px">${PS.esc(l.ts || '')}</span>
+                <button type="button" class="link-muted mono" data-seek="${Number(l.start || 0)}" title="跳转到该句试听" style="font-size:11.5px;min-width:48px;margin-top:2px;text-align:left">▶ ${PS.esc(l.ts || '00:00')}</button>
                 <div class="min0 grow" style="font-size:13.5px;line-height:1.55;${dropped ? 'text-decoration:line-through' : ''}">
                   ${l.cutReason ? `<span class="pill warn" style="padding:0 6px;font-size:10.5px;margin-right:5px">自动标剪：${PS.esc(l.cutReason)}</span>` : ''}
                   ${hooked ? '<span class="pill accent" style="padding:0 6px;font-size:10.5px;margin-right:5px">Hook</span>' : ''}
@@ -1540,18 +1613,25 @@
             <li>原片：<code class="mono">${PS.esc(cp.sourceFile || '未导入')}</code></li>
             <li>前置 Hook：已选 <b>${hookIdx.length}</b> 句原话 · 剪掉 <b>${dropIdx.length}</b> 句口误/语气词 · 停顿阈值 <b>${pauseS}s</b></li>
             <li>落盘目标：自动写入统一目录 <code class="mono">&lt;projectRoot&gt;/YYYY-MM-DD_${PS.esc((cp.title || '').slice(0, 20))}/final/上传/</code> 并载入发布工作台</li>
+            ${mode === 'motion' ? `<li>真执行权限：${PS.S.settings.cutAgentAllowExec ? '<span class="pill good" style="font-size:11px;padding:1px 7px">✓ 已授权（将由剪辑 Agent 直接渲染成片与封面）</span>' : '<span class="pill wait" style="font-size:11px;padding:1px 7px">仅只读规划</span> <a href="#settings" style="margin-left:6px">去系统页授权真剪辑 ›</a>'}</li>` : ''}
           </ul>
           <div class="row" style="flex-wrap:wrap;gap:8px">
-            <button class="btn primary" id="runRenderBtn">${PS.icon('film', 'sm')}${mode === 'rough' ? '一键开始粗剪渲染并落盘' : '一键触发独立剪辑 Agent 执行'}</button>
+            <button class="btn primary" id="runRenderBtn">${PS.icon('film', 'sm')}${mode === 'rough' ? '一键开始粗剪渲染并落盘' : (PS.S.settings.cutAgentAllowExec ? '让剪辑 Agent 动手渲染动效成片' : '一键触发独立剪辑 Agent 规划')}</button>
             <button class="btn" id="dlSpec">导出 / 查看 worktable.json</button>
             <button class="btn" id="copyPrompt">${PS.icon('copy', 'sm')}复制指令备用</button>
           </div>
           <details><summary class="sub" style="font-size:12px;cursor:pointer">查看备用终端指令</summary><pre class="codebox" style="margin-top:8px">${PS.esc(promptTxt)}</pre></details>
         </div>
 
-        ${cp.outputPath ? `<div class="card row" style="border-color:var(--good)">
-          <div class="min0 grow"><b style="color:var(--good)">最新渲染成片已落盘</b><div class="sub mono clip1" style="font-size:12px">${PS.esc(cp.outputPath)}</div></div>
-          <a class="btn primary s" href="#pub-confirm">去发布工作台填表 ›</a>
+        ${cp.outputPath ? `<div class="card stack tight" style="border-color:var(--good)">
+          <div class="row">
+            <div class="min0 grow"><b style="color:var(--good)">最新渲染成片已落盘（可直接播放核对）</b><div class="sub mono clip1" style="font-size:12px">${PS.esc(cp.outputPath)}</div></div>
+            <a class="btn s" href="#pub-pack">去做封面 & 适配文案 ›</a>
+            <a class="btn primary s" href="#pub-confirm">去发布工作台填表 ›</a>
+          </div>
+          <div style="border-radius:10px;overflow:hidden;background:#0D0E10">
+            <video controls preload="metadata" style="width:100%;max-height:360px;display:block" src="/api/media/stream?path=${encodeURIComponent(cp.outputPath)}&t=${Date.now()}"></video>
+          </div>
         </div>` : ''}
       </div>`;
     }
@@ -1675,7 +1755,13 @@
     main.querySelector('#toPlanBtn')?.addEventListener('click', () => { cutStep = 'plan'; PS.pages.cut(); });
     main.querySelector('#toRenderBtn')?.addEventListener('click', () => { cutStep = 'render'; PS.pages.cut(); });
 
-    // Step 2: 删口误 / 勾 Hook / 停顿阈值 / 独立剪辑 Agent 排镜头
+    // Step 2: 删口误 / 勾 Hook / 停顿阈值 / 独立剪辑 Agent 排镜头 / 播放器点句跳秒
+    main.querySelectorAll('[data-seek]').forEach(btn => btn.onclick = () => {
+      const vid = main.querySelector('#cutPreviewVid');
+      if (!vid) return;
+      vid.currentTime = Math.max(0, Number(btn.dataset.seek || 0));
+      vid.play().catch(() => {});
+    });
     main.querySelectorAll('[data-hk]').forEach(el => el.onclick = async e => {
       e.stopPropagation();
       const i = +el.dataset.hk;

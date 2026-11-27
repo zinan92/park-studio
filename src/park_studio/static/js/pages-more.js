@@ -47,7 +47,7 @@
         <div class="acts">
           <button class="btn" id="btnOnboardingTop">${PS.icon('spark', 'sm')}选平台引导</button>
           <a class="btn" href="#position">${PS.icon('star', 'sm')}我的定位</a>
-          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.3.0</a>
+          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.4.0</a>
           <a class="btn" href="https://github.com/zinan92/park-studio/issues" target="_blank" rel="noopener">GitHub Issues ↗</a>
         </div>
       </div>
@@ -188,7 +188,14 @@
           <div><label class="sub" style="display:block;margin-bottom:4px">本地语音转写引擎（原片转带时间戳逐字稿）</label>
             <select id="trEng"><option value="mlx-whisper" ${s.transcribeEngine === 'mlx-whisper' ? 'selected' : ''}>mlx-whisper（Apple Silicon 极速本机）</option><option value="faster-whisper" ${s.transcribeEngine === 'faster-whisper' ? 'selected' : ''}>faster-whisper（macOS / Windows 通用）</option></select>
           </div>
-          <div><button class="btn s primary" id="saveAiCfg">保存 AI 与目录配置并重扫 Obsidian</button></div>
+          <label class="row" style="gap:8px;padding:9px 11px;border-radius:9px;background:var(--sunk);cursor:pointer;font-size:12.5px">
+            <input type="checkbox" id="cutAllowExecIn" ${s.cutAgentAllowExec ? 'checked' : ''} style="accent-color:var(--accent)">
+            <span><b>授权剪辑 Agent 真执行模式</b>（允许在当前期次工程目录内跑动效剪辑与封面脚本）</span>
+          </label>
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <button class="btn s primary" id="saveAiCfg">保存 AI 与目录配置并重扫 Obsidian</button>
+            <button class="btn s" id="btnCheckDeps">检查 / 一键安装依赖（FFmpeg · Whisper · yt-dlp）</button>
+          </div>
         </div>
 
         <div class="card stack">
@@ -436,6 +443,7 @@
       if (main.querySelector('#geminiKeyIn')) s.geminiApiKey = main.querySelector('#geminiKeyIn').value.trim();
       s.cutAgentModel = main.querySelector('#cutModelIn').value.trim();
       s.cutAgentCmd = main.querySelector('#cutCmdIn').value.trim();
+      s.cutAgentAllowExec = !!main.querySelector('#cutAllowExecIn')?.checked;
       s.obsidianPath = main.querySelector('#obPath').value.trim();
       s.projectRoot = main.querySelector('#projRootIn').value.trim();
       s.transcribeEngine = main.querySelector('#trEng').value;
@@ -450,6 +458,7 @@
           cutAgentBackend: s.cutAgentBackend || 'inherit',
           cutAgentModel: s.cutAgentModel,
           cutAgentCmd: s.cutAgentCmd,
+          cutAgentAllowExec: s.cutAgentAllowExec,
           obsidianPath: s.obsidianPath,
           projectRoot: s.projectRoot,
           transcribeEngine: s.transcribeEngine,
@@ -469,8 +478,9 @@
       const p = await PS.pickNativePath({ mode: 'dir' });
       if (p) main.querySelector('#projRootIn').value = p;
     });
-    main.querySelector('#btnOnboardingTop')?.addEventListener('click', () => PS.openOnboarding());
-    main.querySelector('#btnOnboarding')?.addEventListener('click', () => PS.openOnboarding());
+    main.querySelector('#btnCheckDeps')?.addEventListener('click', () => PS.openOnboarding(3));
+    main.querySelector('#btnOnboardingTop')?.addEventListener('click', () => PS.openOnboarding(1));
+    main.querySelector('#btnOnboarding')?.addEventListener('click', () => PS.openOnboarding(1));
     main.querySelector('#resetDemo')?.addEventListener('click', () => PS.resetDemo());
   };
   PS.pages.system = PS.pages.settings;

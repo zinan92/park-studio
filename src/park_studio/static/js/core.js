@@ -410,7 +410,7 @@
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
         <a href="#kb">${PS.icon('book', 'sm')}知识库（Obsidian）</a>
         <a href="#materials">${PS.icon('layers', 'sm')}视觉素材库</a>
-        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.3.0</span></a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.4.0</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
         <button type="button" id="langToggleMenu">🌐 ${PS.lang === 'en' ? '切换为简体中文' : 'Switch to English'}</button>
@@ -645,6 +645,7 @@
       if (b.kb) PS.S.kb = b.kb;
       if (b.materials) PS.S.materials = b.materials;
       if (b.cutEnv) PS.S.cutEnv = b.cutEnv;
+      if (b.deps) PS.S.deps = b.deps;
       PS.S.needsOnboarding = !!b.needsOnboarding;
       PS.save();
     } catch (e) {
@@ -652,12 +653,18 @@
     }
   };
 
-  PS.openOnboarding = function () {
+  PS.openOnboarding = function (initialStep = 1) {
+    let step = initialStep; // 1: platforms | 2: agents & exec | 3: dependencies
     const selected = new Set(PS.activePlats());
     let pickedAi = PS.S.settings.aiBackend || 'gemini-api';
+    let pickedCutAi = PS.S.settings.cutAgentBackend || 'inherit';
+    let allowExec = !!PS.S.settings.cutAgentAllowExec;
+    let depsState = PS.S.deps || null;
+    let depJob = null;
+    let depTimer = null;
+
     const corePlats = PS.PLAT_ORDER.filter(p => !['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(p));
     const globalPlats = PS.PLAT_ORDER.filter(p => ['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(p));
-
     const PRESETS = {
       cn4: ['douyin', 'xhs', 'bilibili', 'channels'],
       cn5: ['douyin', 'xhs', 'bilibili', 'channels', 'wechat'],
@@ -666,24 +673,32 @@
       all12: [...PS.PLAT_ORDER],
       none: [],
     };
+    const agents = PS.S.agents || {};
 
     const renderGrid = list => list.map(pid => {
       const p = PS.PLATFORMS[pid];
       const on = selected.has(pid);
-      return `<button type="button" data-ob-plat="${pid}" class="row" style="text-align:left;padding:10px 12px;border-radius:10px;border:1.5px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'color-mix(in srgb,var(--accent-soft) 45%,var(--surface))' : 'var(--surface)'};cursor:pointer;gap:9px;width:100%;transition:all .15s">
-        ${PS.plogo(pid, 22)}
+      return `<button type="button" data-ob-plat="${pid}" class="row" style="text-align:left;padding:9px 11px;border-radius:10px;border:1.5px solid ${on ? 'var(--accent)' : 'var(--line)'};background:${on ? 'color-mix(in srgb,var(--accent-soft) 45%,var(--surface))' : 'var(--surface)'};cursor:pointer;gap:8px;width:100%;transition:all .15s">
+        ${PS.plogo(pid, 20)}
         <span class="min0 grow" style="display:flex;flex-direction:column;gap:1px">
-          <b style="font-size:13px;color:var(--ink)">${PS.esc(p.name)}</b>
-          <span class="sub" style="font-size:11px">${PS.esc(p.mode || '')}</span>
+          <b style="font-size:12.5px;color:var(--ink)">${PS.esc(p.name)}</b>
+          <span class="sub" style="font-size:10.5px">${PS.esc(p.mode || '')}</span>
         </span>
-        <span class="pill ${on ? 'accent' : ''}" style="font-size:11px;padding:1px 7px">${on ? '✓ 已选' : '未选'}</span>
+        <span class="pill ${on ? 'accent' : ''}" style="font-size:10.5px;padding:1px 6px">${on ? '✓ 已选' : '未选'}</span>
       </button>`;
     }).join('');
 
-    PS.modal({
-      title: '欢迎使用 Park Studio · 按需选择你真正在发的平台',
-      wide: true,
-      body: `<div class="stack">
+    const stepBody = () => {
+      const stepper = `<div class="row" style="gap:6px;margin-bottom:10px;flex-wrap:wrap">
+        ${[
+          [1, '1. 选择发布平台'],
+          [2, '2. 分配写稿与剪辑 Agent'],
+          [3, '3. 一次性装齐本地依赖'],
+        ].map(([n, lab]) => `<button type="button" data-ob-step="${n}" class="btn s ${step === n ? 'primary' : ''}">${lab}</button>`).join('')}
+      </div>`;
+
+      if (step === 1) {
+        return `${stepper}
         <div class="callout-warm" style="font-size:13px;line-height:1.6">
           <b>支持 12 个平台，但不需要全填。</b><br>
           你平时只发 3 个或 5 个平台，就只勾那几个；没选的平台会自动隐藏，不会出现在大屏、体检或发布队列里，随时都能在「● 系统」里增减。
@@ -699,71 +714,169 @@
         </div>
         <div class="stack tight">
           <div class="row"><b style="font-size:13px">中文与主流平台（7 家）</b><span class="grow"></span><span class="pill accent" id="obCount">已选 ${selected.size} / ${PS.PLAT_ORDER.length} 个平台</span></div>
-          <div id="obCoreGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px">${renderGrid(corePlats)}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">${renderGrid(corePlats)}</div>
         </div>
         <div class="stack tight">
           <b style="font-size:13px">海外扩展平台（5 家）</b>
-          <div id="obGlobalGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px">${renderGrid(globalPlats)}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px">${renderGrid(globalPlats)}</div>
+        </div>`;
+      }
+
+      if (step === 2) {
+        return `${stepper}
+        <div class="callout-warm" style="font-size:13px;line-height:1.6">
+          <b>让本地全能 CLI Agent 直接在 App 内帮你完成剪辑、动效与做封面。</b><br>
+          写稿/拆解可以用轻快的 Gemini API 或任意兼容 API；真正的花字、B-roll 动效剪辑与封面生成，可以指定本机的 <b>Claude Code / Codex / Gemini CLI</b> 直接动手执行。
         </div>
-        <div class="stack tight" style="border-top:1px solid var(--line-soft);padding-top:10px">
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <b style="font-size:13px">顺手选一个 AI 引擎（随时可换）：</b>
-            <div class="seg" style="flex-wrap:wrap" id="obAiSeg">
-              ${[
-                ['gemini-api', 'Gemini API'],
-                ['agy', 'Antigravity'],
-                ['gemini', 'Gemini CLI'],
-                ['claude', 'Claude Code'],
-                ['codex', 'Codex'],
-                ['api', '可选 API'],
-              ].map(([id, lab]) => `<button type="button" class="${pickedAi === id ? 'on' : ''}" data-ob-ai="${id}">${lab}</button>`).join('')}
-            </div>
+        <div class="card stack tight" style="background:var(--sunk);border:0">
+          <b style="font-size:13.5px">① 写稿 & 选题 Agent（拆解、写稿、审稿、中→英适配）</b>
+          <div class="seg" style="flex-wrap:wrap">
+            ${[
+              ['gemini-api', 'Gemini API'],
+              ['agy', 'Antigravity'],
+              ['gemini', 'Gemini CLI'],
+              ['claude', 'Claude Code'],
+              ['codex', 'Codex'],
+              ['api', '可选 API'],
+            ].map(([id, lab]) => `<button type="button" class="${pickedAi === id ? 'on' : ''}" data-ob-ai="${id}">${lab}${agents[id]?.installed ? ' ✓' : ''}</button>`).join('')}
           </div>
         </div>
-      </div>`,
-      foot: `<button class="btn" id="obSkip" data-close>稍后再说</button><button class="btn primary" id="obDone">完成配置，进入工作台（已选 ${selected.size} 个）</button>`,
+        <div class="card stack tight" style="background:var(--sunk);border:0">
+          <b style="font-size:13.5px">② 全能剪辑 & 封面 Agent（动效精剪、B-roll、3 比例封面）</b>
+          <div class="seg" style="flex-wrap:wrap">
+            ${[
+              ['inherit', '跟随写稿 Agent'],
+              ['claude', 'Claude Code'],
+              ['codex', 'Codex'],
+              ['gemini', 'Gemini CLI'],
+              ['agy', 'Antigravity'],
+              ['custom', '自定义命令'],
+            ].map(([id, lab]) => `<button type="button" class="${pickedCutAi === id ? 'on' : ''}" data-ob-cutai="${id}">${lab}${agents[id]?.installed ? ' ✓' : ''}</button>`).join('')}
+          </div>
+          <label class="row" style="gap:9px;margin-top:8px;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);cursor:pointer;font-size:13px">
+            <input type="checkbox" id="obAllowExec" ${allowExec ? 'checked' : ''} style="accent-color:var(--accent);width:16px;height:16px">
+            <span><b>允许剪辑 Agent 在视频工程目录内读写文件并执行本地剪辑/封面脚本</b><br><span class="sub" style="font-size:11.5px">工作目录严格锁死在当前期次文件夹内，绝不触碰 Obsidian 与系统其他目录。</span></span>
+          </label>
+        </div>`;
+      }
+
+      const items = depsState?.items || [];
+      const missingN = (depsState?.missingInstallable || []).length;
+      return `${stepper}
+      <div class="callout-warm" style="font-size:13px;line-height:1.6">
+        <b>一次性检查并安装全部本地工具，真正做到 Standalone 开箱即用。</b><br>
+        装好 FFmpeg、Whisper 和 yt-dlp 后，下载素材、离线转写、粗剪、封面和 12 平台填表都能 100% 在本地闭环。
+      </div>
+      <div class="card stack tight" style="background:var(--sunk);border:0">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <b style="font-size:13.5px">本机核心依赖体检</b>
+          <span class="grow"></span>
+          <button type="button" class="btn s" id="obRecheckDeps">重新检测</button>
+          ${missingN ? `<button type="button" class="btn primary s" id="obInstallDeps" ${depJob?.state === 'running' ? 'disabled' : ''}>⚡ 一键安装 ${missingN} 个缺失依赖</button>` : '<span class="pill good">✓ 可自动安装的依赖已全部就绪</span>'}
+        </div>
+        ${items.length ? items.map(it => `<div class="row" style="padding:8px 10px;border-radius:9px;background:var(--surface);border:1px solid var(--line-soft);gap:10px">
+          <div class="min0 grow">
+            <div class="row" style="gap:6px"><b style="font-size:13px">${PS.esc(it.name)}</b>${it.required ? '' : '<span class="pill" style="font-size:10px;padding:0 5px">可选</span>'}</div>
+            <div class="sub" style="font-size:11.5px">${PS.esc(it.role)}</div>
+          </div>
+          ${it.installed
+            ? '<span class="pill good">✓ 已安装</span>'
+            : `<span class="pill wait">缺失 · <code class="mono">${PS.esc(it.hint)}</code></span>`}
+        </div>`).join('') : '<div class="sub" style="padding:12px">正在体检本机依赖…</div>'}
+        ${depJob ? `<div class="stack tight" style="margin-top:8px">
+          <div class="row"><span class="pill ${depJob.state === 'done' ? 'good' : depJob.state === 'failed' ? 'warn' : 'accent'}">${depJob.state === 'running' ? '正在安装依赖…' : depJob.state === 'done' ? '安装完成 ✓' : '安装出错'}</span></div>
+          <pre class="codebox" style="max-height:150px;font-size:11.5px">${PS.esc((depJob.logs || []).join('\n'))}</pre>
+        </div>` : ''}
+      </div>`;
+    };
+
+    PS.modal({
+      title: 'Park Studio · Standalone 全闭环引导设置',
+      wide: true,
+      body: `<div class="stack" id="obBodyHost">${stepBody()}</div>`,
+      foot: `<button class="btn" id="obSkip">稍后再说</button><span class="grow"></span><button class="btn" id="obPrev" style="display:none">上一步</button><button class="btn primary" id="obNext">下一步：分配 Agent ›</button>`,
       onOpen(mb, close) {
-        const refresh = () => {
-          mb.querySelector('#obCoreGrid').innerHTML = renderGrid(corePlats);
-          mb.querySelector('#obGlobalGrid').innerHTML = renderGrid(globalPlats);
-          mb.querySelector('#obCount').textContent = `已选 ${selected.size} / ${PS.PLAT_ORDER.length} 个平台`;
-          mb.querySelector('#obDone').textContent = selected.size
-            ? `完成配置，进入工作台（已选 ${selected.size} 个）`
-            : '暂不启用平台，先体验选题与剪辑';
-          bindGrid();
+        const stopDepPoll = () => { if (depTimer) { clearInterval(depTimer); depTimer = null; } };
+        const fetchDeps = async () => {
+          try {
+            depsState = await PS.api('GET', '/api/deps');
+            PS.S.deps = depsState;
+            if (step === 3) render();
+          } catch (e) {}
         };
-        const bindGrid = () => {
-          mb.querySelectorAll('[data-ob-plat]').forEach(btn => {
-            btn.onclick = () => {
-              const pid = btn.dataset.obPlat;
-              if (selected.has(pid)) selected.delete(pid);
-              else selected.add(pid);
-              refresh();
-            };
+        if (!depsState || initialStep === 3) fetchDeps();
+
+        const render = () => {
+          const host = mb.querySelector('#obBodyHost');
+          if (!host) return;
+          host.innerHTML = stepBody();
+          const prevBtn = mb.querySelector('#obPrev');
+          const nextBtn = mb.querySelector('#obNext');
+          prevBtn.style.display = step > 1 ? '' : 'none';
+          if (step === 1) nextBtn.textContent = '下一步：分配 Agent ›';
+          else if (step === 2) nextBtn.textContent = '下一步：检查本地依赖 ›';
+          else nextBtn.textContent = selected.size ? `完成配置，进入工作台（已选 ${selected.size} 平台）` : '完成配置，进入工作台';
+
+          host.querySelectorAll('[data-ob-step]').forEach(b => b.onclick = () => {
+            step = +b.dataset.obStep;
+            if (step === 3 && !depsState) fetchDeps();
+            render();
           });
-        };
-        bindGrid();
-        mb.querySelectorAll('[data-ob-preset]').forEach(btn => {
-          btn.onclick = () => {
+          host.querySelectorAll('[data-ob-plat]').forEach(btn => btn.onclick = () => {
+            const pid = btn.dataset.obPlat;
+            if (selected.has(pid)) selected.delete(pid); else selected.add(pid);
+            render();
+          });
+          host.querySelectorAll('[data-ob-preset]').forEach(btn => btn.onclick = () => {
             selected.clear();
             for (const p of (PRESETS[btn.dataset.obPreset] || [])) selected.add(p);
-            refresh();
-          };
-        });
-        mb.querySelectorAll('[data-ob-ai]').forEach(btn => {
-          btn.onclick = () => {
-            pickedAi = btn.dataset.obAi;
-            mb.querySelectorAll('[data-ob-ai]').forEach(x => x.classList.toggle('on', x.dataset.obAi === pickedAi));
-          };
-        });
+            render();
+          });
+          host.querySelectorAll('[data-ob-ai]').forEach(btn => btn.onclick = () => { pickedAi = btn.dataset.obAi; render(); });
+          host.querySelectorAll('[data-ob-cutai]').forEach(btn => btn.onclick = () => { pickedCutAi = btn.dataset.obCutai; render(); });
+          host.querySelector('#obAllowExec')?.addEventListener('change', e => { allowExec = !!e.target.checked; });
+          host.querySelector('#obRecheckDeps')?.addEventListener('click', fetchDeps);
+          host.querySelector('#obInstallDeps')?.addEventListener('click', async () => {
+            try {
+              const r = await PS.api('POST', '/api/deps/install', {});
+              depJob = r.job;
+              render();
+              stopDepPoll();
+              depTimer = setInterval(async () => {
+                try {
+                  const st = await PS.api('GET', `/api/cut/jobs/${depJob.id}`);
+                  depJob = st;
+                  if (st.state !== 'running') {
+                    stopDepPoll();
+                    await fetchDeps();
+                  }
+                  render();
+                } catch (err) { stopDepPoll(); }
+              }, 1100);
+            } catch (err) {
+              PS.toast(err.message || '安装启动失败', 'warn');
+            }
+          });
+        };
+
+        render();
+        mb.querySelector('#obPrev').onclick = () => { if (step > 1) { step--; render(); } };
         mb.querySelector('#obSkip').onclick = async () => {
+          stopDepPoll();
           PS.S.needsOnboarding = false;
           PS.S.settings.onboardingDone = true;
           await PS.api('PUT', '/api/settings', { onboardingDone: true }).catch(() => {});
           PS.save();
           close();
         };
-        mb.querySelector('#obDone').onclick = async e => {
+        mb.querySelector('#obNext').onclick = async e => {
+          if (step < 3) {
+            step++;
+            if (step === 3) fetchDeps();
+            render();
+            return;
+          }
+          stopDepPoll();
           const btn = e.currentTarget;
           btn.disabled = true;
           btn.textContent = '正在保存配置…';
@@ -771,6 +884,8 @@
             const r = await PS.api('POST', '/api/onboarding/complete', {
               platforms: [...selected],
               aiBackend: pickedAi,
+              cutAgentBackend: pickedCutAi,
+              cutAgentAllowExec: allowExec,
             });
             if (r.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...r.platformStatus };
             if (r.config) PS.S.settings = { ...PS.S.settings, ...r.config };
@@ -778,17 +893,12 @@
             PS.S.needsOnboarding = false;
             PS.save();
             close();
-            PS.toast(
-              r.enabled.length
-                ? `已为你启用 ${r.enabled.length} 个平台，其余 ${PS.PLAT_ORDER.length - r.enabled.length} 个已安静隐藏 ✓`
-                : '已设为暂不启用发布平台，随时可在「系统」开启 ✓',
-              'good',
-            );
+            PS.toast(`配置已保存：${r.enabled.length} 平台 · 剪辑执行${allowExec ? '已授权' : '只读规划'} ✓`, 'good');
             PS.route();
           } catch (err) {
             PS.toast(err.message || '保存失败', 'warn');
             btn.disabled = false;
-            refresh();
+            render();
           }
         };
       },

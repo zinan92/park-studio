@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-local-009688.svg)](https://fastapi.tiangolo.com)
 [![macOS App](https://img.shields.io/badge/macOS-WKWebView%20DMG-111111.svg)](https://github.com/zinan92/park-studio/releases/latest)
-[![Release](https://img.shields.io/badge/release-v0.3.0-orange.svg)](https://github.com/zinan92/park-studio/releases/tag/v0.3.0)
+[![Release](https://img.shields.io/badge/release-v0.4.0-orange.svg)](https://github.com/zinan92/park-studio/releases/tag/v0.4.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **A local-first open-source Creator OS uniting Topics → Dual-Mode Local Video Cutting → 12-Platform Opt-In CDP Draft Auto-Fill (with AI ZH→EN Localization) → Real Cross-Platform Analytics. 100% on your disk.**
@@ -93,7 +93,7 @@ All screenshots are generated cleanly in an isolated temp workspace via [`script
 
 ## Quick Start
 
-### Option A: macOS Desktop DMG ([Release v0.3.0](https://github.com/zinan92/park-studio/releases/tag/v0.3.0))
+### Option A: macOS Desktop DMG ([Release v0.4.0](https://github.com/zinan92/park-studio/releases/tag/v0.4.0) · Universal Binary)
 
 Download `Park-Studio.dmg` from [Releases](https://github.com/zinan92/park-studio/releases/latest), drag **Park Studio.app** to Applications, and launch (requires Python 3.11+ with `fastapi uvicorn pyyaml httpx` installed locally).
 

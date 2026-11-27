@@ -15,7 +15,7 @@
       meta: {
         owner: 'Park',
         workspaceName: 'Park Studio',
-        version: 'v0.3.0',
+        version: 'v0.4.0',
         demoMode: false,
         runtimeMode: 'localhost', // localhost | desktop-app
       },
@@ -70,7 +70,14 @@
         },
       },
       releases: [
-        { ver: 'v0.3.0', date: '2026-11-24', tag: '最新', title: 'E2E 验收修复 + 2,656 视觉素材库 + 7 角度可配拆解 + 12 平台支持 + API 可视化配置', notes: [
+        { ver: 'v0.4.0', date: '2026-11-27', tag: '最新', title: 'Standalone 全闭环升级：3 步引导装依赖 · 剪辑 Agent 真执行 · 封面工坊 · 内嵌播放器 · 链接拆解与爆款反推', notes: [
+          '3 步式 Standalone Onboarding 引导：按需选 12 平台 → 明确分工写稿 Agent 与全能剪辑 Agent（可显式授权目录内执行）→ 一键体检并自动安装 FFmpeg / Whisper / yt-dlp / Node.js',
+          '解锁剪辑 Agent 真执行模式（Claude Code / Codex / Gemini CLI 在当前期次目录内 workspace-write 实际渲染动效成片并自动落盘）+ 剪辑台内嵌原生 <video> 播放器（点句跳秒试听 + 成片核对）',
+          '内置封面工坊：1 秒本地抽帧大字模板出 3 比例封面（9:16 竖 / 4:3 横 / 16:9 横），也支持交给剪辑 Agent 精做封面，彻底告别跳出到 Canva / PS',
+          '补齐首尾闭环：对标页支持贴视频链接（YouTube / B 站 / 抖音）yt-dlp 自动抓字幕做 7 角度拆解、写稿台支持 AI 一键扩写初稿、复盘页 3× 爆款一键反推下期 3 个续集选题',
+          '原生 macOS Universal Binary（Apple Silicon + Intel）：顶栏空白处拖拽与双击缩放、Finder 原生选文件/目录、真实 GitHub 检查更新'
+        ] },
+        { ver: 'v0.3.0', date: '2026-11-24', tag: '历史', title: 'E2E 验收修复 + 2,656 视觉素材库 + 7 角度可配拆解 + 12 平台支持 + API 可视化配置', notes: [
           '修复选题池进入写稿串稿、剪辑台切换原片残留旧 Hook/镜头表、抖音未上传误报“填好”与启动瞬闪假粉丝 4 项端到端缺陷',
           '视觉素材库恢复全部 2,656 条（图片 352 + 视频动效 258 + 做视频 124 + 视频案例 1,922），支持 4 标签分页与分类筛选',
           '对标爆款拆解升级 3 层可配置引擎（⚡ 极简速览 / 🎯 标准 7 角度 / 🔬 深度全维度 / ⚙ 自定义模块与 Prompt 模板），支持“用这个角度写 ›”一键开稿',
