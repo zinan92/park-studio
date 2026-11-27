@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-local-009688.svg)](https://fastapi.tiangolo.com)
 [![macOS App](https://img.shields.io/badge/macOS-WKWebView%20DMG-111111.svg)](https://github.com/zinan92/park-studio/releases/latest)
-[![Release](https://img.shields.io/badge/release-v0.4.0-orange.svg)](https://github.com/zinan92/park-studio/releases/tag/v0.4.0)
+[![Release](https://img.shields.io/badge/release-v0.5.0-orange.svg)](https://github.com/zinan92/park-studio/releases/tag/v0.5.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 **A local-first open-source Creator OS uniting Topics → Dual-Mode Local Video Cutting → 12-Platform Opt-In CDP Draft Auto-Fill (with AI ZH→EN Localization) → Real Cross-Platform Analytics. 100% on your disk.**

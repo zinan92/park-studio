@@ -360,6 +360,142 @@ def localize_episode_copy(
     }
 
 
+TITLE_MOTIVES = ["反差感", "真实冲突", "硬数字", "场景后果", "悬念缺口", "硬结果"]
+
+
+def _resolve_episode_transcript(conn: sqlite3.Connection, ep: dict[str, Any], explicit: str = "") -> str:
+    if (explicit or "").strip():
+        return explicit.strip()[:5000]
+    pj = ep.get("publishJson") or {}
+    for k in ("transcript", "description"):
+        val = str(pj.get(k) or "").strip()
+        if len(val) >= 30:
+            return val[:5000]
+    # 兜底：尝试从关联的剪辑工程逐字稿或同标题选题正文读取
+    cut = conn.execute("SELECT lines_json FROM cut_projects WHERE episode=? OR title=? ORDER BY id DESC LIMIT 1", (ep.get("episode"), ep.get("title"))).fetchone()
+    if cut and cut["lines_json"]:
+        try:
+            lines = json.loads(cut["lines_json"])
+            txt = "\n".join(str(x.get("text") or "") for x in lines if isinstance(x, dict))
+            if len(txt.strip()) >= 20:
+                return txt.strip()[:5000]
+        except Exception:
+            pass
+    topic = conn.execute("SELECT body FROM topics WHERE title=? ORDER BY id DESC LIMIT 1", (ep.get("title"),)).fetchone()
+    if topic and str(topic["body"] or "").strip():
+        return str(topic["body"]).strip()[:5000]
+    return str(pj.get("description") or ep.get("title") or "").strip()
+
+
+def generate_title_candidates(
+    conn: sqlite3.Connection,
+    episode_id: int,
+    *,
+    transcript: str = "",
+    angle: str = "",
+    cfg: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """按 Topic Studio dbs-title-cover-intro 方法论生成 6 个不同动机的备选标题 + 点击理由 + 封面大字 + 简介/话题。"""
+    ep = get_episode(conn, episode_id)
+    if not ep:
+        raise ValueError("找不到该发布期次")
+    cfg = cfg or config.load_config()
+    pj = dict(ep.get("publishJson") or {})
+    src_title = str(pj.get("title") or ep.get("title") or "").strip()
+    body_txt = _resolve_episode_transcript(conn, ep, explicit=transcript)
+
+    prompt = (
+        "你是顶级短视频标题与封面策划专家（遵循 dbs-title-cover-intro 原则：标题是广告，用目标观众日常大白话，绝不用「震惊/颠覆/必看/真相/秘密」等空洞词，所有数字与事实必须忠于原文绝不编造）。\n"
+        f"当前主题：{src_title}\n"
+        f"{f'创作者期望切入角度：{angle}' if angle else ''}\n"
+        f"口播逐字稿 / 稿件内容：\n{body_txt or '（仅提供主题，请直接围绕主题构思）'}\n\n"
+        f"请输出 **6 个彼此角度完全不同的备选标题**，动机依次覆盖：{', '.join(TITLE_MOTIVES)}。\n"
+        "严格只返回一个 JSON 对象，格式如下：\n"
+        "{\n"
+        '  "candidates": [\n'
+        '    {"motive": "反差感", "title": "<=26字高点击大白话标题", "reason": "<=24字大白话解释观众为什么会点", "cover_text": "<=14字适合放封面中央的极简视觉大字"}\n'
+        "  ],\n"
+        '  "description": "100-180字口语化通用视频简介",\n'
+        '  "tags": ["不带#号的话题1", "话题2", "话题3", "话题4", "话题5"]\n'
+        "}"
+    )
+    res = ai.run_prompt(prompt, cfg=cfg, timeout=120)
+    parsed = ai.extract_json_block(res["text"])
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("candidates"), list):
+        raise ai.AIError("AI 返回的 6 备选标题格式无法解析为 JSON，请重试")
+
+    candidates: list[dict[str, str]] = []
+    for idx, item in enumerate(parsed["candidates"][:6]):
+        if not isinstance(item, dict):
+            continue
+        t = str(item.get("title") or "").strip()
+        if not t:
+            continue
+        motive = str(item.get("motive") or TITLE_MOTIVES[idx % len(TITLE_MOTIVES)]).strip()
+        reason = str(item.get("reason") or "").strip()
+        cover_text = str(item.get("cover_text") or t[:14]).strip()
+        candidates.append({"motive": motive, "title": t, "reason": reason, "cover_text": cover_text})
+    if not candidates:
+        raise ai.AIError("未生成有效备选标题，请重试")
+
+    desc = str(parsed.get("description") or "").strip()
+    tags = [str(x).lstrip("#").strip() for x in (parsed.get("tags") or []) if str(x).strip()][:8]
+    pj["title_candidates"] = candidates
+    if desc and (not pj.get("description") or pj.get("description") == src_title):
+        pj["description"] = desc
+    if tags and not pj.get("tags"):
+        pj["tags"] = tags
+    if body_txt and not pj.get("transcript"):
+        pj["transcript"] = body_txt
+    packed = pack_episode(conn, episode_id, publish_json=pj)
+    db.log_event(conn, f"EP{ep['episode']}", f"{res['backend']}/{res['model']}", "生成 6 动机备选标题", f"共 {len(candidates)} 个候选")
+    return {
+        "ok": True,
+        "candidates": candidates,
+        "description": desc,
+        "tags": tags,
+        "episode": packed["episode"],
+        "backend": res["backend"],
+        "model": res["model"],
+    }
+
+
+def pick_title_candidate(
+    conn: sqlite3.Connection,
+    episode_id: int,
+    *,
+    index: int | None = None,
+    title: str = "",
+    cover_text: str = "",
+) -> dict[str, Any]:
+    """选定某条备选标题（同步更新发布期次主标题、简称与封面大字）。"""
+    ep = get_episode(conn, episode_id)
+    if not ep:
+        raise ValueError("找不到该发布期次")
+    pj = dict(ep.get("publishJson") or {})
+    cands = pj.get("title_candidates") or []
+    picked_title = title.strip()
+    picked_cover = cover_text.strip()
+    if index is not None and 0 <= index < len(cands):
+        c = cands[index]
+        picked_title = picked_title or str(c.get("title") or "").strip()
+        picked_cover = picked_cover or str(c.get("cover_text") or picked_title[:14]).strip()
+        pj["picked_title_idx"] = index
+    if not picked_title:
+        raise ValueError("标题不能为空")
+
+    pj["title"] = picked_title
+    pj["cover_headline"] = picked_cover or picked_title[:14]
+    conn.execute(
+        "UPDATE publish_episodes SET title=?, nick=?, updated_at=? WHERE id=?",
+        (picked_title, picked_title[:24], db.now_iso(), episode_id),
+    )
+    conn.commit()
+    packed = pack_episode(conn, episode_id, publish_json=pj)
+    db.log_event(conn, f"EP{ep['episode']}", "选标题", "采用备选标题", picked_title[:36])
+    return {"ok": True, "title": picked_title, "coverHeadline": pj["cover_headline"], "episode": packed["episode"]}
+
+
 _DEEP_QUERY_FN = """
 function __psQueryAllDeep(root, sel, out) {
   if (!root) return out;

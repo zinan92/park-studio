@@ -208,6 +208,25 @@ class ReviewNextTopicsReq(BaseModel):
     platform: str = "douyin"
 
 
+class GenerateTitlesReq(BaseModel):
+    transcript: str = ""
+    angle: str = ""
+
+
+class PickTitleReq(BaseModel):
+    index: int | None = None
+    title: str = ""
+    cover_text: str = ""
+
+
+class AutopilotVideoReq(BaseModel):
+    video_path: str
+    title: str = ""
+    burn_subs: bool = True
+    generate_covers: bool = True
+    localize_copy: bool = True
+
+
 class KbFoldersReq(BaseModel):
     enabled: list[str]
 
@@ -396,7 +415,121 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             "materials": materials.get_materials(kind="image", limit=24, cfg=cfg),
             "cutEnv": cutter.check_env(cfg),
             "deps": deps.check_all_deps(),
+            "lifecycle": _build_lifecycle(cfg),
         }
+
+    def _build_lifecycle(cfg: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """聚合选题、剪辑、发布与复盘为统一的 6 阶段内容全生命周期总览（Content Lifecycle Pipeline）。"""
+        ps = platforms.get_platform_status_map(conn)
+        active_plats = [p for p in platforms.PLAT_ORDER if not ps.get(p, {}).get("disabled")]
+        items: list[dict[str, Any]] = []
+        seen_titles: set[str] = set()
+
+        def _norm(s: str) -> str:
+            return "".join(ch for ch in (s or "").lower() if ch.isalnum())[:24]
+
+        # 1. 发布期次（最接近闭环的内容排最前）
+        for ep in publisher.list_episodes(conn)[:10]:
+            t = str(ep.get("title") or ep.get("nick") or "").strip()
+            if not t:
+                continue
+            seen_titles.add(_norm(t))
+            pj = ep.get("publishJson") or {}
+            pf = ep.get("preflight") or {}
+            has_video = bool((pf.get("video") or {}).get("exists"))
+            has_cover = bool(pf.get("cover_v") or pf.get("cover_h") or pj.get("cover_169_path"))
+            has_localized = bool((pj.get("platforms") or {}))
+            has_titles = bool(pj.get("title_candidates") or pj.get("picked_title_idx") is not None)
+            tasks = ep.get("tasks") or {}
+            pub_done = sum(1 for p in active_plats if (tasks.get(p) or {}).get("state") == "published")
+            pub_wait = sum(1 for p in active_plats if (tasks.get(p) or {}).get("state") == "awaiting_user")
+            pkg_ready = has_cover and (has_localized or has_titles)
+
+            if pub_done > 0 and pub_wait == 0:
+                cur_stage, cur_label, next_label, next_hash = "review", f"已发 {pub_done}/{len(active_plats)} 平台", "看复盘 & 反推下期 ›", "#review"
+            elif pub_wait > 0 or (has_video and pkg_ready):
+                cur_stage = "publish"
+                cur_label = f"待点发 · {pub_wait} 家" if pub_wait else "封面文案齐备 · 待填表"
+                next_label, next_hash = ("去确认点发 ›" if pub_wait else "去 Chrome 填表 ›"), "#pub-confirm"
+            elif has_video:
+                cur_stage, cur_label, next_label, next_hash = "package", "成片就绪 · 待选标题/封面", "选 6 标题 & 出封面 ›", "#pub-pack"
+            else:
+                cur_stage, cur_label, next_label, next_hash = "cut", "待绑定成片 / 粗剪", "去剪辑工作台 ›", "#cut"
+
+            items.append({
+                "id": f"ep:{ep['id']}",
+                "kind": "publish",
+                "episodeId": ep["id"],
+                "episode": ep["episode"],
+                "title": t,
+                "stages": {
+                    "topic": True,
+                    "script": True,
+                    "cut": has_video,
+                    "package": pkg_ready,
+                    "publish": pub_done > 0,
+                    "review": pub_done > 0,
+                },
+                "currentStage": cur_stage,
+                "currentLabel": cur_label,
+                "nextLabel": next_label,
+                "nextHash": next_hash,
+                "meta": f"EP{ep['episode']} · {pub_done}/{len(active_plats)} 已发",
+            })
+
+        # 2. 剪辑中工程（若尚未进入发布表）
+        for r in conn.execute("SELECT * FROM cut_projects ORDER BY updated_at DESC LIMIT 3").fetchall():
+            t = str(r["title"] or "").strip()
+            if not t or _norm(t) in seen_titles:
+                continue
+            seen_titles.add(_norm(t))
+            meta = _load_cut_meta(r["id"])
+            has_out = bool(meta.get("outputPath"))
+            items.append({
+                "id": f"cut:{r['id']}",
+                "kind": "cut",
+                "cutId": r["id"],
+                "title": t,
+                "stages": {"topic": True, "script": True, "cut": has_out, "package": False, "publish": False, "review": False},
+                "currentStage": "package" if has_out else "cut",
+                "currentLabel": "已出片 · 待打包" if has_out else "剪辑中",
+                "nextLabel": "去选标题 & 封面 ›" if has_out else "接着剪 ›",
+                "nextHash": "#pub-pack" if has_out else "#cut",
+                "meta": f"EP{r['episode']} · {r['status']}",
+            })
+
+        # 3. 选题池 / 写稿中 / 定稿待剪
+        for r in conn.execute("SELECT * FROM topics WHERE trash=0 ORDER BY updated_at DESC LIMIT 12").fetchall():
+            t = str(r["title"] or "").strip()
+            if not t or _norm(t) in seen_titles:
+                continue
+            seen_titles.add(_norm(t))
+            has_body = len(str(r["body"] or "").strip()) >= 80
+            is_final = bool(r["final_at"])
+            if is_final:
+                cur_stage, cur_label, next_label, next_hash = "cut", "已定稿 · 待拍/待剪", "带标题进剪辑台 ›", "#cut"
+            elif has_body:
+                cur_stage, cur_label, next_label, next_hash = "script", "草稿已写 · 待审稿定稿", "去写稿 / 审稿 ›", f"#write/{r['id']}"
+            else:
+                cur_stage, cur_label, next_label, next_hash = "topic", "选题池 · 待扩写口播稿", "AI 扩写初稿 ›", f"#write/{r['id']}"
+            items.append({
+                "id": f"topic:{r['id']}",
+                "kind": "topic",
+                "topicId": r["id"],
+                "title": t,
+                "stages": {"topic": True, "script": is_final, "cut": False, "package": False, "publish": False, "review": False},
+                "currentStage": cur_stage,
+                "currentLabel": cur_label,
+                "nextLabel": next_label,
+                "nextHash": next_hash,
+                "meta": r["source_ref"] or "选题池",
+            })
+
+        return items[:16]
+
+    @app.get("/api/lifecycle")
+    def api_lifecycle() -> dict[str, Any]:
+        return {"items": _build_lifecycle(config.load_config())}
 
     @app.get("/api/deps")
     def api_deps() -> dict[str, Any]:
@@ -920,9 +1053,10 @@ def create_app(db_file: Path | None = None) -> FastAPI:
                 ep_dir.mkdir(parents=True, exist_ok=True)
                 tmp_out = ep_dir / "rendered.mp4"
                 r_res = cutter.render_rough_cut(vp, plan_data, tmp_out, drop=drop, hooks=hooks, pause_s=pause_s, burn_subs=burn_subs, log=log_fn)
+                tr_txt = "\n".join(str(x.get("text") or "") for x in (plan_data.get("lines") or []) if x.get("i") not in set(drop))
                 c2 = db.connect(db_file)
                 try:
-                    landed = cutter.land_into_publish_project(c2, title=row["title"], rendered_mp4=tmp_out, cfg=cfg, log=log_fn)
+                    landed = cutter.land_into_publish_project(c2, title=row["title"], rendered_mp4=tmp_out, transcript_text=tr_txt, cfg=cfg, log=log_fn)
                     c2.execute("UPDATE cut_projects SET status='done', updated_at=? WHERE id=?", (db.now_iso(), cut_id))
                     c2.commit()
                     _save_cut_meta(c2, cut_id, {
@@ -1508,6 +1642,110 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         except ai.AIError as exc:
             raise HTTPException(502, str(exc)) from exc
         return {**res, "episodes": publisher.list_episodes(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/publish/{episode_id}/titles")
+    def api_publish_titles(episode_id: int, req: GenerateTitlesReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        r = req or GenerateTitlesReq()
+        try:
+            res = publisher.generate_title_candidates(conn, episode_id, transcript=r.transcript, angle=r.angle, cfg=cfg)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "lifecycle": _build_lifecycle(cfg), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/publish/{episode_id}/pick-title")
+    def api_publish_pick_title(episode_id: int, req: PickTitleReq) -> dict[str, Any]:
+        try:
+            res = publisher.pick_title_candidate(conn, episode_id, index=req.index, title=req.title, cover_text=req.cover_text)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**res, "episodes": publisher.list_episodes(conn), "lifecycle": _build_lifecycle(config.load_config()), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/autopilot/from-video")
+    def api_autopilot_from_video(req: AutopilotVideoReq) -> dict[str, Any]:
+        """「上来就拍 · 一键全自动（Autopilot）」：选一条原片 → 转写 → 删口误挑 Hook → -16 LUFS 粗剪 → 6 动机标题 → 3 比例封面 → 多平台中英文案。"""
+        vp = Path((req.video_path or "").strip()).expanduser()
+        if not str(req.video_path or "").strip() or not vp.is_file():
+            raise HTTPException(400, f"找不到本地原片文件：{req.video_path or '请先选择视频'}")
+        cfg = config.load_config()
+        ep_title = (req.title or "").strip() or vp.stem
+
+        def run_autopilot(log_fn) -> dict[str, Any]:
+            log_fn(f"1/5 本机离线转写原片并分析口误与停顿：{vp.name} …")
+            plan_data = cutter.transcribe_video(vp, cfg=cfg, log=log_fn)
+            lines = plan_data.get("lines") or []
+            drop = list(plan_data.get("drop") or [])
+            kept = [ln for ln in lines if ln["i"] not in set(drop)] or lines
+            hooks: list[int] = []
+            try:
+                log_fn("2/5 调用 AI 从口播原话中挑出最抓人的开头 Hook…")
+                planned = cutter.ai_plan_shots(plan_data, title=ep_title, density="低", cfg=cfg, positioning_text=_positioning_text())
+                hooks = planned.get("hooks") or []
+            except Exception as exc:
+                log_fn(f"AI 挑 Hook 跳过（{exc}），自动使用首句有效原话")
+            if not hooks and kept:
+                hooks = [int(kept[0]["i"])]
+
+            log_fn("3/5 正在渲染 -16 LUFS 响度统一 + 字幕成片并落盘到统一工程目录…")
+            tmp_out = config.projects_dir() / "autopilot_latest.mp4"
+            r_res = cutter.render_rough_cut(vp, plan_data, tmp_out, drop=drop, hooks=hooks, burn_subs=req.burn_subs, log=log_fn)
+            tr_txt = "\n".join(str(x.get("text") or "") for x in kept)
+
+            c2 = db.connect(db_file)
+            try:
+                landed = cutter.land_into_publish_project(c2, title=ep_title, rendered_mp4=tmp_out, transcript_text=tr_txt, cfg=cfg, log=log_fn)
+                ep = landed["publishEpisode"]
+                ep_id = ep["id"]
+
+                titles_res = None
+                try:
+                    log_fn("4/5 根据口播逐字稿生成 6 个不同动机的备选标题与封面大字…")
+                    titles_res = publisher.generate_title_candidates(c2, ep_id, transcript=tr_txt, cfg=cfg)
+                    if titles_res.get("candidates"):
+                        top0 = titles_res["candidates"][0]
+                        picked = publisher.pick_title_candidate(c2, ep_id, index=0, title=top0["title"], cover_text=top0["cover_text"])
+                        ep = picked["episode"]
+                        log_fn(f"已自动先套用第 1 个推荐标题（{top0['motive']}）：{top0['title']}")
+                except Exception as exc:
+                    log_fn(f"6 标题生成跳过（{exc}），可在打包页手动重试")
+
+                cov_res = None
+                if req.generate_covers:
+                    try:
+                        log_fn("5/5 自动抽帧生成 3 比例封面（9:16 / 4:3 / 16:9）并适配多平台中英文案…")
+                        cov_head = (ep.get("publishJson") or {}).get("cover_headline") or ep["title"]
+                        cov_res = covers.generate_episode_covers(c2, ep_id, mode="local", headline=cov_head, cfg=cfg)
+                        ep = cov_res["episode"]
+                    except Exception as exc:
+                        log_fn(f"自动出封面跳过（{exc}）")
+
+                loc_res = None
+                if req.localize_copy:
+                    try:
+                        loc_res = publisher.localize_episode_copy(c2, ep_id, cfg=cfg)
+                        ep = loc_res["episode"]
+                        log_fn(f"✓ 已为 {loc_res['localized']} 个启用平台生成专属中/英文案与 Hashtags！")
+                    except Exception as exc:
+                        log_fn(f"多平台文案适配跳过（{exc}）")
+
+                db.log_event(c2, f"EP{ep['episode']}", "Autopilot", "原片一条龙全自动完成", f"{r_res['durationText']} · 6 标题 + 3 封面")
+                return {
+                    "ok": True,
+                    "episode": ep,
+                    "episodeId": ep_id,
+                    "videoPath": landed["videoPath"],
+                    "folder": landed["folder"],
+                    "titlesCount": len((titles_res or {}).get("candidates") or []),
+                    "hasCovers": bool(cov_res),
+                    "localizedCount": (loc_res or {}).get("localized", 0),
+                }
+            finally:
+                c2.close()
+
+        job = cutter.JOBS.start("autopilot", f"一键全自动出片 · {ep_title[:20]}", run_autopilot)
+        return {"ok": True, "job": job}
 
     @app.post("/api/publish/{episode_id}/generate-covers")
     def api_publish_generate_covers(episode_id: int, req: CoverGenReq | None = None) -> dict[str, Any]:

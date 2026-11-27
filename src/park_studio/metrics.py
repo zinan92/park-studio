@@ -386,12 +386,113 @@ async def _collect_xhs(client: cdp.CDPClient) -> list[dict[str, Any]]:
     return items
 
 
+async def _collect_global_dom_generic(
+    client: cdp.CDPClient,
+    *,
+    platform: str,
+    url: str,
+    host_substr: str,
+    link_selector: str,
+) -> list[dict[str, Any]]:
+    """通用海外平台（Instagram / Threads / LinkedIn / Meta / TikTok）已发作品 DOM 采集器。"""
+    items: list[dict[str, Any]] = []
+
+    async def fn(sid: str, _tid: str) -> None:
+        if not await _wait_origin(client, sid, host_substr, timeout_s=10.0):
+            return
+        await asyncio.sleep(3.5)
+        rows = await client.evaluate(
+            sid,
+            f"""(() => {{
+              const out = [];
+              const seen = new Set();
+              for (const a of document.querySelectorAll({json.dumps(link_selector)})) {{
+                const href = a.href || '';
+                if (!href || seen.has(href)) continue;
+                seen.add(href);
+                const card = a.closest('article, [role="row"], tr, li, div') || a;
+                const txt = (card.innerText || a.innerText || a.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+                if (txt.length < 3) continue;
+                out.push({{ href, text: txt.slice(0, 260) }});
+                if (out.length >= 20) break;
+              }}
+              return out;
+            }})()""",
+        )
+        today_s = datetime.now(CN).strftime("%Y-%m-%d")
+        for idx, r in enumerate(rows or []):
+            href = str(r.get("href") or "")
+            txt = str(r.get("text") or "")
+            m_views = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:views|plays|impressions|播放|浏览)", txt, re.I)
+            m_likes = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:likes|reactions|赞)", txt, re.I)
+            m_comm = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:comments|replies|评论)", txt, re.I)
+            wid = re.sub(r"[^A-Za-z0-9_-]+", "_", href)[-48:] or f"{platform}_{idx}"
+            items.append({
+                "platform": platform,
+                "work_id": wid,
+                "title": _clean_title(txt),
+                "url": href,
+                "published_at": today_s,
+                "published_ts": 0,
+                "duration_sec": 0,
+                "views": _parse_count(m_views.group(1)) if m_views else 0,
+                "likes": _parse_count(m_likes.group(1)) if m_likes else 0,
+                "comments": _parse_count(m_comm.group(1)) if m_comm else 0,
+                "favorites": 0,
+                "shares": 0,
+                "raw": {},
+            })
+
+    await client.with_tab(url, fn, wait_s=0.0)
+    return items
+
+
+async def _collect_instagram(client: cdp.CDPClient) -> list[dict[str, Any]]:
+    return await _collect_global_dom_generic(
+        client, platform="instagram", url="https://www.instagram.com/", host_substr="instagram.com",
+        link_selector='a[href*="/reel/"], a[href*="/p/"]',
+    )
+
+
+async def _collect_threads(client: cdp.CDPClient) -> list[dict[str, Any]]:
+    return await _collect_global_dom_generic(
+        client, platform="threads", url="https://www.threads.net/", host_substr="threads.",
+        link_selector='a[href*="/post/"]',
+    )
+
+
+async def _collect_linkedin(client: cdp.CDPClient) -> list[dict[str, Any]]:
+    return await _collect_global_dom_generic(
+        client, platform="linkedin", url="https://www.linkedin.com/in/me/recent-activity/all/", host_substr="linkedin.com",
+        link_selector='a[href*="/feed/update/"], a[href*="/posts/"]',
+    )
+
+
+async def _collect_meta(client: cdp.CDPClient) -> list[dict[str, Any]]:
+    return await _collect_global_dom_generic(
+        client, platform="meta", url="https://business.facebook.com/latest/posts/published_posts", host_substr="facebook.com",
+        link_selector='a[href*="facebook.com"], a[href*="instagram.com"]',
+    )
+
+
+async def _collect_tiktok(client: cdp.CDPClient) -> list[dict[str, Any]]:
+    return await _collect_global_dom_generic(
+        client, platform="tiktok", url="https://www.tiktok.com/tiktokstudio/content", host_substr="tiktok.com",
+        link_selector='a[href*="/video/"]',
+    )
+
+
 COLLECTORS = {
     "douyin": _collect_douyin,
     "channels": _collect_channels,
     "bilibili": _collect_bilibili,
     "youtube": _collect_youtube,
     "xhs": _collect_xhs,
+    "instagram": _collect_instagram,
+    "threads": _collect_threads,
+    "linkedin": _collect_linkedin,
+    "meta": _collect_meta,
+    "tiktok": _collect_tiktok,
 }
 
 

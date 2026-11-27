@@ -451,6 +451,63 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
             total = parse_cn_num(m.group(1)) if m else None
             return {"total": total, "history": []} if total is not None else None
 
+        if pid == "instagram":
+            # 跳到当前登录用户的 Profile 页提取 followers 数
+            prof = await client.evaluate(
+                sid,
+                "(() => { const a = [...document.querySelectorAll('a[href]')].find(x => /^\\/[A-Za-z0-9._]+\\/?$/.test(new URL(x.href).pathname) && /profile|个人主页/i.test(x.innerText || x.getAttribute('aria-label') || '')); return a ? a.href : ''; })()",
+            )
+            if prof:
+                await client.evaluate(sid, f"(location.href={json.dumps(prof)}, 1)")
+                await asyncio.sleep(3.0)
+            txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
+            m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|粉丝)", txt, re.I)
+            total = parse_cn_num(m.group(1)) if m else None
+            return {"total": total, "history": []} if total is not None else None
+
+        if pid == "threads":
+            prof = await client.evaluate(
+                sid,
+                "(() => { const a = [...document.querySelectorAll('a[href*=\"/@\"]')].find(x => /profile|个人主页/i.test(x.innerText || x.getAttribute('aria-label') || '') || x.querySelector('svg')); return a ? a.href : ''; })()",
+            )
+            if prof:
+                await client.evaluate(sid, f"(location.href={json.dumps(prof)}, 1)")
+                await asyncio.sleep(3.0)
+            txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
+            m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|粉丝)", txt, re.I)
+            total = parse_cn_num(m.group(1)) if m else None
+            return {"total": total, "history": []} if total is not None else None
+
+        if pid == "linkedin":
+            await asyncio.sleep(2.5)
+            txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
+            m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|connections|关注者|好友)", txt, re.I)
+            if not m:
+                await client.evaluate(sid, "(location.href='https://www.linkedin.com/in/me/', 1)")
+                await asyncio.sleep(3.5)
+                txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
+                m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|connections|关注者|位关注者)", txt, re.I)
+            total = parse_cn_num(m.group(1)) if m else None
+            return {"total": total, "history": []} if total is not None else None
+
+        if pid == "meta":
+            await asyncio.sleep(3.0)
+            txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
+            m = re.search(r"(?:Followers|Facebook Page followers|Instagram followers|粉丝)\s*\n?\s*([\d,.]+\s*[KkMm万]?)", txt, re.I)
+            if not m:
+                m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|粉丝)", txt, re.I)
+            total = parse_cn_num(m.group(1)) if m else None
+            return {"total": total, "history": []} if total is not None else None
+
+        if pid == "tiktok":
+            await asyncio.sleep(3.0)
+            txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
+            m = re.search(r"(?:Followers|粉丝)\s*\n?\s*([\d,.]+\s*[KkMm万]?)", txt, re.I)
+            if not m:
+                m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:Followers|粉丝)", txt, re.I)
+            total = parse_cn_num(m.group(1)) if m else None
+            return {"total": total, "history": []} if total is not None else None
+
         return None
 
     try:

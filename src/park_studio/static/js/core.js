@@ -410,7 +410,7 @@
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
         <a href="#kb">${PS.icon('book', 'sm')}知识库（Obsidian）</a>
         <a href="#materials">${PS.icon('layers', 'sm')}视觉素材库</a>
-        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.4.0</span></a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.5.0</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
         <button type="button" id="langToggleMenu">🌐 ${PS.lang === 'en' ? '切换为简体中文' : 'Switch to English'}</button>
@@ -646,11 +646,16 @@
       if (b.materials) PS.S.materials = b.materials;
       if (b.cutEnv) PS.S.cutEnv = b.cutEnv;
       if (b.deps) PS.S.deps = b.deps;
+      if (b.lifecycle) PS.S.lifecycle = b.lifecycle;
       PS.S.needsOnboarding = !!b.needsOnboarding;
       PS.save();
     } catch (e) {
       PS.backendOnline = false;
     }
+  };
+
+  PS.setActivePubEp = function (id) {
+    if (id) PS.S.activePubEpId = id;
   };
 
   PS.openOnboarding = function (initialStep = 1) {

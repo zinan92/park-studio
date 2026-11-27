@@ -67,8 +67,12 @@
   // ==================== 发布 · 打包（#pub-pack · 统一标准工程目录自动识别） ====================
   PS.pages['pub-pack'] = function () {
     const list = pubEpisodes();
+    if (PS.S.activePubEpId && list.some(e => e.id === PS.S.activePubEpId)) {
+      curPubEpId = PS.S.activePubEpId;
+    }
     const ep = list.find(e => e.id === curPubEpId) || list[0];
     curPubEpId = ep.id;
+    PS.S.activePubEpId = ep.id;
     const pf = ep.preflight || { video: { exists: false, faststart: false, note: '未检测' }, cover_v: false, cover_h: false };
     const projState = PS.S.projects || { root: PS.S.settings.projectRoot || '~/Movies/ParkStudio', mounted: false, projects: [] };
     const readyProjs = (projState.projects || []).filter(p => p.stage === 'ready');
@@ -152,14 +156,40 @@
 
         <div style="border-top:1px solid var(--line-soft);padding-top:12px" class="stack tight">
           <div class="row" style="flex-wrap:wrap;gap:8px">
-            <b style="font-size:13.5px">封面工坊 · 一键生成 3 比例封面（9:16 竖 / 4:3 横 / 16:9 横）</b>
+            <b style="font-size:13.5px">① 选标题 · 6 个不同动机备选（反差 / 冲突 / 数字 / 场景 / 悬念 / 结果）</b>
+            <span class="sub" style="font-size:12px">自动读取你的口播逐字稿或稿件，每条标明点击动机与推荐封面大字</span>
+            <span class="grow"></span>
+            <button class="btn primary s" id="genTitlesBtn">${PS.icon('spark', 'sm')}AI 生成 6 个动机标题</button>
+          </div>
+          ${(ep.publishJson?.title_candidates || []).length ? `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:10px">
+              ${(ep.publishJson.title_candidates || []).map((c, idx) => {
+                const picked = ep.publishJson?.picked_title_idx === idx;
+                return `<div class="card stack tight" style="padding:11px 13px;background:${picked ? 'color-mix(in srgb,var(--accent-soft) 38%,var(--surface))' : 'var(--sunk)'};border:${picked ? '1.5px solid var(--accent)' : '1px solid transparent'}">
+                  <div class="row" style="gap:6px">
+                    <span class="pill ${picked ? 'accent' : 'info'}" style="font-size:11px;padding:1px 7px">${PS.esc(c.motive || `角度 ${idx + 1}`)}</span>
+                    <span class="grow"></span>
+                    <button type="button" class="btn s ${picked ? 'good' : 'primary'}" data-pick-title="${idx}">${picked ? '✓ 当前已选' : '采用这个标题'}</button>
+                  </div>
+                  <div style="font-size:14px;font-weight:700;line-height:1.4">${PS.esc(c.title)}</div>
+                  ${c.reason ? `<div class="sub" style="font-size:12px;line-height:1.45">为什么会点：${PS.esc(c.reason)}</div>` : ''}
+                  ${c.cover_text ? `<div class="sub mono" style="font-size:11px;color:var(--accent)">推荐封面大字：${PS.esc(c.cover_text)}</div>` : ''}
+                </div>`;
+              }).join('')}
+            </div>
+          ` : `<div class="sub" style="font-size:12.5px;padding:6px 0">点击右侧「AI 生成 6 个动机标题」，自动根据逐字稿出 6 个不同动机的备选标题与封面大字（选定后自动同步到下方封面工坊）。</div>`}
+        </div>
+
+        <div style="border-top:1px solid var(--line-soft);padding-top:12px" class="stack tight">
+          <div class="row" style="flex-wrap:wrap;gap:8px">
+            <b style="font-size:13.5px">② 封面工坊 · 一键生成 3 比例封面（9:16 竖 / 4:3 横 / 16:9 横）</b>
             <span class="sub" style="font-size:12px">自动保存到 <code>final/上传/</code>，不用跳去 Canva / PS</span>
             <span class="grow"></span>
             <button class="btn s" id="genCoverLocalBtn">⚡ 1 秒本地抽帧出 3 张封面</button>
             <button class="btn primary s" id="genCoverAgentBtn">${PS.icon('spark', 'sm')}让剪辑 Agent 精做封面</button>
           </div>
           <div class="sys-2col">
-            <input type="text" id="covHeadlineIn" value="${PS.esc(ep.publishJson?.title || ep.title || '')}" placeholder="封面主标题（大字，建议 12–24 字）">
+            <input type="text" id="covHeadlineIn" value="${PS.esc(ep.publishJson?.cover_headline || ep.publishJson?.title || ep.title || '')}" placeholder="封面主标题（大字，建议 12–24 字）">
             <input type="text" id="covSubtitleIn" value="" placeholder="可选副标题 / 卖点标签（如：全流程开源 · 零 API 费）">
           </div>
           ${(ep.coverVPath || ep.coverHPath || ep.publishJson?.cover_169_path) ? `
@@ -229,6 +259,33 @@
         btn.disabled = false; btn.innerHTML = old;
       }
     };
+    main.querySelector('#genTitlesBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'AI 构思 6 个动机标题中…';
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/titles`, {});
+        applyPubRes(res);
+        if (res.lifecycle) PS.S.lifecycle = res.lifecycle;
+        PS.toast(`已由 ${res.backend}/${res.model} 生成 ${res.candidates?.length || 6} 个动机备选标题 ✓`, 'good');
+        PS.pages['pub-pack']();
+      } catch (err) {
+        PS.toast(err.message || '生成标题失败', 'warn');
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    });
+    main.querySelectorAll('[data-pick-title]').forEach(b => b.onclick = async () => {
+      const idx = +b.dataset.pickTitle;
+      try {
+        const res = await PS.api('POST', `/api/publish/${ep.id}/pick-title`, { index: idx });
+        applyPubRes(res);
+        if (res.lifecycle) PS.S.lifecycle = res.lifecycle;
+        PS.toast(`已采用标题并同步到封面大字：${res.title.slice(0, 20)} ✓`, 'good');
+        PS.pages['pub-pack']();
+      } catch (err) {
+        PS.toast(err.message || '采用标题失败', 'warn');
+      }
+    });
     main.querySelector('#localizeCopyBtn')?.addEventListener('click', e => runLocalize(e.currentTarget));
     main.querySelector('#localizeCopyBtn2')?.addEventListener('click', e => runLocalize(e.currentTarget));
     const runCoverGen = async (btn, mode) => {
@@ -295,8 +352,12 @@
   // ==================== 发布 · 确认（#pub-confirm · 100% MIT 开源自研专用 Chrome 填表引擎） ====================
   PS.pages['pub-confirm'] = function () {
     const list = pubEpisodes();
+    if (PS.S.activePubEpId && list.some(e => e.id === PS.S.activePubEpId)) {
+      curPubEpId = PS.S.activePubEpId;
+    }
     const ep = list.find(e => e.id === curPubEpId) || list[0];
     curPubEpId = ep.id;
+    PS.S.activePubEpId = ep.id;
     const active = PS.activePlats();
 
     const main = PS.shell('pub-confirm', [['发布工作台', '#pub-confirm'], ['确认 · 专用 Chrome 填表', '#pub-confirm']], `

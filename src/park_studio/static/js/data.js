@@ -15,7 +15,7 @@
       meta: {
         owner: 'Park',
         workspaceName: 'Park Studio',
-        version: 'v0.4.0',
+        version: 'v0.5.0',
         demoMode: false,
         runtimeMode: 'localhost', // localhost | desktop-app
       },
@@ -70,7 +70,13 @@
         },
       },
       releases: [
-        { ver: 'v0.4.0', date: '2026-11-27', tag: '最新', title: 'Standalone 全闭环升级：3 步引导装依赖 · 剪辑 Agent 真执行 · 封面工坊 · 内嵌播放器 · 链接拆解与爆款反推', notes: [
+        { ver: 'v0.5.0', date: '2026-11-27', tag: '最新', title: '内容全生命周期总览 + 6 动机备选标题 + 上来就拍一键 Autopilot + 海外 5 平台数据采集', notes: [
+          '中控大屏升级「内容全生命周期总览（Content Lifecycle Pipeline）」：一屏看清每条内容在「1.选题 → 2.写稿 → 3.剪辑 → 4.标题/封面 → 5.发布 → 6.复盘」6 个阶段的进度，点右侧主按钮直接带着上下文推进到下一关',
+          '找回并升级 Topic Studio 经典「6 个不同动机备选标题」：覆盖反差感 / 真实冲突 / 硬数字 / 场景后果 / 悬念缺口 / 硬结果，每条带点击理由与推荐封面大字，点一下同步更新标题与封面工坊',
+          '新增「⚡ 上来就拍 · 一键全自动（Autopilot）」：无需先写稿，选入一条原片 1 次点击跑完转写 → 删口误挑 Hook → -16 LUFS 渲染 → 用逐字稿出 6 动机标题 → 3 比例封面 → 多平台中英文案与 Hashtags',
+          '补齐 Instagram / Threads / LinkedIn / Meta / TikTok 的粉丝与作品 CDP 数据采集器，全部 12 平台纳入统一中控大屏'
+        ] },
+        { ver: 'v0.4.0', date: '2026-11-27', tag: '历史', title: 'Standalone 全闭环升级：3 步引导装依赖 · 剪辑 Agent 真执行 · 封面工坊 · 内嵌播放器 · 链接拆解与爆款反推', notes: [
           '3 步式 Standalone Onboarding 引导：按需选 12 平台 → 明确分工写稿 Agent 与全能剪辑 Agent（可显式授权目录内执行）→ 一键体检并自动安装 FFmpeg / Whisper / yt-dlp / Node.js',
           '解锁剪辑 Agent 真执行模式（Claude Code / Codex / Gemini CLI 在当前期次目录内 workspace-write 实际渲染动效成片并自动落盘）+ 剪辑台内嵌原生 <video> 播放器（点句跳秒试听 + 成片核对）',
           '内置封面工坊：1 秒本地抽帧大字模板出 3 比例封面（9:16 竖 / 4:3 横 / 16:9 横），也支持交给剪辑 Agent 精做封面，彻底告别跳出到 Canva / PS',

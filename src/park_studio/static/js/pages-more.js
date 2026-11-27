@@ -47,7 +47,7 @@
         <div class="acts">
           <button class="btn" id="btnOnboardingTop">${PS.icon('spark', 'sm')}选平台引导</button>
           <a class="btn" href="#position">${PS.icon('star', 'sm')}我的定位</a>
-          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.4.0</a>
+          <a class="btn" href="#releases">${PS.icon('spark', 'sm')}上新 · v0.5.0</a>
           <a class="btn" href="https://github.com/zinan92/park-studio/issues" target="_blank" rel="noopener">GitHub Issues ↗</a>
         </div>
       </div>

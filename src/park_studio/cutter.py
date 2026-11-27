@@ -472,10 +472,11 @@ def land_into_publish_project(
     *,
     title: str,
     rendered_mp4: Path,
+    transcript_text: str = "",
     cfg: dict[str, Any] | None = None,
     log: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """把成片落盘到统一标准工程目录 <projectRoot>/YYYY-MM-DD_<标题>/final/上传/ 并自动导入发布工作台。"""
+    """把成片落盘到统一标准工程目录 <projectRoot>/YYYY-MM-DD_<标题>/final/上传/ 并自动导入发布工作台（顺带透传转写逐字稿）。"""
     cfg = cfg or config.load_config()
     _log = log or (lambda _m: None)
     folder = projects.scaffold_episode_dir(title, cfg=cfg)
@@ -485,15 +486,21 @@ def land_into_publish_project(
     if rendered_mp4.resolve() != target_mp4.resolve():
         shutil.copy2(rendered_mp4, target_mp4)
     copy_txt = upload_dir / "文案.txt"
+    clean_tr = (transcript_text or "").strip()
     if not copy_txt.exists():
-        copy_txt.write_text(f"{title}\n", encoding="utf-8")
+        copy_txt.write_text(f"{title}\n" + (f"\n{clean_tr[:800]}\n" if clean_tr else ""), encoding="utf-8")
     _log(f"已落盘到统一工程目录：{target_mp4}")
     imported = publisher.import_from_project_dir(conn, str(folder), cfg=cfg)
-    _log(f"已自动载入发布工作台（EP{imported['episode']['episode']}），可直接一键去填表！")
+    ep = imported["episode"]
+    if clean_tr:
+        pj = {**(ep.get("publishJson") or {}), "transcript": clean_tr[:6000]}
+        packed = publisher.pack_episode(conn, ep["id"], publish_json=pj)
+        ep = packed["episode"]
+    _log(f"已自动载入发布工作台（EP{ep['episode']}），可直接选标题、出封面并一键填表！")
     return {
         "folder": str(folder),
         "videoPath": str(target_mp4),
-        "publishEpisode": imported["episode"],
+        "publishEpisode": ep,
     }
 
 

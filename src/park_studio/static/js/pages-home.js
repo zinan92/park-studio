@@ -69,8 +69,101 @@
     });
   }
 
-  // ==================== 中控（#dashboard · 「正在做」+ 运营大屏一屏总览） ====================
+  // ==================== 上来就拍 · 一键全自动（Autopilot）弹窗 ====================
+  function openAutopilotModal() {
+    let pollTimer = null;
+    PS.modal({
+      title: '⚡ 上来就拍 · 一键全自动流水线（Autopilot）',
+      wide: true,
+      body: `<div class="stack" id="apHost">
+        <div class="callout-warm" style="font-size:13px;line-height:1.6">
+          <b>不用写稿、不用管封面、不用想标题和 Hashtag。</b><br>
+          选一条刚拍好的原片，1 次点击后台自动跑完：<b>离线转写 → 删口误挑 Hook → -16 LUFS 渲染 → 用逐字稿出 6 动机备选标题 → 生成 3 比例封面 → 适配所有启用平台的中/英文案与标签</b>，最后直接落到打包页让你 10 秒核对点发。
+        </div>
+        <div>
+          <label class="sub" style="display:block;margin-bottom:4px">本机原片路径（.mp4 / .mov）</label>
+          <div class="row" style="gap:6px">
+            <input type="text" id="apVideoIn" class="mono grow" placeholder="/Volumes/.../raw.mov 或 ~/Movies/.../raw.mp4">
+            ${PS.isMacApp ? '<button type="button" class="btn s" id="apPickBtn">选文件…</button>' : ''}
+          </div>
+        </div>
+        <div>
+          <label class="sub" style="display:block;margin-bottom:4px">临时主题名（可选，留空自动用文件名并由 AI 用逐字稿重起 6 个爆款标题）</label>
+          <input type="text" id="apTitleIn" placeholder="留空也可以，AI 会直接听你的口播起标题">
+        </div>
+        <div class="row" style="gap:16px;flex-wrap:wrap;font-size:13px">
+          <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="apSubs" checked style="accent-color:var(--accent)"> 烧录口播字幕</label>
+          <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="apCovers" checked style="accent-color:var(--accent)"> 自动出 3 比例封面</label>
+          <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="apLocalize" checked style="accent-color:var(--accent)"> 自动适配各平台中/英文案与标签</label>
+        </div>
+        <div id="apProgress" hidden class="stack tight">
+          <div class="row"><span class="pill accent" id="apStatePill">全自动流水线运行中…</span><span class="grow"></span><a class="btn primary s" id="apGoPack" href="#pub-pack" hidden data-close>去打包页挑标题 & 点发布 ›</a></div>
+          <pre class="codebox" id="apLogs" style="max-height:200px;font-size:11.5px"></pre>
+        </div>
+      </div>`,
+      foot: `<button class="btn" data-close id="apCancel">关闭</button><button class="btn primary" id="apRunBtn">⚡ 一键启动全自动出片</button>`,
+      onOpen(mb, close) {
+        const stop = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+        mb.querySelector('#apCancel')?.addEventListener('click', stop);
+        mb.querySelector('#apPickBtn')?.addEventListener('click', async () => {
+          const p = await PS.pickNativePath({ mode: 'file', exts: ['mp4', 'mov', 'mkv', 'm4v'] });
+          if (p) mb.querySelector('#apVideoIn').value = p;
+        });
+        mb.querySelector('#apRunBtn').onclick = async e => {
+          const vp = mb.querySelector('#apVideoIn').value.trim();
+          if (!vp) return PS.toast('请先选择一条本机原片视频', 'warn');
+          const btn = e.currentTarget;
+          btn.disabled = true; btn.textContent = '全自动运行中…';
+          mb.querySelector('#apProgress').hidden = false;
+          try {
+            const res = await PS.api('POST', '/api/autopilot/from-video', {
+              video_path: vp,
+              title: mb.querySelector('#apTitleIn').value.trim(),
+              burn_subs: !!mb.querySelector('#apSubs').checked,
+              generate_covers: !!mb.querySelector('#apCovers').checked,
+              localize_copy: !!mb.querySelector('#apLocalize').checked,
+            });
+            const jobId = res.job.id;
+            const logEl = mb.querySelector('#apLogs');
+            const pillEl = mb.querySelector('#apStatePill');
+            const goEl = mb.querySelector('#apGoPack');
+            logEl.textContent = (res.job.logs || []).join('\n');
+            stop();
+            pollTimer = setInterval(async () => {
+              try {
+                const st = await PS.api('GET', `/api/cut/jobs/${jobId}`);
+                logEl.textContent = (st.logs || []).join('\n');
+                logEl.scrollTop = logEl.scrollHeight;
+                if (st.state !== 'running') {
+                  stop();
+                  if (st.state === 'done') {
+                    pillEl.className = 'pill good';
+                    pillEl.textContent = '✓ 全自动流水线已完成（成片 + 6 标题 + 3 封面 + 文案）';
+                    if (st.result?.episodeId) PS.setActivePubEp(st.result.episodeId);
+                    await PS.syncFromBackend();
+                    goEl.hidden = false;
+                    btn.textContent = '已完成 ✓';
+                    PS.toast('Autopilot 全部完成！点击去打包页挑标题 & 点发布 ✓', 'good');
+                  } else {
+                    pillEl.className = 'pill warn';
+                    pillEl.textContent = `运行失败：${st.error || '请查看日志'}`;
+                    btn.disabled = false; btn.textContent = '重试全自动出片';
+                  }
+                }
+              } catch (err) { stop(); }
+            }, 1100);
+          } catch (err) {
+            PS.toast(err.message || '启动失败', 'warn');
+            btn.disabled = false; btn.textContent = '⚡ 一键启动全自动出片';
+          }
+        };
+      },
+    });
+  }
+
+  // ==================== 中控（#dashboard · 全生命周期总览 + 运营大屏一屏闭环） ====================
   let heroIdx = 0;
+  let lcFilter = 'all';
 
   PS.pages.dashboard = function () {
     const active = PS.activePlats();
@@ -107,17 +200,67 @@
     // 给堆叠图准备真实发布日虚线标记
     const fanMarksEps = realEps.map(e => ({ episode: e.index, nick: e.nick, schedule: e.published_at || '' }));
 
+    const lcItemsAll = PS.S.lifecycle || [];
+    const lcItems = lcFilter === 'all' ? lcItemsAll : lcItemsAll.filter(x => x.currentStage === lcFilter);
+    const LC_STEPS = [
+      ['topic', '1.选题'],
+      ['script', '2.写稿'],
+      ['cut', '3.剪辑'],
+      ['package', '4.标题/封面'],
+      ['publish', '5.发布'],
+      ['review', '6.复盘'],
+    ];
+
     const main = PS.shell('dashboard', [['中控', '#dashboard']], `
       <div class="ph">
         <div>
           <h1>中控大屏</h1>
           <p>全盘真实数据总览（已采集 ${an.totalWorks || 0} 条真实作品 · 上次采数：${PS.esc(an.lastMetricsAt || PS.S.daemon.lastMetricsAt || '未采集')}）。</p>
         </div>
-        <div class="acts">
+        <div class="acts" style="flex-wrap:wrap">
+          <button class="btn" id="autopilotBtn">${PS.icon('spark', 'sm')}⚡ 上来就拍 · 一键全自动</button>
           <button class="btn" id="quickImportBtn">${PS.icon('upload', 'sm')}导入素材 / 贴稿</button>
           <button class="btn primary" id="dashCollect">${PS.icon('refresh', 'sm')}立即采数（粉丝+流量）</button>
         </div>
       </div>
+
+      <section class="card stack tight" style="margin-bottom:4px">
+        <div class="row" style="flex-wrap:wrap;gap:8px">
+          <div>
+            <b style="font-size:15px">内容全生命周期总览（Content Lifecycle）</b>
+            <span class="sub" style="font-size:12px;margin-left:8px">每条内容停在哪一步一目了然，点右侧直接推到下一关</span>
+          </div>
+          <span class="grow"></span>
+          <div class="seg" id="lcFilterSeg">
+            ${[
+              ['all', `全部 (${lcItemsAll.length})`],
+              ['script', '写稿'],
+              ['cut', '待剪辑'],
+              ['package', '待打包'],
+              ['publish', '待发布'],
+              ['review', '已发复盘'],
+            ].map(([k, lab]) => `<button type="button" class="${lcFilter === k ? 'on' : ''}" data-lcf="${k}">${lab}</button>`).join('')}
+          </div>
+        </div>
+        <div class="stack tight" style="gap:7px">
+          ${lcItems.slice(0, 6).map((it, idx) => `<div class="row" style="padding:10px 12px;border-radius:10px;background:var(--sunk);gap:10px;flex-wrap:wrap">
+            <div class="min0 grow" style="min-width:200px">
+              <div class="row" style="gap:6px">
+                <b class="clip1" style="font-size:13.5px">${PS.esc(it.title)}</b>
+                <span class="pill ${it.currentStage === 'review' ? 'good' : it.currentStage === 'publish' ? 'wait' : 'accent'}" style="font-size:11px;padding:1px 7px">${PS.esc(it.currentLabel)}</span>
+              </div>
+              <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">
+                ${LC_STEPS.map(([sk, sl]) => {
+                  const done = !!it.stages?.[sk];
+                  const cur = it.currentStage === sk;
+                  return `<span class="pill ${cur ? 'accent' : done ? 'good' : ''}" style="font-size:10.5px;padding:1px 6px;opacity:${done || cur ? '1' : '.48'}">${done ? '✓ ' : ''}${sl}</span>`;
+                }).join('<span class="sub" style="font-size:10px;opacity:.4">→</span>')}
+              </div>
+            </div>
+            <button type="button" class="btn primary s" data-lc-go="${idx}">${PS.esc(it.nextLabel)}</button>
+          </div>`).join('') || '<div class="sub" style="padding:12px">当前筛选下暂无内容，点右上角「⚡ 上来就拍 · 一键全自动」或去「选题」新建一条。</div>'}
+        </div>
+      </section>
 
       <section class="wip-strip" aria-label="正在做">
         <button type="button" class="wip-card primary" onclick="location.hash='#cut'">
@@ -249,7 +392,21 @@
 
     renderHero();
     PS.drawStackedFans(main.querySelector('#fansChart'), PS.S.followers, active, fanMarksEps);
+    main.querySelector('#autopilotBtn').onclick = openAutopilotModal;
     main.querySelector('#quickImportBtn').onclick = openQuickImportModal;
+    main.querySelectorAll('[data-lcf]').forEach(b => b.onclick = () => { lcFilter = b.dataset.lcf; PS.pages.dashboard(); });
+    main.querySelectorAll('[data-lc-go]').forEach(b => b.onclick = async () => {
+      const it = lcItems[+b.dataset.lcGo];
+      if (!it) return;
+      if (it.episodeId) PS.setActivePubEp(it.episodeId);
+      if (it.topicId && it.nextHash.startsWith('#write')) PS.selectTopicForWrite?.(it.topicId);
+      if (it.nextHash === '#cut' && it.title && PS.S.cutProject) {
+        PS.S.cutProject.title = it.title;
+        if (PS.S.cutProject.id) await PS.api('PATCH', `/api/cut/${PS.S.cutProject.id}`, { title: it.title }).catch(() => {});
+        PS.save();
+      }
+      location.hash = it.nextHash;
+    });
     main.querySelector('#dashCollect').onclick = async e => {
       const btn = e.currentTarget;
       const old = btn.innerHTML;
