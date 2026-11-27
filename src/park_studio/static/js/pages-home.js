@@ -161,31 +161,20 @@
     });
   }
 
-  // ==================== 中控（#dashboard · 全生命周期总览 + 运营大屏一屏闭环） ====================
+  // ==================== 中控（#dashboard · 极简当前推进条 + 数据大屏为主体） ====================
   let heroIdx = 0;
   let lcFilter = 'all';
+  let lcExpanded = false;
 
   PS.pages.dashboard = function () {
     const active = PS.activePlats();
-    const cut = PS.S.cutProject;
     const iss = PS._newsletterIssue;
-    const savedDaily = PS._savedDaily;
-    const topNews = iss?.parts?.length
-      ? iss.parts.flatMap(p => p.groups.flatMap(g => g.items)).slice(0, 3)
-      : PS.S.sources.newsletter.slice(0, 3);
     const newsCount = iss?.total || PS.S.sources.newsletter.length;
-    const savedCount = (savedDaily?.cards?.length || 0) + (savedDaily?.items?.length || 0) || PS.S.sources.saved.length;
 
     const an = PS.S.analytics || {};
     const realEps = an.episodes || [];
     const slides = realEps.slice(0, 4);
     if (heroIdx >= slides.length) heroIdx = 0;
-
-    // 真实待确认发布期次（来自 SQLite publish_episodes，而非演示种子）
-    const pubList = PS.S.publishEpisodes || [];
-    const activePub = pubList.find(e => Object.values(e.tasks || {}).some(t => t.state === 'awaiting_user')) || pubList[0];
-    const pubTodoPlats = activePub ? active.filter(pid => activePub.tasks?.[pid]?.state === 'awaiting_user') : [];
-    const pubDoneN = activePub ? active.filter(pid => activePub.tasks?.[pid]?.state === 'published').length : 0;
 
     const pStats = active.map(id => ({ id, ...PS.fanStats(id) }));
     const totFans = pStats.reduce((s, x) => s + x.total, 0);
@@ -201,7 +190,10 @@
     const fanMarksEps = realEps.map(e => ({ episode: e.index, nick: e.nick, schedule: e.published_at || '' }));
 
     const lcItemsAll = PS.S.lifecycle || [];
-    const lcItems = lcFilter === 'all' ? lcItemsAll : lcItemsAll.filter(x => x.currentStage === lcFilter);
+    const lcInProgress = lcItemsAll.filter(x => x.currentStage !== 'review');
+    const lcItems = lcExpanded
+      ? (lcFilter === 'all' ? lcItemsAll : lcItemsAll.filter(x => x.currentStage === lcFilter)).slice(0, 8)
+      : (lcInProgress.length ? lcInProgress : lcItemsAll).slice(0, 2);
     const LC_STEPS = [
       ['topic', '1.选题'],
       ['script', '2.写稿'],
@@ -224,74 +216,59 @@
         </div>
       </div>
 
-      <section class="card stack tight" style="margin-bottom:4px">
-        <div class="row" style="flex-wrap:wrap;gap:8px">
-          <div>
-            <b style="font-size:15px">内容全生命周期总览（Content Lifecycle）</b>
-            <span class="sub" style="font-size:12px;margin-left:8px">每条内容停在哪一步一目了然，点右侧直接推到下一关</span>
-          </div>
+      <section class="working-strip" aria-label="当前推进">
+        <div class="working-head">
+          <span class="working-title">当前推进</span>
+          <span class="sub" style="font-size:12px">${lcInProgress.length ? `进行中 ${lcInProgress.length} 条` : `共 ${lcItemsAll.length} 条`}</span>
           <span class="grow"></span>
-          <div class="seg" id="lcFilterSeg">
-            ${[
-              ['all', `全部 (${lcItemsAll.length})`],
-              ['script', '写稿'],
-              ['cut', '待剪辑'],
-              ['package', '待打包'],
-              ['publish', '待发布'],
-              ['review', '已发复盘'],
-            ].map(([k, lab]) => `<button type="button" class="${lcFilter === k ? 'on' : ''}" data-lcf="${k}">${lab}</button>`).join('')}
-          </div>
+          <a class="sub" href="#source" style="font-size:12px">今日信源 ${newsCount} 条 ›</a>
+          ${lcItemsAll.length > 0 ? `<button type="button" class="btn ghost s" id="lcToggleBtn" style="height:24px;padding:0 8px;font-size:11.5px">${lcExpanded ? '收起 ▴' : `展开全生命周期 (${lcItemsAll.length}) ▾`}</button>` : ''}
         </div>
-        <div class="stack tight" style="gap:7px">
-          ${lcItems.slice(0, 6).map((it, idx) => `<div class="row" style="padding:10px 12px;border-radius:10px;background:var(--sunk);gap:10px;flex-wrap:wrap">
-            <div class="min0 grow" style="min-width:200px">
-              <div class="row" style="gap:6px">
-                <b class="clip1" style="font-size:13.5px">${PS.esc(it.title)}</b>
-                <span class="pill ${it.currentStage === 'review' ? 'good' : it.currentStage === 'publish' ? 'wait' : 'accent'}" style="font-size:11px;padding:1px 7px">${PS.esc(it.currentLabel)}</span>
+        ${lcExpanded ? `<div class="seg" id="lcFilterSeg" style="width:fit-content">
+          ${[
+            ['all', `全部 (${lcItemsAll.length})`],
+            ['script', '写稿'],
+            ['cut', '待剪辑'],
+            ['package', '待打包'],
+            ['publish', '待发布'],
+            ['review', '已发复盘'],
+          ].map(([k, lab]) => `<button type="button" class="${lcFilter === k ? 'on' : ''}" data-lcf="${k}">${lab}</button>`).join('')}
+        </div>` : ''}
+        <div class="working-list">
+          ${lcItems.map((it, idx) => {
+            const pillCls = it.currentStage === 'review' ? 'good' : it.currentStage === 'publish' ? 'wait' : 'accent';
+            if (!lcExpanded) {
+              const dots = LC_STEPS.map(([sk, sl]) => {
+                const done = !!it.stages?.[sk];
+                const cur = it.currentStage === sk;
+                return `<i class="${cur ? 'cur' : done ? 'done' : ''}" title="${sl}"></i>`;
+              }).join('');
+              return `<div class="working-row">
+                <span class="pill ${pillCls}" style="font-size:11px;padding:1px 7px;flex:none">${PS.esc(it.currentLabel)}</span>
+                <b class="clip1 grow" style="font-size:13px;min-width:0">${PS.esc(it.title)}</b>
+                <span class="working-dots" aria-hidden="true">${dots}</span>
+                ${it.meta ? `<span class="sub" style="font-size:11px;white-space:nowrap">${PS.esc(it.meta)}</span>` : ''}
+                <button type="button" class="btn primary s" style="height:26px;padding:0 10px;font-size:12px;flex:none" data-lc-go="${idx}">${PS.esc(it.nextLabel)}</button>
+              </div>`;
+            }
+            return `<div class="working-row expanded">
+              <div class="min0 grow" style="min-width:200px">
+                <div class="row" style="gap:6px">
+                  <b class="clip1" style="font-size:13px">${PS.esc(it.title)}</b>
+                  <span class="pill ${pillCls}" style="font-size:11px;padding:1px 7px">${PS.esc(it.currentLabel)}</span>
+                </div>
+                <div class="row" style="gap:4px;margin-top:5px;flex-wrap:wrap">
+                  ${LC_STEPS.map(([sk, sl]) => {
+                    const done = !!it.stages?.[sk];
+                    const cur = it.currentStage === sk;
+                    return `<span class="pill ${cur ? 'accent' : done ? 'good' : ''}" style="font-size:10.5px;padding:1px 6px;opacity:${done || cur ? '1' : '.48'}">${done ? '✓ ' : ''}${sl}</span>`;
+                  }).join('<span class="sub" style="font-size:10px;opacity:.4">→</span>')}
+                </div>
               </div>
-              <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">
-                ${LC_STEPS.map(([sk, sl]) => {
-                  const done = !!it.stages?.[sk];
-                  const cur = it.currentStage === sk;
-                  return `<span class="pill ${cur ? 'accent' : done ? 'good' : ''}" style="font-size:10.5px;padding:1px 6px;opacity:${done || cur ? '1' : '.48'}">${done ? '✓ ' : ''}${sl}</span>`;
-                }).join('<span class="sub" style="font-size:10px;opacity:.4">→</span>')}
-              </div>
-            </div>
-            <button type="button" class="btn primary s" data-lc-go="${idx}">${PS.esc(it.nextLabel)}</button>
-          </div>`).join('') || '<div class="sub" style="padding:12px">当前筛选下暂无内容，点右上角「⚡ 上来就拍 · 一键全自动」或去「选题」新建一条。</div>'}
+              <button type="button" class="btn primary s" data-lc-go="${idx}">${PS.esc(it.nextLabel)}</button>
+            </div>`;
+          }).join('') || '<div class="sub" style="padding:4px 2px;font-size:12px">暂无进行中内容，点右上角「⚡ 上来就拍 · 一键全自动」或去「选题」新建一条。</div>'}
         </div>
-      </section>
-
-      <section class="wip-strip" aria-label="正在做">
-        <button type="button" class="wip-card primary" onclick="location.hash='#cut'">
-          <span class="wip-ic">${PS.icon('film')}</span>
-          <div class="min0 grow">
-            <div class="wip-tag"><span>正在做 · 剪辑工作台</span></div>
-            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(cut.title)}</b>
-            <div class="sub clip1" style="font-size:12px">停在「镜头表 (${(cut.shots || []).length} 镜)」</div>
-          </div>
-          <span class="wip-go">接着剪 ›</span>
-        </button>
-
-        <button type="button" class="wip-card ${pubTodoPlats.length ? 'warn' : ''}" onclick="location.hash='#pub-confirm'">
-          <span class="wip-ic">${PS.icon(pubTodoPlats.length ? 'send' : 'check')}</span>
-          <div class="min0 grow">
-            <div class="wip-tag"><span>${pubTodoPlats.length ? `待确认发布 · ${pubTodoPlats.length} 平台` : (activePub ? '当前发布包' : '准备发布')}</span></div>
-            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(activePub ? activePub.nick : '从本地工程目录一键载入')}</b>
-            <div class="sub clip1" style="font-size:12px">${pubTodoPlats.length ? `${PS.esc(pubTodoPlats.map(p => PS.PLATFORMS[p].name).join('、'))} 已由专用 Chrome 填表` : `${pubDoneN}/${active.length} 平台已发布`}</div>
-          </div>
-          <span class="wip-go">${pubTodoPlats.length ? '去点发 ›' : '去发布 ›'}</span>
-        </button>
-
-        <button type="button" class="wip-card" onclick="location.hash='#source'">
-          <span class="wip-ic">${PS.icon('star')}</span>
-          <div class="min0 grow">
-            <div class="wip-tag"><span>今日信源 · AI 日报 ${newsCount} 条</span></div>
-            <b class="clip1" style="display:block;font-size:14px;margin-top:2px">${PS.esc(topNews[0]?.title || '查看今日 AI 情报')}</b>
-            <div class="sub clip1" style="font-size:12px">搞钱日报 ${savedCount} 条 · 选题池 ${PS.S.topics.filter(t => !t.trash).length} 条</div>
-          </div>
-          <span class="wip-go">看日报 ›</span>
-        </button>
       </section>
 
       <section class="hero-ep" id="heroHost"></section>
@@ -394,6 +371,7 @@
     PS.drawStackedFans(main.querySelector('#fansChart'), PS.S.followers, active, fanMarksEps);
     main.querySelector('#autopilotBtn').onclick = openAutopilotModal;
     main.querySelector('#quickImportBtn').onclick = openQuickImportModal;
+    main.querySelector('#lcToggleBtn')?.addEventListener('click', () => { lcExpanded = !lcExpanded; PS.pages.dashboard(); });
     main.querySelectorAll('[data-lcf]').forEach(b => b.onclick = () => { lcFilter = b.dataset.lcf; PS.pages.dashboard(); });
     main.querySelectorAll('[data-lc-go]').forEach(b => b.onclick = async () => {
       const it = lcItems[+b.dataset.lcGo];

@@ -1,47 +1,63 @@
 /* 业务页面样式 — 极简呼吸感 + 四大工作台（选题 / 剪辑镜头表 / 发布闭环 / 复盘大屏） */
 
-/* ========== 1. 中控大屏顶部「正在做」推进条（替代独立首页） ========== */
-.wip-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-@media (max-width: 940px) { .wip-strip { grid-template-columns: 1fr; } }
-.wip-card {
+/* ========== 1. 中控大屏顶部「当前推进」极简条（给数据大屏留出主视觉空间） ========== */
+.working-strip {
   display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 13px 16px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
   border-radius: 14px;
   border: 1px solid var(--line-soft);
   background: var(--surface);
   box-shadow: var(--shadow-1);
-  text-align: left;
-  cursor: pointer;
-  transition: transform var(--fast), border-color var(--fast), box-shadow var(--fast);
 }
-.wip-card:hover { transform: translateY(-1px); border-color: var(--line); box-shadow: var(--shadow-2); }
-.wip-card.primary {
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
-  border-color: var(--accent-line);
+.working-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
-.wip-card.primary:hover { border-color: var(--accent); }
-.wip-card.warn {
-  background: color-mix(in srgb, var(--hot-soft) 52%, var(--surface));
-  border-color: color-mix(in srgb, var(--hot) 32%, var(--line-soft));
+.working-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.wip-ic {
-  width: 36px; height: 36px; border-radius: 10px; flex: none;
-  display: grid; place-items: center;
-  background: var(--sunk); color: var(--ink-2);
+.working-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.wip-card.primary .wip-ic { background: var(--accent); color: var(--on-accent); }
-.wip-card.warn .wip-ic { background: var(--hot); color: #0D0D0D; }
-.wip-tag { font-size: 11.5px; font-weight: 600; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
-.wip-card.primary .wip-tag { color: var(--accent); }
-.wip-card.warn .wip-tag { color: var(--hot); }
-.wip-go { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; margin-left: auto; }
-.wip-card.warn .wip-go { color: var(--hot); }
+.working-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: var(--sunk);
+  min-width: 0;
+}
+.working-row.expanded {
+  flex-wrap: wrap;
+  padding: 9px 11px;
+}
+.working-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+.working-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line);
+  display: block;
+}
+.working-dots i.done { background: var(--good); }
+.working-dots i.cur { background: var(--accent); transform: scale(1.2); }
 
 .hm-now {
   display: flex;

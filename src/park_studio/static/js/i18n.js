@@ -444,6 +444,8 @@
     '⚡ 上来就拍 · 一键全自动': '⚡ Raw Video Autopilot',
     '⚡ 上来就拍 · 一键全自动流水线（Autopilot）': '⚡ Raw Video → Publish Autopilot',
     '⚡ 一键启动全自动出片': '⚡ Run Full Autopilot',
+    '当前推进': 'Working On',
+    '收起 ▴': 'Collapse ▴',
     '内容全生命周期总览（Content Lifecycle）': 'Content Lifecycle Pipeline',
     '每条内容停在哪一步一目了然，点右侧直接推到下一关': 'Track every piece end-to-end and click to advance to the next stage',
     '写稿': 'Script',
