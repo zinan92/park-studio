@@ -149,43 +149,165 @@ async def _wait_origin(client: cdp.CDPClient, sid: str, host_substr: str, *, tim
     return False
 
 
+def _fnum(v: Any) -> float | None:
+    if v in (None, "", "-", "—"):
+        return None
+    try:
+        return float(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _inum(v: Any) -> int | None:
+    f = _fnum(v)
+    return int(round(f)) if f is not None else None
+
+
+def parse_douyin_work_list(payload: str | dict[str, Any]) -> tuple[list[dict[str, Any]], bool, str]:
+    """解析抖音创作者后台 work_list（同时合并 aweme_list 基础数据与 items[].metrics 留存/完播/涨粉/封面点击率）。
+
+    传原始 JSON 字符串时由 Python json.loads 无损解析 64 位 item.id，避免 JS Number 精度丢失。
+    """
+    if isinstance(payload, str):
+        try:
+            data = json.loads(payload)
+        except ValueError:
+            return [], False, "0"
+    else:
+        data = payload or {}
+    if not isinstance(data, dict):
+        return [], False, "0"
+
+    raw_items = data.get("items") or []
+    metrics_by_id: dict[str, dict[str, Any]] = {}
+    metrics_by_ts: dict[int, dict[str, Any]] = {}
+    for it in raw_items:
+        if not isinstance(it, dict):
+            continue
+        m = it.get("metrics") or {}
+        if not isinstance(m, dict) or not m:
+            continue
+        iid = str(it.get("id") or it.get("aweme_id") or "").strip()
+        if iid:
+            metrics_by_id[iid] = m
+        cts = _inum(it.get("create_time")) or 0
+        if cts:
+            metrics_by_ts[cts] = m
+
+    out: list[dict[str, Any]] = []
+    aweme_list = data.get("aweme_list") or []
+    for idx, a in enumerate(aweme_list):
+        if not isinstance(a, dict):
+            continue
+        wid = str(a.get("aweme_id") or "").strip()
+        if not wid:
+            continue
+        st = a.get("statistics") or {}
+        ts = int(a.get("create_time") or 0)
+        dur_ms = int((a.get("video") or {}).get("duration") or a.get("duration") or 0)
+        dur_s = dur_ms // 1000 if dur_ms > 2000 else dur_ms
+
+        # 精准匹配 items[].metrics：1) exact id -> 2) create_time -> 3) 同长度同下标兜底
+        m = metrics_by_id.get(wid) or (metrics_by_ts.get(ts) if ts else None)
+        if m is None and idx < len(raw_items) and isinstance(raw_items[idx], dict):
+            cand = raw_items[idx].get("metrics")
+            if isinstance(cand, dict) and cand:
+                m = cand
+        m = m or {}
+
+        raw_extra: dict[str, Any] = {"desc": a.get("desc") or ""}
+        bounce_2s = _fnum(m.get("bounce_rate_2s"))
+        comp_5s = _fnum(m.get("completion_rate_5s"))
+        comp = _fnum(m.get("completion_rate"))
+        avg_s = _fnum(m.get("avg_view_second"))
+        avg_prop = _fnum(m.get("avg_view_proportion"))
+        cover_ctr = _fnum(m.get("cover_click_rate"))
+        cover_show = _inum(m.get("cover_show"))
+        sub_cnt = _inum(m.get("subscribe_count"))
+        unsub_cnt = _inum(m.get("unsubscribe_count"))
+        home_visits = _inum(m.get("homepage_visit_count"))
+        fan_view_prop = _fnum(m.get("fan_view_proportion"))
+
+        if bounce_2s is not None:
+            raw_extra["bounce_2s"] = round(bounce_2s, 4)
+            raw_extra["retention_2s"] = round(max(0.0, 1.0 - bounce_2s), 4)
+        if comp_5s is not None:
+            raw_extra["completion_5s"] = round(comp_5s, 4)
+        if comp is not None:
+            raw_extra["completion"] = round(comp, 4)
+        if avg_s is not None:
+            raw_extra["avg_view_s"] = round(avg_s, 1)
+        if avg_prop is not None:
+            raw_extra["avg_view_pct"] = round(avg_prop, 4)
+        if cover_ctr is not None:
+            raw_extra["cover_ctr"] = round(cover_ctr, 4)
+        if cover_show is not None:
+            raw_extra["cover_show"] = cover_show
+        if sub_cnt is not None:
+            raw_extra["fans_gained"] = sub_cnt
+        if unsub_cnt is not None:
+            raw_extra["fans_lost"] = unsub_cnt
+        if sub_cnt is not None:
+            raw_extra["net_fans"] = sub_cnt - (unsub_cnt or 0)
+        if home_visits is not None:
+            raw_extra["home_visits"] = home_visits
+        if fan_view_prop is not None:
+            raw_extra["fan_view_pct"] = round(fan_view_prop, 4)
+
+        views = _inum(m.get("view_count"))
+        if views is None:
+            views = int(st.get("play_count") or 0)
+
+        out.append({
+            "platform": "douyin",
+            "work_id": wid,
+            "title": _clean_title(a.get("desc") or a.get("item_title") or ""),
+            "url": f"https://www.douyin.com/video/{wid}",
+            "published_at": _ts_to_day(ts),
+            "published_ts": ts,
+            "duration_sec": max(0, int(dur_s)),
+            "views": max(0, int(views)),
+            "likes": int(st.get("digg_count") or _inum(m.get("like_count")) or 0),
+            "comments": int(st.get("comment_count") or _inum(m.get("comment_count")) or 0),
+            "favorites": int(st.get("collect_count") or _inum(m.get("favorite_count")) or 0),
+            "shares": int(st.get("share_count") or _inum(m.get("share_count")) or 0),
+            "raw": raw_extra,
+        })
+
+    has_more = bool(data.get("has_more"))
+    next_cursor = str(data.get("max_cursor") or "0")
+    return out, has_more, next_cursor
+
+
 async def _collect_douyin(client: cdp.CDPClient) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
+    seen: set[str] = set()
 
     async def fn(sid: str, _tid: str) -> None:
         if not await _wait_origin(client, sid, "douyin.com", timeout_s=10.0):
             return
         await asyncio.sleep(1.5)
-        data = await client.evaluate(
-            sid,
-            """(async () => {
-              const r = await fetch('/janus/douyin/creator/pc/work_list?status=0&count=30&max_cursor=0&scene=star_atlas&device_platform=android&aid=1128', {credentials:'include'});
-              return await r.json();
-            })()""",
-        )
-        for a in (data or {}).get("aweme_list") or []:
-            wid = str(a.get("aweme_id") or "").strip()
-            if not wid:
-                continue
-            st = a.get("statistics") or {}
-            ts = int(a.get("create_time") or 0)
-            dur_ms = int((a.get("video") or {}).get("duration") or a.get("duration") or 0)
-            dur_s = dur_ms // 1000 if dur_ms > 2000 else dur_ms
-            items.append({
-                "platform": "douyin",
-                "work_id": wid,
-                "title": _clean_title(a.get("desc") or a.get("item_title") or ""),
-                "url": f"https://www.douyin.com/video/{wid}",
-                "published_at": _ts_to_day(ts),
-                "published_ts": ts,
-                "duration_sec": max(0, int(dur_s)),
-                "views": int(st.get("play_count") or 0),
-                "likes": int(st.get("digg_count") or 0),
-                "comments": int(st.get("comment_count") or 0),
-                "favorites": int(st.get("collect_count") or 0),
-                "shares": int(st.get("share_count") or 0),
-                "raw": {"desc": a.get("desc") or ""},
-            })
+        cursor = "0"
+        for _ in range(3):
+            raw_text = await client.evaluate(
+                sid,
+                f"""(async () => {{
+                  const r = await fetch('/janus/douyin/creator/pc/work_list?status=0&count=30&max_cursor={cursor}&scene=star_atlas&device_platform=android&aid=1128&support_h265=1', {{credentials:'include'}});
+                  return await r.text();
+                }})()""",
+            )
+            if not isinstance(raw_text, str) or not raw_text.strip().startswith("{"):
+                break
+            batch, has_more, next_cursor = parse_douyin_work_list(raw_text)
+            for row in batch:
+                if row["work_id"] in seen:
+                    continue
+                seen.add(row["work_id"])
+                items.append(row)
+            if not has_more or not next_cursor or next_cursor == cursor:
+                break
+            cursor = next_cursor
+            await asyncio.sleep(0.8)
 
     await client.with_tab("https://creator.douyin.com/creator-micro/content/manage", fn, wait_s=0.0)
     return items
@@ -509,6 +631,22 @@ def upsert_works(conn: sqlite3.Connection, works: list[dict[str, Any]]) -> int:
         wid = str(w["work_id"])
         pub_ts = int(w.get("published_ts") or 0)
         age = max(0, (now_ts - pub_ts) // 86400) if pub_ts else 0
+        # 合并保留历史 raw_json（避免部分刷新覆盖掉留存/完播/涨粉等深层指标）
+        old_row = conn.execute(
+            "SELECT raw_json FROM platform_works WHERE platform=? AND work_id=?",
+            (pid, wid),
+        ).fetchone()
+        merged_raw: dict[str, Any] = {}
+        if old_row and old_row["raw_json"]:
+            try:
+                old_obj = json.loads(old_row["raw_json"])
+                if isinstance(old_obj, dict):
+                    merged_raw.update(old_obj)
+            except Exception:
+                pass
+        for k, v in (w.get("raw") or {}).items():
+            if v is not None and v != "":
+                merged_raw[k] = v
         conn.execute(
             """INSERT INTO platform_works(
                  platform, work_id, title, url, published_at, published_ts, duration_sec,
@@ -527,7 +665,7 @@ def upsert_works(conn: sqlite3.Connection, works: list[dict[str, Any]]) -> int:
                 str(w.get("published_at") or ""), pub_ts, int(w.get("duration_sec") or 0),
                 int(w.get("views") or 0), int(w.get("likes") or 0), int(w.get("comments") or 0),
                 int(w.get("favorites") or 0), int(w.get("shares") or 0),
-                json.dumps(w.get("raw") or {}, ensure_ascii=False), ts_iso,
+                json.dumps(merged_raw, ensure_ascii=False), ts_iso,
             ),
         )
         conn.execute(
@@ -674,6 +812,7 @@ def _group_episodes(works: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "favorites": w["favorites"],
                     "shares": w["shares"],
                     "duration_sec": w["duration_sec"],
+                    "raw": w.get("raw") or {},
                 }
                 for pid, w in g["platforms"].items()
             },
@@ -681,18 +820,42 @@ def _group_episodes(works: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _safe_raw(raw_json: Any) -> dict[str, Any]:
+    if isinstance(raw_json, dict):
+        return raw_json
+    if not raw_json:
+        return {}
+    try:
+        obj = json.loads(raw_json)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+def _pct_or_none(val: Any) -> float | None:
+    f = _fnum(val)
+    if f is None:
+        return None
+    # 兼容 0-1 小数与 0-100 百分数
+    return round(f * 100, 1) if f <= 1.0 else round(f, 1)
+
+
 def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
     """基于 SQLite 真实采集的 platform_works、work_snapshots 与 followers_daily 生成全量复盘与大屏结论。"""
     rows = conn.execute(
         """SELECT platform, work_id, title, url, published_at, published_ts, duration_sec,
-                  views, likes, comments, favorites, shares, collected_at
+                  views, likes, comments, favorites, shares, raw_json, collected_at
            FROM platform_works
            ORDER BY published_ts DESC, views DESC"""
     ).fetchall()
-    works = [dict(r) for r in rows]
+    works: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        d["raw"] = _safe_raw(d.pop("raw_json", None))
+        works.append(d)
     episodes = _group_episodes(works)
 
-    # 1. 抖音作品分析（完全基于真实采集的抖音作品）
+    # 1. 抖音作品分析（含 2秒跳出/留存、5秒完播、全片完播、均看时长、封面点击率、单条涨粉、主页访问）
     dy_works = [w for w in works if w["platform"] == "douyin"]
     dy_views = [int(w["views"]) for w in dy_works]
     dy_likes = [int(w["likes"]) for w in dy_works]
@@ -703,12 +866,49 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
     tot_dy_favs = sum(dy_favs)
     fav_like_pct = round((tot_dy_favs / tot_dy_likes) * 100, 1) if tot_dy_likes else 0.0
 
+    vals_5s: list[float] = []
+    vals_b2s: list[float] = []
+    vals_comp: list[float] = []
+    vals_avg_s: list[float] = []
+    vals_ctr: list[float] = []
+    tot_dy_fans_gained = 0
+    tot_dy_home_visits = 0
+    has_fans_gained = False
+
     scatter: list[dict[str, Any]] = []
     hit_3x = 0
     for w in dy_works:
         mult = round(w["views"] / med_views, 1) if med_views > 0 else 1.0
         if mult >= 3.0:
             hit_3x += 1
+        raw = w.get("raw") or {}
+        c5s = _pct_or_none(raw.get("completion_5s"))
+        b2s = _pct_or_none(raw.get("bounce_2s"))
+        stay2s = round(max(0.0, 100.0 - b2s), 1) if b2s is not None else _pct_or_none(raw.get("retention_2s"))
+        comp = _pct_or_none(raw.get("completion"))
+        avg_s = _fnum(raw.get("avg_view_s"))
+        ctr = _pct_or_none(raw.get("cover_ctr"))
+        fg = _inum(raw.get("fans_gained"))
+        nf = _inum(raw.get("net_fans"))
+        hv = _inum(raw.get("home_visits"))
+        fvp = _pct_or_none(raw.get("fan_view_pct"))
+
+        if c5s is not None:
+            vals_5s.append(c5s)
+        if b2s is not None:
+            vals_b2s.append(b2s)
+        if comp is not None:
+            vals_comp.append(comp)
+        if avg_s is not None:
+            vals_avg_s.append(round(avg_s, 1))
+        if ctr is not None:
+            vals_ctr.append(ctr)
+        if fg is not None:
+            tot_dy_fans_gained += fg
+            has_fans_gained = True
+        if hv is not None:
+            tot_dy_home_visits += hv
+
         scatter.append({
             "work_id": w["work_id"],
             "title": w["title"],
@@ -721,9 +921,99 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
             "mult": mult,
             "published_at": w["published_at"],
             "url": w["url"],
+            "completion5sPct": c5s,
+            "bounce2sPct": b2s,
+            "stay2sPct": stay2s,
+            "completionPct": comp,
+            "avgViewS": round(avg_s, 1) if avg_s is not None else None,
+            "coverCtrPct": ctr,
+            "fansGained": fg,
+            "netFans": nf,
+            "homeVisits": hv,
+            "fanViewPct": fvp,
+            "diagTag": "",
+            "diagTone": "",
         })
 
-    # 2. 跨平台单期对比与多日快照（用于「同龄复盘」）
+    med_5s = round(median(vals_5s), 1) if vals_5s else None
+    med_b2s = round(median(vals_b2s), 1) if vals_b2s else None
+    med_stay2s = round(max(0.0, 100.0 - med_b2s), 1) if med_b2s is not None else None
+    med_comp = round(median(vals_comp), 1) if vals_comp else None
+    med_avg_s = round(median(vals_avg_s), 1) if vals_avg_s else None
+    med_ctr = round(median(vals_ctr), 1) if vals_ctr else None
+    has_retention = bool(vals_5s or vals_b2s or vals_comp or vals_avg_s)
+
+    # 基于账号自身中位数打诊断标签，真正区分出优势项与短板项
+    for item in scatter:
+        mult = item["mult"]
+        c5s = item["completion5sPct"]
+        b2s = item["bounce2sPct"]
+        ctr = item["coverCtrPct"]
+        fg = item["fansGained"] or 0
+        if mult >= 3.0:
+            item["diagTag"], item["diagTone"] = ("🔥 爆款 · 涨粉王" if fg >= 500 else "🔥 3× 爆款"), "good"
+        elif b2s is not None and med_b2s is not None and b2s >= max(42.0, med_b2s + 6.0):
+            item["diagTag"], item["diagTone"] = "⚠️ 2s 跳出高 · 改开头", "warn"
+        elif c5s is not None and med_5s is not None and c5s >= max(42.0, med_5s + 6.0):
+            item["diagTag"], item["diagTone"] = "⚡ 5s 完播极强", "good"
+        elif fg >= 300:
+            item["diagTag"], item["diagTone"] = "🧲 高转粉", "good"
+        elif ctr is not None and med_ctr is not None and ctr >= med_ctr + 10.0:
+            item["diagTag"], item["diagTone"] = "🎯 封面极吸睛", "accent"
+        elif ctr is not None and med_ctr is not None and ctr <= max(14.0, med_ctr - 10.0):
+            item["diagTag"], item["diagTone"] = "🖼 封面偏弱", "warn"
+        elif item["likes"] > 0 and (item["favorites"] / item["likes"]) >= 0.9:
+            item["diagTag"], item["diagTone"] = "💎 高收藏干货", "accent"
+        elif mult < 0.6 and med_views > 0:
+            item["diagTag"], item["diagTone"] = "📉 低于中位", "warn"
+
+    # 抖音留存诊断洞察（对比 3× 爆款 vs 普通视频）
+    retention_insights: list[dict[str, str]] = []
+    if has_retention:
+        hits_5s = [x["completion5sPct"] for x in scatter if x["mult"] >= 3.0 and x["completion5sPct"] is not None]
+        norm_5s = [x["completion5sPct"] for x in scatter if x["mult"] < 3.0 and x["completion5sPct"] is not None]
+        if hits_5s and norm_5s:
+            h5, n5 = round(median(hits_5s), 1), round(median(norm_5s), 1)
+            diff = round(h5 - n5, 1)
+            retention_insights.append({
+                "cls": "g" if diff >= 0 else "o",
+                "tag": "5秒留存",
+                "html": f"你的 3× 爆款 5 秒完播中位数 <b>{h5}%</b> vs 普通作品 <b>{n5}%</b>（差值 <b>{'+' if diff >= 0 else ''}{diff}%</b>），前 5 秒直接决定推流池大小。",
+            })
+        elif med_5s is not None and med_stay2s is not None:
+            retention_insights.append({
+                "cls": "b",
+                "tag": "开头留存",
+                "html": f"近 {len(vals_5s)} 条抖音实测 <b>2 秒留存 {med_stay2s}%</b>（跳出 {med_b2s}%）、<b>5 秒完播 {med_5s}%</b>、平均观看 <b>{med_avg_s or 0} 秒</b>。",
+            })
+        top_fan_w = max((x for x in scatter if (x["fansGained"] or 0) > 0), key=lambda x: x["fansGained"] or 0, default=None)
+        if top_fan_w:
+            retention_insights.append({
+                "cls": "g",
+                "tag": "涨粉王",
+                "html": f"单条最能涨粉的是「<b>{top_fan_w['title'][:24]}</b>」单条涨粉 <b>+{top_fan_w['fansGained']:,}</b>（主页访问 {top_fan_w['homeVisits'] or 0:,} · 封面点击 {top_fan_w['coverCtrPct'] or 0}%）。",
+            })
+        worst_b2s = max((x for x in scatter if x["bounce2sPct"] is not None), key=lambda x: x["bounce2sPct"] or 0, default=None)
+        if worst_b2s and (worst_b2s["bounce2sPct"] or 0) >= 42.0:
+            retention_insights.append({
+                "cls": "o",
+                "tag": "跳出预警",
+                "html": f"「<b>{worst_b2s['title'][:22]}</b>」2 秒跳出高达 <b>{worst_b2s['bounce2sPct']}%</b>，前 2 秒信息密度/画面冲突不足，建议复盘开场第一句。",
+            })
+        if med_ctr is not None:
+            retention_insights.append({
+                "cls": "p",
+                "tag": "封面点击",
+                "html": f"抖音封面点击率中位数 <b>{med_ctr}%</b>，累计通过作品带来 <b>+{tot_dy_fans_gained:,}</b> 涨粉与 <b>{tot_dy_home_visits:,}</b> 次主页访问。",
+            })
+    elif dy_works:
+        retention_insights.append({
+            "cls": "o",
+            "tag": "留存待同步",
+            "html": "点右上角「<b>立即采流量</b>」即可从抖音创作者后台同步每条视频的 <b>2 秒跳出率、5 秒完播率、全片完播、均看时长、封面点击率与单条涨粉</b>。",
+        })
+
+    # 2. 跨平台单期对比与多日快照（最多 20 期，附主力平台归因、留存、诊断结论）
     snap_rows = conn.execute(
         "SELECT day, platform, work_id, age_days, views, likes, favorites FROM work_snapshots ORDER BY day ASC"
     ).fetchall()
@@ -731,12 +1021,16 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
     for sr in snap_rows:
         snaps_by_work.setdefault((sr["platform"], sr["work_id"]), []).append(dict(sr))
 
+    ep_views_all = [int(e["views"]) for e in episodes if int(e["views"]) > 0]
+    ep_med_views = int(round(median(ep_views_all))) if ep_views_all else 0
+
     age_reviews: list[dict[str, Any]] = []
-    for i, ep in enumerate(episodes[:8]):
+    for i, ep in enumerate(episodes[:20]):
         prev = episodes[i + 1] if i + 1 < len(episodes) else None
         prev_views = prev["views"] if prev else 0
         ratio = round(ep["views"] / prev_views, 1) if prev_views > 0 else None
-        # 聚合该期已有快照天数
+        mult_acc = round(ep["views"] / ep_med_views, 1) if ep_med_views > 0 else 1.0
+
         day_totals: dict[str, dict[str, int]] = {}
         for pid, pw in ep["platforms"].items():
             for s in snaps_by_work.get((pid, pw["work_id"]), []):
@@ -746,17 +1040,76 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
                 d["favorites"] += int(s["favorites"])
                 d["age"] = max(d["age"], int(s["age_days"]))
         snapshots = [{"day": d, **v} for d, v in sorted(day_totals.items())]
+
+        breakdown: list[dict[str, Any]] = []
+        tot_v = max(1, int(ep["views"] or 0))
+        for pid, pw in sorted(ep["platforms"].items(), key=lambda kv: int(kv[1].get("views") or 0), reverse=True):
+            pv = int(pw.get("views") or 0)
+            p_inter = int(pw.get("likes") or 0) + int(pw.get("comments") or 0) + int(pw.get("favorites") or 0) + int(pw.get("shares") or 0)
+            praw = pw.get("raw") or {}
+            b2s = _pct_or_none(praw.get("bounce_2s"))
+            breakdown.append({
+                "platform": pid,
+                "name": platforms.PLATFORM_SPECS.get(pid, {}).get("name", pid),
+                "views": pv,
+                "sharePct": round((pv / tot_v) * 100, 1) if ep["views"] else 0.0,
+                "likes": int(pw.get("likes") or 0),
+                "favorites": int(pw.get("favorites") or 0),
+                "comments": int(pw.get("comments") or 0),
+                "shares": int(pw.get("shares") or 0),
+                "inter": p_inter,
+                "interRate": round((p_inter / pv) * 100, 1) if pv else 0.0,
+                "url": pw.get("url") or "",
+                "published_at": pw.get("published_at") or "",
+                "stay2sPct": round(max(0.0, 100.0 - b2s), 1) if b2s is not None else None,
+                "completion5sPct": _pct_or_none(praw.get("completion_5s")),
+                "completionPct": _pct_or_none(praw.get("completion")),
+                "avgViewS": _fnum(praw.get("avg_view_s")),
+                "coverCtrPct": _pct_or_none(praw.get("cover_ctr")),
+                "fansGained": _inum(praw.get("fans_gained")),
+            })
+
+        lead = breakdown[0] if breakdown else None
+        dy_p = next((x for x in breakdown if x["platform"] == "douyin"), None)
+        verdict_parts: list[str] = []
+        if lead and ep["views"] > 0:
+            verdict_parts.append(f"{lead['name']}贡献 {lead['sharePct']}% 流量为主力阵地")
+        if mult_acc >= 2.5:
+            verdict_parts.append(f"达全盘中位数 {mult_acc}×，属于明确爆款选题")
+        elif mult_acc <= 0.5 and ep_med_views > 0:
+            verdict_parts.append(f"仅为全盘中位数 {mult_acc}×，需检查选题切口或封面标题")
+        if dy_p and dy_p.get("completion5sPct") is not None:
+            verdict_parts.append(f"抖音 5 秒完播 {dy_p['completion5sPct']}% · 2 秒留存 {dy_p['stay2sPct']}%")
+        if ep["platformCount"] == 1:
+            verdict_parts.append("仅在单平台采到，建议检查其余平台是否漏发或标题差异过大")
+
         age_reviews.append({
+            "id": ep["id"],
             "title": ep["title"],
             "nick": ep["nick"],
             "published_at": ep["published_at"],
+            "duration_sec": ep["duration_sec"],
+            "platformCount": ep["platformCount"],
             "views": ep["views"],
+            "likes": ep["likes"],
+            "favorites": ep["favorites"],
+            "comments": ep["comments"],
+            "shares": ep["shares"],
             "inter": ep["inter"],
             "interRate": ep["interRate"],
+            "multVsAccount": mult_acc,
             "prevViews": prev_views,
             "prevTitle": prev["nick"] if prev else "",
             "ratio": ratio,
-            "platforms": ep["platforms"],
+            "leadPlatform": lead["platform"] if lead else "",
+            "leadName": lead["name"] if lead else "",
+            "leadSharePct": lead["sharePct"] if lead else 0.0,
+            "verdict": "；".join(verdict_parts) if verdict_parts else "已采集跨平台实测数据。",
+            "platformBreakdown": breakdown,
+            "platforms": {
+                pid: {k: v for k, v in pw.items() if k != "raw"}
+                for pid, pw in ep["platforms"].items()
+            },
             "snapshots": snapshots,
         })
 
@@ -778,7 +1131,7 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
     tot_fans = sum(x["total"] for x in fan_summary)
     tot_d7 = sum(x["d7"] for x in fan_summary)
 
-    # 4. 动态「人话结论」（100% 来自真实采集数据，无硬编码演示数字）
+    # 4. 动态「人话结论」（100% 来自真实采集数据）
     insights: list[dict[str, str]] = []
     if fan_summary:
         top_f = max(fan_summary, key=lambda x: x["d7"])
@@ -813,10 +1166,11 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
         })
 
     if dy_works:
+        ret_bit = f" · 5s 完播 <b>{med_5s}%</b>" if med_5s is not None else ""
         insights.append({
             "cls": "p",
             "tag": "抖音",
-            "html": f"近 {len(dy_works)} 条抖音实测中位播放 <b>{med_views:,}</b>、中位点赞 <b>{med_likes:,}</b>，收藏/赞比 <b>{fav_like_pct}%</b>，3× 以上爆款 <b>{hit_3x} 条</b>。",
+            "html": f"近 {len(dy_works)} 条抖音实测中位播放 <b>{med_views:,}</b>{ret_bit}，收藏/赞比 <b>{fav_like_pct}%</b>，3× 以上爆款 <b>{hit_3x} 条</b>。",
         })
     elif not episodes:
         insights.append({
@@ -825,26 +1179,220 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
             "html": "尚未采集各平台已发作品数据，点击右上角「<b>立即采数</b>」即可从专用 Chrome 实时拉取真实播放与互动。",
         })
 
-    # 5. 动态真实周报文本
+    # 5. 结构化周报（weeklyBrief：可视化叙事复盘）+ 可复制 Markdown 周报（weeklyReport）
     now_str = datetime.now(CN).strftime("%Y-%m-%d %H:%M")
-    plat_totals: dict[str, int] = {}
+    plat_stats: dict[str, dict[str, Any]] = {}
     for w in works:
-        plat_totals[w["platform"]] = plat_totals.get(w["platform"], 0) + int(w["views"])
-    plat_view_line = " · ".join(
-        f"{platforms.PLATFORM_SPECS.get(p, {}).get('name', p)} {v:,}"
-        for p, v in sorted(plat_totals.items(), key=lambda kv: kv[1], reverse=True)
-    ) or "暂无作品播放数据"
+        pid = w["platform"]
+        st = plat_stats.setdefault(pid, {"count": 0, "views": 0, "inter": 0})
+        st["count"] += 1
+        st["views"] += int(w["views"] or 0)
+        st["inter"] += int(w["likes"] or 0) + int(w["comments"] or 0) + int(w["favorites"] or 0) + int(w["shares"] or 0)
+
+    fan_map = {x["platform"]: x for x in fan_summary}
+    all_seen_plats = list(dict.fromkeys(list(plat_stats.keys()) + list(fan_map.keys())))
+    platform_health: list[dict[str, Any]] = []
+    tot_all_views = sum(x["views"] for x in plat_stats.values())
+    for pid in all_seen_plats:
+        ps = plat_stats.get(pid, {"count": 0, "views": 0, "inter": 0})
+        fs = fan_map.get(pid, {"total": 0, "d7": 0})
+        avg_v = int(round(ps["views"] / ps["count"])) if ps["count"] else 0
+        ir = round((ps["inter"] / ps["views"]) * 100, 1) if ps["views"] else 0.0
+        share_v = round((ps["views"] / tot_all_views) * 100, 1) if tot_all_views else 0.0
+        role = "核心主阵地" if share_v >= 50 else ("成长分发" if ps["views"] > 0 else ("存量关注" if fs["total"] > 0 else "待启动"))
+        platform_health.append({
+            "platform": pid,
+            "name": platforms.PLATFORM_SPECS.get(pid, {}).get("name", pid),
+            "fans": fs["total"],
+            "d7Fans": fs["d7"],
+            "works": ps["count"],
+            "views": ps["views"],
+            "avgViews": avg_v,
+            "interRate": ir,
+            "viewSharePct": share_v,
+            "role": role,
+        })
+    platform_health.sort(key=lambda x: (x["views"], x["fans"]), reverse=True)
+
+    # 发生了什么（叙事卡片）
+    what_happened: list[dict[str, str]] = []
+    if episodes:
+        latest = episodes[0]
+        latest_mult = round(latest["views"] / ep_med_views, 1) if ep_med_views else 1.0
+        what_happened.append({
+            "tone": "good" if latest_mult >= 1.2 else ("warn" if latest_mult < 0.7 else "accent"),
+            "tag": "最新一期表现",
+            "title": f"《{latest['nick']}》全网 {latest['views']:,} 播放（{latest_mult}× 全盘中位）",
+            "detail": f"发布于 {latest['published_at'] or '近期'}，覆盖 {latest['platformCount']} 个平台，互动 {latest['inter']:,}（互动率 {latest['interRate']}%）。"
+                      + ("高于平时表现，说明这个切口受众买单。" if latest_mult >= 1.2 else ("低于平时中位数，建议回看前 5 秒和标题动机。" if latest_mult < 0.7 else "表现符合账号基本盘，保持稳定节奏。")),
+        })
+    if fan_summary:
+        lead_f = max(fan_summary, key=lambda x: x["d7"])
+        what_happened.append({
+            "tone": "good" if tot_d7 > 0 else "accent",
+            "tag": "粉丝增长结构",
+            "title": f"全网总粉 {tot_fans:,}（近 7 天 {'+' if tot_d7 >= 0 else ''}{tot_d7:,}）",
+            "detail": (f"近 7 天增量主要由 {lead_f['name']} 贡献（{'+' if lead_f['d7'] >= 0 else ''}{lead_f['d7']:,}）。" if tot_d7 > 0 else "近 7 天粉丝波动平缓，主力粉丝池在 " + lead_f["name"] + f"（{lead_f['total']:,}）。")
+                      + (f"抖音已采作品累计直接涨粉 +{tot_dy_fans_gained:,}。" if has_fans_gained else ""),
+        })
+    if has_retention:
+        what_happened.append({
+            "tone": "good" if (med_5s or 0) >= 35 else "warn",
+            "tag": "开头与留存体检",
+            "title": f"抖音 2 秒留存 {med_stay2s or 0}% · 5 秒完播 {med_5s or 0}% · 均看 {med_avg_s or 0}s",
+            "detail": f"封面点击率中位数 {med_ctr or 0}%，全片完播中位数 {med_comp or 0}%。"
+                      + ("前 5 秒钩子健康，继续把核心结果/冲突压到前 3 秒。" if (med_5s or 0) >= 35 else "5 秒完播偏弱，下期剪辑优先砍掉寒暄、直接抛反差结论。"),
+        })
+    elif dy_works:
+        what_happened.append({
+            "tone": "accent",
+            "tag": "内容变现/干货信号",
+            "title": f"抖音收藏/赞比 {fav_like_pct}% · 3× 以上爆款 {hit_3x} 条",
+            "detail": f"账号中位播放 {med_views:,}、中位点赞 {med_likes:,}；高收藏赞比说明用户把你的视频当成可复用的实操指南。",
+        })
+    if platform_health:
+        top_p = platform_health[0]
+        weak_p = [x for x in platform_health if x["works"] > 0 and x["viewSharePct"] < 5]
+        what_happened.append({
+            "tone": "accent",
+            "tag": "多平台分发格局",
+            "title": f"{top_p['name']} 占全网 {top_p['viewSharePct']}% 播放，跨平台长尾待放大",
+            "detail": (f"{' / '.join(x['name'] for x in weak_p[:3])} 已分发但流量占比偏低，建议在打包页按平台独立改写标题动机与封面大字，海外 IG/LinkedIn 直接发英文图文卡或纯文字。"
+                       if weak_p else "当前各已采平台分发均衡，建议持续保持多平台同日上线以便做 1/3/7 天同龄复盘。"),
+        })
+
+    # 红黑榜：Top 3 爆款 vs 需优化作品
+    winners = [
+        {
+            "title": e["title"],
+            "published_at": e["published_at"],
+            "views": e["views"],
+            "inter": e["inter"],
+            "interRate": e["interRate"],
+            "platformCount": e["platformCount"],
+            "reason": f"全网中位数 {round(e['views'] / ep_med_views, 1) if ep_med_views else 1.0}× · 互动率 {e['interRate']}%",
+        }
+        for e in sorted(episodes, key=lambda x: x["views"], reverse=True)[:3]
+    ]
+    recent_pool = [x for x in scatter[:12] if x["views"] > 0]
+    watchouts = [
+        {
+            "title": x["title"],
+            "published_at": x["published_at"],
+            "views": x["views"],
+            "mult": x["mult"],
+            "bounce2sPct": x["bounce2sPct"],
+            "completion5sPct": x["completion5sPct"],
+            "coverCtrPct": x["coverCtrPct"],
+            "reason": (
+                f"2秒跳出 {x['bounce2sPct']}% 偏高，开头没留住人"
+                if (x["bounce2sPct"] or 0) >= 42
+                else (
+                    f"封面点击率 {x['coverCtrPct']}% 偏低，建议换反差大字"
+                    if x["coverCtrPct"] is not None and x["coverCtrPct"] < 14
+                    else f"播放仅为账号中位数 {x['mult']}×，建议复盘选题切口"
+                )
+            ),
+        }
+        for x in sorted(recent_pool, key=lambda z: z["views"])[:3]
+    ]
+
+    # 下周行动清单
+    next_actions: list[dict[str, str]] = []
+    if winners:
+        next_actions.append({
+            "priority": "P0",
+            "title": f"围绕最高代表作《{winners[0]['title'][:18]}》做 1 条续集或反向视角",
+            "detail": f"该题材已验证拿到 {winners[0]['views']:,} 播放，直接点「反推选题」生成 3 个延续切口，复用成功动机。",
+            "hash": "#review/douyin",
+            "cta": "去反推续集 ›",
+        })
+    if has_retention and (med_b2s or 0) >= 35:
+        next_actions.append({
+            "priority": "P1",
+            "title": f"下期剪辑把前 2 秒跳出率从 {med_b2s}% 压到 32% 以内",
+            "detail": "去掉“大家好我是…”寒暄，前 2 秒直接出结果画面或冲突数字，并在剪辑页用高密度动效抓住前 5 秒。",
+            "hash": "#cut",
+            "cta": "去剪辑工作台 ›",
+        })
+    else:
+        next_actions.append({
+            "priority": "P1",
+            "title": "坚持每期 6 动机标题测试 + 三比例封面一次打包",
+            "detail": "同内容在抖音/视频号/B站/YouTube 差异化投放，IG/Meta/LinkedIn 自动切英文图文卡与纯文字，零额外人力拿海外增量。",
+            "hash": "#pub-pack",
+            "cta": "去发布打包 ›",
+        })
+    next_actions.append({
+        "priority": "P2",
+        "title": "保持每天一次自动采数，跑出 1/3/7 天同龄复盘曲线",
+        "detail": "连续采满 7 天后，可按发布第 1/3/7 天精准横向对比不同选题的冷启动推流斜率。",
+        "hash": "#review/age",
+        "cta": "看跨平台单期复盘 ›",
+    })
+
+    if episodes:
+        lead_ep = winners[0]
+        headline = (
+            f"全网实测 {tot_fans:,} 粉（近 7 天 {'+' if tot_d7 >= 0 else ''}{tot_d7:,}），"
+            f"已复盘 {len(works)} 条作品（{len(episodes)} 期）；代表作《{lead_ep['title'][:18]}》拿到 {lead_ep['views']:,} 播放"
+            + (f"，抖音 5 秒完播中位数 {med_5s}%。" if med_5s is not None else "。")
+        )
+    else:
+        headline = "尚未采集真实作品数据，点击右上角「立即采流量」即可自动生成可执行数据周报。"
+
+    ai_memo_row = conn.execute("SELECT v FROM kv WHERE k='weekly_ai_memo'").fetchone()
+    ai_memo = None
+    if ai_memo_row and ai_memo_row["v"]:
+        try:
+            ai_memo = json.loads(ai_memo_row["v"])
+        except Exception:
+            ai_memo = None
+
+    weekly_brief = {
+        "generatedAt": now_str,
+        "headline": headline,
+        "aiMemo": ai_memo,
+        "kpis": [
+            {"lab": "全网实测总粉", "val": f"{tot_fans:,}", "sub": f"近 7 天 {'+' if tot_d7 >= 0 else ''}{tot_d7:,}", "tone": "good" if tot_d7 > 0 else ""},
+            {"lab": "已入库作品 / 期次", "val": f"{len(works)} / {len(episodes)}", "sub": f"累计 {tot_all_views:,} 播放", "tone": ""},
+            {"lab": "抖音中位播放", "val": f"{med_views:,}" if med_views else "–", "sub": f"3× 爆款 {hit_3x} 条 · 收藏赞比 {fav_like_pct}%", "tone": "accent"},
+            {
+                "lab": "抖音 5s 完播 / 2s 留存",
+                "val": f"{med_5s}% / {med_stay2s}%" if (med_5s is not None and med_stay2s is not None) else "待采留存",
+                "sub": f"均看 {med_avg_s}s · 封面点击 {med_ctr}%" if med_avg_s is not None else "点右上角「立即采流量」同步",
+                "tone": "good" if (med_5s or 0) >= 35 else "",
+            },
+            {
+                "lab": "作品直接涨粉",
+                "val": f"+{tot_dy_fans_gained:,}" if has_fans_gained else "–",
+                "sub": f"主页访问 {tot_dy_home_visits:,}" if tot_dy_home_visits else "来自抖音创作者后台",
+                "tone": "good" if tot_dy_fans_gained > 0 else "",
+            },
+        ],
+        "whatHappened": what_happened,
+        "platformHealth": platform_health,
+        "winners": winners,
+        "watchouts": watchouts,
+        "nextWeekActions": next_actions,
+    }
+
+    plat_view_line = " · ".join(f"{x['name']} {x['views']:,}" for x in platform_health if x["views"] > 0) or "暂无作品播放数据"
     fan_line = " · ".join(f"{x['name']} {x['total']:,}" for x in fan_summary) or "暂无粉丝数据"
     top3_lines = "\n".join(
         f"  {i + 1}. 《{e['title'][:32]}》 {e['views']:,} 播放 · {e['inter']:,} 互动（{e['published_at'] or '日期未标'}）"
         for i, e in enumerate(episodes[:5])
     ) or "  （点击右上角「立即采流量」拉取真实作品数据）"
+    action_lines = "\n".join(f"  - [{a['priority']}] {a['title']}" for a in next_actions)
     weekly_report = (
-        f"🗓 Park Studio 真实数据简报｜生成于 {now_str}\n"
-        f"已采集作品：{len(works)} 条（跨平台归并 {len(episodes)} 期）\n"
-        f"各平台累计播放：{plat_view_line}\n"
-        f"各平台实测粉丝：{fan_line}（合计 {tot_fans:,}）\n"
-        f"最近 5 期真实表现：\n{top3_lines}"
+        f"🗓 Park Studio 真实数据周报｜{now_str}\n"
+        f"一句话结论：{headline}\n\n"
+        f"【核心盘面】\n"
+        f"- 全网粉丝：{fan_line}（合计 {tot_fans:,}，7日 {'+' if tot_d7 >= 0 else ''}{tot_d7:,}）\n"
+        f"- 累计播放：{plat_view_line}\n"
+        + (f"- 抖音留存体检：2秒留存 {med_stay2s}% · 5秒完播 {med_5s}% · 均看 {med_avg_s}s · 封面点击 {med_ctr}% · 作品涨粉 +{tot_dy_fans_gained:,}\n" if has_retention else "")
+        + f"\n【最近 5 期表现】\n{top3_lines}\n\n"
+        f"【下周行动建议】\n{action_lines}"
     )
 
     last_at_row = conn.execute("SELECT v FROM kv WHERE k='last_metrics_at'").fetchone()
@@ -858,7 +1406,7 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
             pid: sum(1 for w in works if w["platform"] == pid)
             for pid in platforms.PLAT_ORDER
         },
-        "episodes": episodes[:15],
+        "episodes": episodes[:20],
         "works": works[:60],
         "douyin": {
             "count": len(dy_works),
@@ -866,9 +1414,20 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
             "medianLikes": med_likes,
             "favLikePct": fav_like_pct,
             "hit3xCount": hit_3x,
+            "hasRetention": has_retention,
+            "median2sBouncePct": med_b2s,
+            "median2sStayPct": med_stay2s,
+            "median5sPct": med_5s,
+            "medianCompletionPct": med_comp,
+            "medianAvgViewS": med_avg_s,
+            "medianCoverCtrPct": med_ctr,
+            "totalFansGained": tot_dy_fans_gained if has_fans_gained else None,
+            "totalHomeVisits": tot_dy_home_visits if tot_dy_home_visits else None,
+            "retentionInsights": retention_insights,
             "scatter": scatter,
         },
         "ageReviews": age_reviews,
         "insights": insights,
+        "weeklyBrief": weekly_brief,
         "weeklyReport": weekly_report,
     }

@@ -1331,6 +1331,61 @@ def create_app(db_file: Path | None = None) -> FastAPI:
         db.log_event(conn, "复盘", f"{res['backend']}/{res['model']}", "爆款反推续集选题", f"产出 {len(items)} 个")
         return {"ok": True, "topics": items, "backend": res["backend"], "model": res["model"]}
 
+    @app.post("/api/review/weekly-ai")
+    def api_review_weekly_ai() -> dict[str, Any]:
+        an = metrics.build_analytics(conn)
+        wb = an.get("weeklyBrief") or {}
+        dy = an.get("douyin") or {}
+        if not an.get("hasLiveWorks"):
+            raise HTTPException(400, "尚未采集真实作品数据，请先点击「立即采流量」后再做 AI 周报解读")
+        snapshot = {
+            "headline": wb.get("headline", ""),
+            "kpis": wb.get("kpis", []),
+            "douyin_retention": {
+                "median2sStayPct": dy.get("median2sStayPct"),
+                "median2sBouncePct": dy.get("median2sBouncePct"),
+                "median5sPct": dy.get("median5sPct"),
+                "medianCompletionPct": dy.get("medianCompletionPct"),
+                "medianAvgViewS": dy.get("medianAvgViewS"),
+                "medianCoverCtrPct": dy.get("medianCoverCtrPct"),
+                "totalFansGained": dy.get("totalFansGained"),
+            },
+            "platformHealth": (wb.get("platformHealth") or [])[:6],
+            "winners": wb.get("winners") or [],
+            "watchouts": wb.get("watchouts") or [],
+        }
+        prompt = (
+            f"{_positioning_text()}\n\n"
+            f"下面是创作者当前全平台真实采集到的运营复盘数据（JSON）：\n{json.dumps(snapshot, ensure_ascii=False)}\n\n"
+            "请以「资深内容增长操盘手」的口吻，给出直击要害的周度经营诊断（绝不空话套话，必须引用具体数字与作品名）：\n"
+            '严格只返回一个 JSON 对象：{"summary":"2句话总评发生了什么(<=110字)","working":"什么打法正在奏效(<=100字)","leak":"当前最大的流量/留存漏水点在哪(<=100字)","nextMoves":["下周最该执行的第1件事","第2件事","第3件事"]}'
+        )
+        try:
+            res = ai.run_prompt(prompt)
+        except ai.AIError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        parsed = ai.extract_json_block(res["text"])
+        if not isinstance(parsed, dict) or not parsed.get("summary"):
+            parsed = {
+                "summary": str(res["text"]).strip()[:300],
+                "working": "",
+                "leak": "",
+                "nextMoves": [],
+            }
+        memo = {
+            "generatedAt": metrics.datetime.now(metrics.CN).strftime("%Y-%m-%d %H:%M"),
+            "backend": res["backend"],
+            "model": res["model"],
+            "summary": str(parsed.get("summary") or "").strip(),
+            "working": str(parsed.get("working") or "").strip(),
+            "leak": str(parsed.get("leak") or "").strip(),
+            "nextMoves": [str(x).strip() for x in (parsed.get("nextMoves") or []) if str(x).strip()][:4],
+        }
+        conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('weekly_ai_memo', ?)", (json.dumps(memo, ensure_ascii=False),))
+        conn.commit()
+        db.log_event(conn, "复盘", f"{res['backend']}/{res['model']}", "AI 深度周报解读", memo["summary"][:40])
+        return {"ok": True, "memo": memo}
+
     @app.post("/api/ai/hooks")
     def ai_hooks(req: AIRequest) -> dict[str, Any]:
         prompt = (

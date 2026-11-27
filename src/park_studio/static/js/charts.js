@@ -152,9 +152,86 @@
       const gold = mult >= 3;
       const r = gold ? 8 : 5.5;
       const durStr = sec >= 60 ? `${Math.floor(sec / 60)}分${sec % 60}秒` : `${sec}秒`;
-      const tip = `${p.title}\n发布：${p.published_at || '未知'} · 时长：${durStr}\n播放：${PS.fmt(p.views)}（${mult}× 中位数）\n赞 ${PS.fmt(p.likes)} · 收藏 ${PS.fmt(p.favorites)} · 评 ${PS.fmt(p.comments)}`;
+      const retLine = p.completion5sPct != null
+        ? `\n2秒留存 ${p.stay2sPct ?? '–'}% · 5秒完播 ${p.completion5sPct}% · 均看 ${p.avgViewS ?? '–'}s`
+        : '';
+      const growLine = (p.coverCtrPct != null || p.fansGained != null)
+        ? `\n封面点击 ${p.coverCtrPct ?? '–'}% · 单条涨粉 +${PS.fmt(p.fansGained || 0)}`
+        : '';
+      const tip = `${p.title}\n发布：${p.published_at || '未知'} · 时长：${durStr}\n播放：${PS.fmt(p.views)}（${mult}× 中位数）\n赞 ${PS.fmt(p.likes)} · 收藏 ${PS.fmt(p.favorites)} · 评 ${PS.fmt(p.comments)}${retLine}${growLine}`;
       svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${gold ? '#E2A21B' : 'var(--accent)'}" fill-opacity="${gold ? 0.92 : 0.7}" stroke="var(--surface)" stroke-width="2" data-tip="${PS.esc(tip)}" style="cursor:pointer"/>`;
     }
+    svg += '</svg>';
+    el.innerHTML = svg;
+  };
+
+  // 抖音开头留存体检图（2秒留存 vs 5秒完播 + 封面点击率标点）
+  PS.drawDouyinRetention = function (el, rawPts, med5s) {
+    if (!el) return;
+    const pts = (Array.isArray(rawPts) ? rawPts : [])
+      .filter(p => p.completion5sPct != null || p.stay2sPct != null)
+      .slice(0, 14)
+      .reverse();
+    if (!pts.length) {
+      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:210px;color:var(--ink-3);font-size:13px;text-align:center;padding:0 18px">暂无 2 秒留存 / 5 秒完播数据 · 点右上角「立即采流量」即可从抖音创作者后台同步</div>';
+      return;
+    }
+    const W = Math.max(440, el.clientWidth || 620), H = 250;
+    const L = 44, R = 16, T = 22, B = 32;
+    const pw = W - L - R, ph = H - T - B;
+    const band = pw / pts.length;
+    const bw = Math.min(20, Math.max(8, band * 0.44));
+    const Y = v => T + ph - (Math.min(100, Math.max(0, v)) / 100) * ph;
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}">`;
+    for (const tk of [0, 25, 50, 75, 100]) {
+      const y = Y(tk).toFixed(1);
+      svg += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--line-soft)" stroke-dasharray="${tk ? '3 3' : ''}"/>`;
+      svg += `<text x="${L - 7}" y="${+y + 4}" text-anchor="end">${tk}%</text>`;
+    }
+    if (med5s != null && med5s > 0) {
+      const my = Y(med5s).toFixed(1);
+      svg += `<line x1="${L}" x2="${W - R}" y1="${my}" y2="${my}" stroke="#E2A21B" stroke-dasharray="5 4" stroke-opacity="0.78"/>`;
+      svg += `<text x="${W - R}" y="${T - 7}" text-anchor="end" style="fill:#B8820A;font-weight:700">--- 5s 完播中位 ${med5s}%</text>`;
+    }
+
+    pts.forEach((p, i) => {
+      const cx = L + i * band + band / 2;
+      const x = cx - bw / 2;
+      const stay2 = Number(p.stay2sPct ?? 0);
+      const comp5 = Number(p.completion5sPct ?? 0);
+      const ctr = p.coverCtrPct != null ? Number(p.coverCtrPct) : null;
+      const gold = Number(p.mult || 1) >= 3;
+
+      // 背景柱：2秒留存
+      if (stay2 > 0) {
+        const y2 = Y(stay2), h2 = Math.max(2, Y(0) - y2);
+        svg += `<rect x="${x.toFixed(1)}" y="${y2.toFixed(1)}" width="${bw.toFixed(1)}" height="${h2.toFixed(1)}" rx="3" fill="var(--accent)" fill-opacity="0.22"/>`;
+      }
+      // 前景柱：5秒完播（3×爆款标金）
+      if (comp5 > 0) {
+        const y5 = Y(comp5), h5 = Math.max(2, Y(0) - y5);
+        svg += `<rect x="${x.toFixed(1)}" y="${y5.toFixed(1)}" width="${bw.toFixed(1)}" height="${h5.toFixed(1)}" rx="3" fill="${gold ? '#E2A21B' : 'var(--accent)'}" fill-opacity="0.92"/>`;
+      }
+      // 绿点：封面点击率
+      if (ctr != null) {
+        svg += `<circle cx="${cx.toFixed(1)}" cy="${Y(ctr).toFixed(1)}" r="3.6" fill="#22A06B" stroke="var(--surface)" stroke-width="1.5"/>`;
+      }
+      const lbl = (p.published_at || '').slice(5) || `#${i + 1}`;
+      if (pts.length <= 10 || i % 2 === 0 || i === pts.length - 1) {
+        svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle">${PS.esc(lbl)}</text>`;
+      }
+      const tip = [
+        p.title,
+        `发布：${p.published_at || '未知'} · 播放：${PS.fmt(p.views)}（${p.mult}×）`,
+        `2秒留存：${p.stay2sPct ?? '–'}%（2秒跳出 ${p.bounce2sPct ?? '–'}%）`,
+        `5秒完播：${p.completion5sPct ?? '–'}% · 全片完播：${p.completionPct ?? '–'}%`,
+        `均看时长：${p.avgViewS ?? '–'}s · 封面点击：${p.coverCtrPct ?? '–'}%`,
+        `单条涨粉：+${PS.fmt(p.fansGained || 0)} · 主页访问：${PS.fmt(p.homeVisits || 0)}`,
+      ].join('\n');
+      svg += `<rect x="${(L + i * band).toFixed(1)}" y="${T}" width="${band.toFixed(1)}" height="${ph}" fill="transparent" data-tip="${PS.esc(tip)}" style="cursor:pointer"/>`;
+    });
+
     svg += '</svg>';
     el.innerHTML = svg;
   };

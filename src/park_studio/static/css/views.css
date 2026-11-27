@@ -385,8 +385,77 @@
 .hpl.on .st { color: var(--good); }
 .hpl.todo .st { color: var(--hot); }
 
-.kpi-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 960px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+
+/* 复盘工作室宽屏布局（抖音留存 + 跨平台主从复盘 + 可视化经营周报） */
+.rev-2col { display: grid; grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.rev-2col-eq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+@media (max-width: 1040px) { .rev-2col, .rev-2col-eq { grid-template-columns: 1fr; } }
+
+.ep-split { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1040px) { .ep-split { grid-template-columns: 1fr; } }
+.ep-list { display: flex; flex-direction: column; gap: 8px; max-height: 78vh; overflow-y: auto; padding-right: 4px; }
+.ep-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color var(--fast), background var(--fast), transform var(--fast);
+}
+.ep-item:hover { border-color: var(--line); background: var(--sunk); }
+.ep-item.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface));
+  box-shadow: var(--shadow-1);
+}
+.ep-bar-row { display: grid; grid-template-columns: 108px minmax(0, 1fr) 128px; align-items: center; gap: 10px; font-size: 12.5px; }
+.ep-bar-track { height: 10px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
+.ep-bar-fill { height: 100%; border-radius: 999px; transition: width 300ms ease; }
+.ret-mini { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; }
+.ret-mini-bar { width: 42px; height: 5px; border-radius: 999px; background: var(--line-soft); overflow: hidden; display: inline-block; }
+.ret-mini-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.ret-mini-bar.good i { background: var(--good); }
+.ret-mini-bar.warn i { background: var(--warn); }
+
+.wb-hero {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 55%, var(--surface)) 0%, var(--surface) 62%);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line-soft));
+  border-radius: 16px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-1);
+}
+.wb-story {
+  padding: 13px 15px;
+  border-radius: 12px;
+  background: var(--sunk);
+  border-left: 3.5px solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wb-story.good { border-left-color: var(--good); }
+.wb-story.warn { border-left-color: var(--warn); }
+.wb-action {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.wb-memo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 960px) { .wb-memo-grid { grid-template-columns: 1fr; } }
 .kpi-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px 16px; }
 .kpi-val { font-size: 26px; font-weight: 800; font-family: var(--mono); line-height: 1.15; }
 .kpi-val.xl { font-size: 36px; }

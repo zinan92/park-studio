@@ -190,3 +190,119 @@ def test_v051_platform_strategy_defaults_and_english_visual_card(tmp_path: Path,
     if cutter._which("ffmpeg"):
         assert data["enCardPath"] and Path(data["enCardPath"]).is_file()
 
+
+def test_v052_douyin_retention_and_weekly_brief(tmp_path: Path, monkeypatch) -> None:
+    """v0.5.2：抖音 2s留存/5s完播/封面点击/单条涨粉解析 + 跨平台单期拆解 + 可视化结构化周报与 AI 解读。"""
+    monkeypatch.setenv("PARK_STUDIO_DATA", str(tmp_path / "data"))
+    raw_json = json.dumps(
+        {
+            "has_more": False,
+            "max_cursor": "0",
+            "aweme_list": [
+                {
+                    "aweme_id": "7690817035621666111",
+                    "desc": "AI时代的明牌机会，但是大部分人不会走 #AI",
+                    "create_time": 1760000000,
+                    "video": {"duration": 520000},
+                    "statistics": {"play_count": 120000, "digg_count": 4200, "collect_count": 3800, "comment_count": 310, "share_count": 500},
+                },
+                {
+                    "aweme_id": "7690817035621666222",
+                    "desc": "普通日常复盘视频",
+                    "create_time": 1759500000,
+                    "video": {"duration": 300000},
+                    "statistics": {"play_count": 20000, "digg_count": 400, "collect_count": 260, "comment_count": 25, "share_count": 40},
+                },
+            ],
+            "items": [
+                {
+                    "id": 7690817035621666111,
+                    "create_time": 1760000000,
+                    "metrics": {
+                        "view_count": "120000",
+                        "bounce_rate_2s": "0.285",
+                        "completion_rate_5s": "0.468",
+                        "completion_rate": "0.025",
+                        "avg_view_second": "42.3",
+                        "cover_click_rate": "0.312",
+                        "subscribe_count": "1280",
+                        "unsubscribe_count": "20",
+                        "homepage_visit_count": "6400",
+                    },
+                },
+                {
+                    "id": 7690817035621666222,
+                    "create_time": 1759500000,
+                    "metrics": {
+                        "view_count": "20000",
+                        "bounce_rate_2s": "0.482",
+                        "completion_rate_5s": "0.310",
+                        "completion_rate": "0.012",
+                        "avg_view_second": "18.6",
+                        "cover_click_rate": "0.184",
+                        "subscribe_count": "95",
+                        "unsubscribe_count": "5",
+                        "homepage_visit_count": "820",
+                    },
+                },
+            ],
+        },
+        ensure_ascii=False,
+    )
+    rows, has_more, _ = metrics.parse_douyin_work_list(raw_json)
+    assert has_more is False
+    assert len(rows) == 2
+    assert rows[0]["raw"]["completion_5s"] == 0.468
+    assert rows[0]["raw"]["retention_2s"] == 0.715
+    assert rows[0]["raw"]["fans_gained"] == 1280
+
+    from park_studio import db
+    conn = db.connect(tmp_path / "data" / "studio.db")
+    db.init_db(conn)
+    metrics.upsert_works(conn, rows + [{
+        "platform": "bilibili",
+        "work_id": "BV1test12345",
+        "title": "AI时代的明牌机会，但是大部分人不会走",
+        "url": "https://www.bilibili.com/video/BV1test12345",
+        "published_at": "2026-10-10",
+        "published_ts": 1760000100,
+        "duration_sec": 520,
+        "views": 6500,
+        "likes": 210,
+        "comments": 30,
+        "favorites": 180,
+        "shares": 22,
+        "raw": {},
+    }])
+    an = metrics.build_analytics(conn)
+    assert an["douyin"]["hasRetention"] is True
+    assert an["douyin"]["median5sPct"] is not None
+    assert an["douyin"]["median2sStayPct"] is not None
+    assert an["douyin"]["totalFansGained"] == 1375
+    assert len(an["douyin"]["retentionInsights"]) >= 2
+    assert an["ageReviews"][0]["platformCount"] == 2
+    assert len(an["ageReviews"][0]["platformBreakdown"]) == 2
+    wb = an["weeklyBrief"]
+    assert wb["headline"] and len(wb["kpis"]) == 5 and len(wb["whatHappened"]) >= 2 and len(wb["nextWeekActions"]) >= 2
+
+    monkeypatch.setattr(
+        ai,
+        "run_prompt",
+        lambda prompt, **kw: {
+            "text": json.dumps({
+                "summary": "本周代表作《AI时代的明牌机会》拉动全盘增长，单条涨粉 +1,280。",
+                "working": "高 5s 完播（46.8%）+ 强封面点击（31.2%）带来推流放大。",
+                "leak": "日常复盘视频 2s 跳出 48.2%，开头缺少冲突钩子。",
+                "nextMoves": ["围绕代表作做 1 条续集", "前 2 秒直接抛结果画面"],
+            }, ensure_ascii=False),
+            "backend": "gemini-api",
+            "model": "gemini-2.5-flash",
+        },
+    )
+    client = TestClient(app_mod.create_app(tmp_path / "data" / "studio.db"))
+    r = client.post("/api/review/weekly-ai")
+    assert r.status_code == 200
+    assert "代表作" in r.json()["memo"]["summary"]
+    assert client.get("/api/bootstrap").json()["analytics"]["weeklyBrief"]["aiMemo"]["summary"]
+
+

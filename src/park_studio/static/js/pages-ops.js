@@ -258,7 +258,7 @@
           <pre class="codebox" style="margin-top:8px">${PS.esc(JSON.stringify(ep.publishJson || {}, null, 2))}</pre>
         </details>
       </div>
-    `, 'mid');
+    `);
 
     main.querySelector('#pkSel').onchange = e => { curPubEpId = +e.target.value; PS.pages['pub-pack'](); };
     main.querySelector('#pickPkVideoBtn')?.addEventListener('click', async () => {
@@ -633,50 +633,158 @@
         </div>
       </div>
       ${body}
-    `, 'mid');
+    `);
 
     main.querySelector('#vMat').onclick = () => { sentView = 'matrix'; PS.pages['pub-sent'](); };
     main.querySelector('#vCal').onclick = () => { sentView = 'cal'; PS.pages['pub-sent'](); };
   };
 
-  // ==================== 复盘 · 同龄复盘与抖音分析（#review · 100% 真实作品数据） ====================
+  // ==================== 复盘 · 宽屏作品分析、跨平台主从复盘与可视化经营周报（#review） ====================
   let revTab = 'douyin';
+  let dySort = 'date';
+  let ageSelIdx = 0;
+  let ageFilter = 'all';
+  let ageSort = 'date';
 
   PS.pages.review = function (sub) {
     if (['douyin', 'age', 'weekly'].includes(sub)) revTab = sub;
     const an = PS.S.analytics || {};
     const dy = an.douyin || { count: 0, medianViews: 0, medianLikes: 0, favLikePct: 0, hit3xCount: 0, scatter: [] };
-    const ageList = an.ageReviews || [];
+    const ageAll = an.ageReviews || [];
+    const wb = an.weeklyBrief || null;
     const fmtDur = s => s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : (s ? `${s}s` : '–');
+    const dyFan = PS.fanStats('douyin');
+
+    const retBar = (val, tone) => {
+      if (val == null) return '<span class="sub">–</span>';
+      const w = Math.max(4, Math.min(100, Number(val)));
+      return `<span class="ret-mini"><b>${val}%</b><span class="ret-mini-bar ${tone || ''}"><i style="width:${w}%"></i></span></span>`;
+    };
+
     let body = '';
+    let sortedDy = [...(dy.scatter || [])];
+    let filteredAge = [...ageAll];
 
     if (revTab === 'douyin') {
+      if (dySort === 'views') sortedDy.sort((a, b) => (b.views || 0) - (a.views || 0));
+      else if (dySort === 'c5s') sortedDy.sort((a, b) => (b.completion5sPct ?? -1) - (a.completion5sPct ?? -1));
+      else if (dySort === 'stay2s') sortedDy.sort((a, b) => (b.stay2sPct ?? -1) - (a.stay2sPct ?? -1));
+      else if (dySort === 'fans') sortedDy.sort((a, b) => (b.fansGained ?? -1) - (a.fansGained ?? -1));
+
       body = `
         <div class="kpi-row">
-          <div class="kpi-card"><div class="kpi-lab">抖音粉丝</div><div class="kpi-val">${PS.fmt(PS.fanStats('douyin').total)}</div></div>
-          <div class="kpi-card"><div class="kpi-lab">近 ${dy.count || 0} 条点赞中位数</div><div class="kpi-val">${dy.count ? PS.fmt(dy.medianLikes) : '–'}</div></div>
-          <div class="kpi-card"><div class="kpi-lab">平时一条播放（中位数）</div><div class="kpi-val">${dy.count ? PS.kfmt(dy.medianViews) : '–'}</div></div>
-          <div class="kpi-card"><div class="kpi-lab">收藏 / 赞</div><div class="kpi-val">${dy.count ? dy.favLikePct + '%' : '–'}</div></div>
-          <div class="kpi-card"><div class="kpi-lab">3× 以上爆款</div><div class="kpi-val" style="color:var(--accent)">${dy.count ? `${dy.hit3xCount} 条` : '–'}</div></div>
+          <div class="kpi-card">
+            <div class="kpi-lab">抖音粉丝</div>
+            <div class="kpi-val">${PS.fmt(dyFan.total)}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px">7日 ${PS.sgn(dyFan.d7)} · 作品涨粉 ${dy.totalFansGained != null ? '+' + PS.fmt(dy.totalFansGained) : '待同步'}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lab">中位播放 · 3× 爆款</div>
+            <div class="kpi-val">${dy.count ? PS.kfmt(dy.medianViews) : '–'}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px"><b style="color:var(--accent)">${dy.hit3xCount || 0} 条</b> 3×爆款 · 点赞中位 ${dy.count ? PS.fmt(dy.medianLikes) : '–'}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lab">2 秒留存（2s 跳出）</div>
+            <div class="kpi-val" style="color:${(dy.median2sStayPct || 0) >= 60 ? 'var(--good)' : 'var(--ink)'}">${dy.median2sStayPct != null ? dy.median2sStayPct + '%' : '待采'}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px">${dy.median2sBouncePct != null ? `2秒跳出中位 ${dy.median2sBouncePct}%` : '点「立即采流量」同步'}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lab">5 秒完播率（中位）</div>
+            <div class="kpi-val" style="color:${(dy.median5sPct || 0) >= 35 ? 'var(--good)' : 'var(--accent)'}">${dy.median5sPct != null ? dy.median5sPct + '%' : '待采'}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px">${dy.medianCompletionPct != null ? `全片完播中位 ${dy.medianCompletionPct}%` : '开头抓人核心指标'}</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lab">平均播放时长</div>
+            <div class="kpi-val">${dy.medianAvgViewS != null ? dy.medianAvgViewS + 's' : '待采'}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px">收藏 / 赞比 <b>${dy.count ? dy.favLikePct + '%' : '–'}</b></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-lab">封面点击率（中位）</div>
+            <div class="kpi-val">${dy.medianCoverCtrPct != null ? dy.medianCoverCtrPct + '%' : '待采'}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px">主页访问 ${dy.totalHomeVisits != null ? PS.fmt(dy.totalHomeVisits) : '–'}</div>
+          </div>
         </div>
-        <div class="card stack">
-          <div class="card-h"><h3>时长 × 播放散点图（真实采集 ${dy.count || 0} 条）</h3><span class="sub">金色圆点 = 高于中位数 3 倍以上 · 悬停看明细</span></div>
-          <div class="chart-box tall" id="dyScatter"></div>
+
+        ${(dy.retentionInsights && dy.retentionInsights.length) ? `
+          <section class="card stack tight" style="padding:14px 18px">
+            <div class="row" style="gap:8px"><b style="font-size:13.5px">抖音留存与爆款归因</b><span class="sub" style="font-size:12px">基于真实 2s 跳出 / 5s 完播 / 封面点击 / 单条涨粉自动计算</span></div>
+            <div class="rev-2col-eq" style="gap:10px">
+              ${dy.retentionInsights.map(i => `<div class="ins-item" style="background:var(--sunk);padding:10px 12px;border-radius:10px"><em class="${i.cls}">${i.tag}</em><div>${i.html}</div></div>`).join('')}
+            </div>
+          </section>
+        ` : ''}
+
+        <div class="rev-2col-eq">
+          <div class="card stack">
+            <div class="card-h">
+              <h3>开头留存体检（2秒留存 × 5秒完播）</h3>
+              <span class="sub">浅柱=2s留存 · 实柱=5s完播（金=3×爆款）· 绿点=封面点击</span>
+            </div>
+            <div class="chart-box tall" id="dyRetentionChart"></div>
+          </div>
+          <div class="card stack">
+            <div class="card-h">
+              <h3>时长 × 播放散点图（真实采集 ${dy.count || 0} 条）</h3>
+              <span class="sub">金色圆点 = 高于中位数 3 倍以上 · 悬停看完整留存与涨粉</span>
+            </div>
+            <div class="chart-box tall" id="dyScatter"></div>
+          </div>
         </div>
-        ${dy.scatter?.length ? `
+
+        ${sortedDy.length ? `
           <section class="card pad-0">
-            <div class="card-h" style="padding:14px 16px 6px"><h3>抖音作品实测明细</h3><span class="sub">按发布时间倒序 · 来自专用 Chrome 实时拉取</span></div>
+            <div class="card-h" style="padding:14px 18px 8px;flex-wrap:wrap;gap:10px">
+              <div>
+                <h3 style="margin:0">抖音作品实测明细（含留存 / 封面 / 涨粉）</h3>
+                <span class="sub" style="font-size:12px">来自抖音创作者后台实时拉取 · 点标题直达原视频</span>
+              </div>
+              <div class="seg" id="dySortSeg">
+                ${[
+                  ['date', '按最新'],
+                  ['views', '按播放'],
+                  ['c5s', '按 5s 完播'],
+                  ['stay2s', '按 2s 留存'],
+                  ['fans', '按单条涨粉'],
+                ].map(([k, lab]) => `<button type="button" class="${dySort === k ? 'on' : ''}" data-dysort="${k}">${lab}</button>`).join('')}
+              </div>
+            </div>
             <div class="tbl-wrap"><table class="tbl">
-              <thead><tr><th>标题</th><th>发布日</th><th class="n">时长</th><th class="n">播放</th><th class="n">倍数</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">反推下期</th></tr></thead>
-              <tbody>${dy.scatter.map((w, idx) => `<tr>
-                <td><a href="${PS.esc(w.url || '#')}" target="_blank" rel="noopener" style="font-weight:600">${PS.esc(w.title)}</a></td>
-                <td class="mono sub" style="font-size:12px">${PS.esc(w.published_at || '–')}</td>
+              <thead><tr>
+                <th style="min-width:260px">标题与诊断</th>
+                <th>发布日</th>
+                <th class="n">时长</th>
+                <th class="n">播放 / 倍数</th>
+                <th class="n">2s 留存 / 跳出</th>
+                <th class="n">5s 完播</th>
+                <th class="n">均看 / 完播</th>
+                <th class="n">封面点击</th>
+                <th class="n">单条涨粉</th>
+                <th class="n">赞 · 藏 · 评</th>
+                <th class="n">操作</th>
+              </tr></thead>
+              <tbody>${sortedDy.map((w, idx) => `<tr>
+                <td>
+                  <a href="${PS.esc(w.url || '#')}" target="_blank" rel="noopener" style="font-weight:600;display:block">${PS.esc(w.title)}</a>
+                  ${w.diagTag ? `<span class="pill ${w.diagTone || ''}" style="font-size:10.5px;padding:1px 6px;margin-top:4px;display:inline-flex">${PS.esc(w.diagTag)}</span>` : ''}
+                </td>
+                <td class="mono sub" style="font-size:12px;white-space:nowrap">${PS.esc(w.published_at || '–')}</td>
                 <td class="n mono sub">${fmtDur(w.sec)}</td>
-                <td class="n"><b>${PS.fmt(w.views)}</b></td>
-                <td class="n"><span class="pill ${w.mult >= 3 ? 'accent' : ''}">${w.mult}×</span></td>
-                <td class="n">${PS.fmt(w.likes)}</td>
-                <td class="n">${PS.fmt(w.favorites)}</td>
-                <td class="n">${PS.fmt(w.comments)}</td>
+                <td class="n" style="white-space:nowrap"><b>${PS.fmt(w.views)}</b> <span class="pill ${w.mult >= 3 ? 'accent' : ''}" style="font-size:11px;padding:1px 6px">${w.mult}×</span></td>
+                <td class="n" style="white-space:nowrap">
+                  ${retBar(w.stay2sPct, (w.bounce2sPct || 0) >= 42 ? 'warn' : ((w.stay2sPct || 0) >= 65 ? 'good' : ''))}
+                  ${w.bounce2sPct != null ? `<div class="sub" style="font-size:10.5px">跳出 ${w.bounce2sPct}%</div>` : ''}
+                </td>
+                <td class="n" style="white-space:nowrap">${retBar(w.completion5sPct, (w.completion5sPct || 0) >= 42 ? 'good' : ((w.completion5sPct || 0) < 30 ? 'warn' : ''))}</td>
+                <td class="n mono" style="white-space:nowrap">
+                  <div>${w.avgViewS != null ? w.avgViewS + 's' : '–'}</div>
+                  <div class="sub" style="font-size:10.5px">${w.completionPct != null ? `完播 ${w.completionPct}%` : ''}</div>
+                </td>
+                <td class="n mono" style="white-space:nowrap">${w.coverCtrPct != null ? `<b>${w.coverCtrPct}%</b>` : '<span class="sub">–</span>'}</td>
+                <td class="n mono" style="white-space:nowrap">
+                  ${w.fansGained != null ? `<b style="color:${w.fansGained >= 200 ? 'var(--good)' : 'var(--ink)'}">+${PS.fmt(w.fansGained)}</b>` : '<span class="sub">–</span>'}
+                  ${w.homeVisits ? `<div class="sub" style="font-size:10.5px">主页 ${PS.kfmt(w.homeVisits)}</div>` : ''}
+                </td>
+                <td class="n mono sub" style="font-size:12px;white-space:nowrap">${PS.fmt(w.likes)} / ${PS.fmt(w.favorites)} / ${PS.fmt(w.comments)}</td>
                 <td class="n"><button type="button" class="btn s ${w.mult >= 3 ? 'primary' : ''}" data-next-idx="${idx}">反推选题</button></td>
               </tr>`).join('')}</tbody>
             </table></div>
@@ -684,56 +792,293 @@
         ` : ''}
       `;
     } else if (revTab === 'age') {
-      if (!ageList.length) {
+      if (ageFilter === 'multi') filteredAge = filteredAge.filter(e => (e.platformCount || Object.keys(e.platforms || {}).length) >= 2);
+      if (ageSort === 'views') filteredAge.sort((a, b) => (b.views || 0) - (a.views || 0));
+      else if (ageSort === 'inter') filteredAge.sort((a, b) => (b.interRate || 0) - (a.interRate || 0));
+      if (ageSelIdx >= filteredAge.length) ageSelIdx = 0;
+
+      const multiCount = ageAll.filter(e => (e.platformCount || Object.keys(e.platforms || {}).length) >= 2).length;
+      if (!ageAll.length) {
         body = `<div class="card stack"><b>暂无跨平台单期复盘数据</b><p class="sub m0">点击右上角「立即采流量」，系统会自动归并你在抖音、视频号、B站、YouTube、小红书发过的每一期真实作品，并持续按天记录快照生成 1/3/7 天同龄对比。</p></div>`;
       } else {
-        body = `<div class="hm-grid">
-          ${ageList.map(ep => `<div class="card stack tight">
-            <div class="row">
-              <span class="pill accent">${PS.esc(ep.published_at || '已发布')}</span>
-              <span class="sub" style="font-size:12px">已归并 ${Object.keys(ep.platforms || {}).length} 平台</span>
-              <span class="grow"></span>
-              ${ep.ratio != null ? `<span class="pill ${ep.ratio >= 1 ? 'good' : ''}">较上期 ${ep.ratio}×</span>` : ''}
+        const cur = filteredAge[ageSelIdx] || filteredAge[0];
+        const bdown = cur ? (cur.platformBreakdown || Object.entries(cur.platforms || {}).map(([pid, pw]) => ({
+          platform: pid, name: PS.PLATFORMS[pid]?.name || pid, views: pw.views || 0,
+          sharePct: cur.views ? Math.round((pw.views / cur.views) * 1000) / 10 : 0,
+          likes: pw.likes || 0, favorites: pw.favorites || 0, comments: pw.comments || 0,
+          interRate: pw.views ? Math.round(((pw.likes + pw.favorites + pw.comments + (pw.shares || 0)) / pw.views) * 1000) / 10 : 0,
+          url: pw.url || '',
+        }))) : [];
+        const dyEntry = bdown.find(x => x.platform === 'douyin' && (x.completion5sPct != null || x.stay2sPct != null));
+
+        body = `
+          <div class="row" style="flex-wrap:wrap;gap:10px">
+            <div class="seg" id="ageFilterSeg">
+              <button type="button" class="${ageFilter === 'all' ? 'on' : ''}" data-af="all">全部期次 (${ageAll.length})</button>
+              <button type="button" class="${ageFilter === 'multi' ? 'on' : ''}" data-af="multi">多平台归并 (${multiCount})</button>
             </div>
-            <h3 class="m0" style="font-size:15.5px">${PS.esc(ep.title)}</h3>
-            <div style="padding:10px 12px;background:var(--sunk);border-radius:9px;font-size:13px">
-              全平台实测 <b>${PS.fmt(ep.views)}</b> 播放 · 总互动 <b>${PS.fmt(ep.inter)}</b>（互动率 <b>${ep.interRate}%</b>）
-              ${ep.prevViews ? `· 上期「${PS.esc(ep.prevTitle)}」${PS.fmt(ep.prevViews)} 播放` : ''}
+            <div class="seg" id="ageSortSeg">
+              <button type="button" class="${ageSort === 'date' ? 'on' : ''}" data-as="date">按最新</button>
+              <button type="button" class="${ageSort === 'views' ? 'on' : ''}" data-as="views">按播放最高</button>
+              <button type="button" class="${ageSort === 'inter' ? 'on' : ''}" data-as="inter">按互动率</button>
             </div>
-            <div class="row" style="flex-wrap:wrap;gap:6px">
-              ${Object.entries(ep.platforms || {}).map(([pid, pw]) => `<a class="pill" href="${PS.esc(pw.url || '#')}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px">${PS.plogo(pid, 14)}${PS.PLATFORMS[pid]?.name || pid} <b>${PS.kfmt(pw.views)}</b></a>`).join('')}
+            <span class="grow"></span>
+            <span class="sub" style="font-size:12px">左侧选一期，右侧看全平台拆解、留存漏斗与 1/3/7 天快照</span>
+          </div>
+
+          ${!cur ? '<div class="card"><span class="sub">当前筛选下暂无期次，请切回「全部期次」。</span></div>' : `
+          <div class="ep-split">
+            <div class="ep-list">
+              ${filteredAge.map((ep, i) => `<button type="button" class="ep-item ${i === ageSelIdx ? 'on' : ''}" data-age-idx="${i}">
+                <div class="row" style="gap:6px">
+                  <span class="pill ${i === ageSelIdx ? 'accent' : ''}" style="font-size:11px;padding:1px 7px">${PS.esc(ep.published_at || '近期')}</span>
+                  <span class="sub" style="font-size:11.5px">${ep.platformCount || Object.keys(ep.platforms || {}).length} 平台</span>
+                  <span class="grow"></span>
+                  ${ep.multVsAccount != null ? `<span class="pill ${ep.multVsAccount >= 2.5 ? 'good' : ''}" style="font-size:10.5px;padding:1px 6px">${ep.multVsAccount}×</span>` : ''}
+                </div>
+                <b class="clip2" style="font-size:13.5px;line-height:1.38">${PS.esc(ep.title)}</b>
+                <div class="row" style="gap:8px;font-size:12px">
+                  <span><b>${PS.kfmt(ep.views)}</b> 播放</span>
+                  <span class="sub">互动率 ${ep.interRate}%</span>
+                  <span class="grow"></span>
+                  <span class="row" style="gap:3px">${Object.keys(ep.platforms || {}).slice(0, 5).map(pid => PS.plogo(pid, 14)).join('')}</span>
+                </div>
+              </button>`).join('')}
             </div>
-            ${ep.snapshots?.length ? `<div class="sub" style="font-size:11.5px">快照记录：${ep.snapshots.map(s => `${s.day}（第 ${s.age} 天 · ${PS.kfmt(s.views)}）`).join(' → ')}</div>` : ''}
-            <div class="row" style="padding-top:6px;border-top:1px solid var(--line-soft)">
-              <span class="grow"></span>
-              <button type="button" class="btn s" data-next-ep="${PS.esc(ep.title)}" data-next-views="${ep.views || 0}">${PS.icon('spark', 'sm')}爆款反推下期 3 选题</button>
+
+            <div class="card stack" style="padding:20px 22px">
+              <div class="row" style="flex-wrap:wrap;gap:8px;align-items:flex-start">
+                <div class="grow min0">
+                  <div class="row" style="gap:6px;margin-bottom:6px;flex-wrap:wrap">
+                    <span class="pill accent">${PS.esc(cur.published_at || '已发布')}</span>
+                    <span class="pill">已归并 ${bdown.length} 平台</span>
+                    ${cur.duration_sec ? `<span class="pill">时长 ${fmtDur(cur.duration_sec)}</span>` : ''}
+                    ${cur.ratio != null ? `<span class="pill ${cur.ratio >= 1 ? 'good' : 'warn'}">较上期 ${cur.ratio}×</span>` : ''}
+                  </div>
+                  <h2 class="m0" style="font-size:19px;line-height:1.35">${PS.esc(cur.title)}</h2>
+                </div>
+                <button type="button" class="btn primary s" data-next-ep="${PS.esc(cur.title)}" data-next-views="${cur.views || 0}">${PS.icon('spark', 'sm')}爆款反推下期 3 选题</button>
+              </div>
+
+              <div class="wb-story ${cur.multVsAccount >= 2.5 ? 'good' : (cur.multVsAccount <= 0.5 ? 'warn' : '')}">
+                <b style="font-size:12.5px">单期跨平台诊断</b>
+                <div style="font-size:13px">${PS.esc(cur.verdict || '')}${cur.prevViews ? `（对比上期《${PS.esc(cur.prevTitle)}》${PS.fmt(cur.prevViews)} 播放）` : ''}</div>
+              </div>
+
+              <div class="kpi-row" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+                <div class="kpi-card"><div class="kpi-lab">全平台总播放</div><div class="kpi-val">${PS.fmt(cur.views)}</div></div>
+                <div class="kpi-card"><div class="kpi-lab">全平台总互动</div><div class="kpi-val">${PS.fmt(cur.inter)}</div><div class="sub" style="font-size:11.5px">互动率 ${cur.interRate}%</div></div>
+                <div class="kpi-card"><div class="kpi-lab">主力阵地</div><div class="kpi-val" style="font-size:20px">${PS.esc(cur.leadName || '–')}</div><div class="sub" style="font-size:11.5px">贡献 ${cur.leadSharePct || 0}% 播放</div></div>
+                <div class="kpi-card"><div class="kpi-lab">收藏 / 点赞</div><div class="kpi-val">${cur.likes ? PS.pct(cur.favorites || 0, cur.likes, 0) : '–'}</div><div class="sub" style="font-size:11.5px">赞 ${PS.fmt(cur.likes || 0)} · 藏 ${PS.fmt(cur.favorites || 0)}</div></div>
+              </div>
+
+              <div class="stack tight">
+                <b style="font-size:13.5px">各平台流量分布占比</b>
+                <div class="stack tight" style="gap:8px">
+                  ${bdown.map(p => {
+                    const col = PS.PLATFORMS[p.platform]?.color || 'var(--accent)';
+                    return `<div class="ep-bar-row">
+                      <span class="row" style="gap:6px">${PS.plogo(p.platform, 16)}<b>${PS.esc(p.name)}</b></span>
+                      <div class="ep-bar-track"><div class="ep-bar-fill" style="width:${Math.max(2, p.sharePct)}%;background:${col}"></div></div>
+                      <span class="mono" style="text-align:right"><b>${PS.kfmt(p.views)}</b> <span class="sub">(${p.sharePct}%)</span></span>
+                    </div>`;
+                  }).join('')}
+                </div>
+              </div>
+
+              ${dyEntry ? `
+                <div class="stack tight" style="padding:12px 14px;border-radius:12px;background:var(--sunk)">
+                  <b style="font-size:13px">抖音开头与留存漏斗（本条实测）</b>
+                  <div class="kpi-row" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px">
+                    <div><div class="kpi-lab">2 秒留存</div><div style="font-size:18px;font-weight:700">${dyEntry.stay2sPct ?? '–'}%</div></div>
+                    <div><div class="kpi-lab">5 秒完播</div><div style="font-size:18px;font-weight:700;color:var(--accent)">${dyEntry.completion5sPct ?? '–'}%</div></div>
+                    <div><div class="kpi-lab">全片完播</div><div style="font-size:18px;font-weight:700">${dyEntry.completionPct ?? '–'}%</div></div>
+                    <div><div class="kpi-lab">均看时长</div><div style="font-size:18px;font-weight:700">${dyEntry.avgViewS != null ? dyEntry.avgViewS + 's' : '–'}</div></div>
+                    <div><div class="kpi-lab">封面点击</div><div style="font-size:18px;font-weight:700">${dyEntry.coverCtrPct ?? '–'}%</div></div>
+                    <div><div class="kpi-lab">单条涨粉</div><div style="font-size:18px;font-weight:700;color:var(--good)">+${PS.fmt(dyEntry.fansGained || 0)}</div></div>
+                  </div>
+                </div>
+              ` : ''}
+
+              <div class="tbl-wrap"><table class="tbl">
+                <thead><tr><th>平台</th><th class="n">播放</th><th class="n">流量占比</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">互动率</th><th class="n">原作品</th></tr></thead>
+                <tbody>${bdown.map(p => `<tr>
+                  <td><span class="row" style="gap:6px">${PS.plogo(p.platform, 15)}<b>${PS.esc(p.name)}</b></span></td>
+                  <td class="n"><b>${PS.fmt(p.views)}</b></td>
+                  <td class="n mono sub">${p.sharePct}%</td>
+                  <td class="n mono">${PS.fmt(p.likes)}</td>
+                  <td class="n mono">${PS.fmt(p.favorites)}</td>
+                  <td class="n mono">${PS.fmt(p.comments)}</td>
+                  <td class="n mono">${p.interRate}%</td>
+                  <td class="n">${p.url ? `<a class="btn s" href="${PS.esc(p.url)}" target="_blank" rel="noopener">查看 ↗</a>` : '–'}</td>
+                </tr>`).join('')}</tbody>
+              </table></div>
+
+              <div class="row" style="flex-wrap:wrap;gap:8px;padding-top:6px;border-top:1px solid var(--line-soft)">
+                <b style="font-size:12.5px">同龄快照轨迹：</b>
+                ${cur.snapshots?.length
+                  ? cur.snapshots.map(s => `<span class="pill" style="font-size:11.5px">${PS.esc(s.day)} · 第 ${s.age} 天 · <b>${PS.kfmt(s.views)}</b></span>`).join('<span class="sub">→</span>')
+                  : '<span class="sub" style="font-size:12px">持续每日采数后将自动记录第 1 / 3 / 7 天增长曲线</span>'}
+              </div>
             </div>
-          </div>`).join('')}
-        </div>`;
+          </div>
+          `}
+        `;
       }
     } else {
-      body = `<div class="card stack">
-        <div class="row"><b>真实数据周报（自动从 SQLite 汇总）</b><span class="grow"></span><button class="btn s" id="copyWeeklyBtn">复制文本</button></div>
-        <pre class="codebox" id="weeklyPre">${PS.esc(an.weeklyReport || '暂无数据，请先点击右上角「立即采流量」。')}</pre>
-      </div>`;
+      const memo = wb?.aiMemo || null;
+      body = !wb ? `<div class="card stack"><b>暂无周报数据</b><p class="sub m0">点击右上角「立即采流量」后自动生成经营周报。</p></div>` : `
+        <section class="wb-hero">
+          <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+            <span class="pill accent">经营周报 · ${PS.esc(wb.generatedAt || '')}</span>
+            <span class="grow"></span>
+            <button type="button" class="btn primary s" id="aiWeeklyBtn">${PS.icon('spark', 'sm')}✨ AI 深度解读本周</button>
+            <button type="button" class="btn s" id="copyWeeklyBtn">复制飞书 / Markdown 周报</button>
+          </div>
+          <h2 class="m0" style="font-size:18px;line-height:1.45">${PS.esc(wb.headline || '')}</h2>
+          ${memo ? `
+            <div class="card stack tight" style="background:var(--surface);border-color:color-mix(in srgb,var(--accent) 30%,var(--line-soft));padding:14px 16px">
+              <div class="row" style="gap:8px">
+                <span class="pill good">AI 操盘手解读</span>
+                <span class="sub" style="font-size:11.5px">${PS.esc(memo.generatedAt || '')} · ${PS.esc(memo.backend || '')}${memo.model ? '/' + PS.esc(memo.model) : ''}</span>
+              </div>
+              <div style="font-size:13.5px;font-weight:600;line-height:1.5">${PS.esc(memo.summary || '')}</div>
+              <div class="wb-memo-grid">
+                ${memo.working ? `<div class="wb-story good"><b style="font-size:12px">正在奏效</b><span style="font-size:12.5px">${PS.esc(memo.working)}</span></div>` : ''}
+                ${memo.leak ? `<div class="wb-story warn"><b style="font-size:12px">最大漏水点</b><span style="font-size:12.5px">${PS.esc(memo.leak)}</span></div>` : ''}
+                ${(memo.nextMoves && memo.nextMoves.length) ? `<div class="wb-story"><b style="font-size:12px">下周最优先动作</b><ul style="margin:2px 0 0;padding-left:16px;font-size:12.5px">${memo.nextMoves.map(m => `<li>${PS.esc(m)}</li>`).join('')}</ul></div>` : ''}
+              </div>
+            </div>
+          ` : ''}
+        </section>
+
+        <div class="kpi-row">
+          ${(wb.kpis || []).map(k => `<div class="kpi-card">
+            <div class="kpi-lab">${PS.esc(k.lab)}</div>
+            <div class="kpi-val" style="${k.tone === 'good' ? 'color:var(--good)' : k.tone === 'accent' ? 'color:var(--accent)' : ''}">${PS.esc(k.val)}</div>
+            <div class="sub" style="font-size:11.5px;margin-top:4px">${PS.esc(k.sub || '')}</div>
+          </div>`).join('')}
+        </div>
+
+        <div class="rev-2col">
+          <div class="stack">
+            <section class="card stack tight">
+              <div class="card-h"><h3>本周发生了什么（经营复盘）</h3><span class="sub">把冷冰冰的数字翻译成发生的变化</span></div>
+              <div class="stack tight" style="gap:10px">
+                ${(wb.whatHappened || []).map(s => `<div class="wb-story ${s.tone || ''}">
+                  <div class="row" style="gap:6px"><span class="pill ${s.tone || ''}" style="font-size:10.5px;padding:1px 7px">${PS.esc(s.tag)}</span><b style="font-size:13.5px">${PS.esc(s.title)}</b></div>
+                  <div class="sub" style="font-size:12.5px;line-height:1.5;margin-top:2px">${PS.esc(s.detail)}</div>
+                </div>`).join('') || '<div class="sub">暂无足够变化数据</div>'}
+              </div>
+            </section>
+
+            <section class="card stack tight">
+              <div class="card-h"><h3>下周行动清单</h3><span class="sub">点右侧直接跳对应工作台执行</span></div>
+              <div class="stack tight" style="gap:9px">
+                ${(wb.nextWeekActions || []).map(a => `<div class="wb-action">
+                  <span class="pill ${a.priority === 'P0' ? 'accent' : ''}" style="font-size:11px;flex:none">${PS.esc(a.priority)}</span>
+                  <div class="grow min0">
+                    <b style="font-size:13.5px;display:block">${PS.esc(a.title)}</b>
+                    <div class="sub" style="font-size:12px;margin-top:3px">${PS.esc(a.detail)}</div>
+                  </div>
+                  <a class="btn s" href="${PS.esc(a.hash || '#dashboard')}" style="flex:none">${PS.esc(a.cta || '去执行 ›')}</a>
+                </div>`).join('')}
+              </div>
+            </section>
+          </div>
+
+          <div class="stack">
+            <section class="card pad-0">
+              <div class="card-h" style="padding:14px 16px 6px"><h3>各平台健康度体检</h3><span class="sub">粉丝 + 作品播放归因</span></div>
+              <div class="tbl-wrap"><table class="tbl">
+                <thead><tr><th>平台</th><th class="n">粉丝 (7日)</th><th class="n">作品</th><th class="n">累计播放</th><th class="n">互动率</th><th>阵地定位</th></tr></thead>
+                <tbody>${(wb.platformHealth || []).map(p => `<tr>
+                  <td><span class="row" style="gap:6px">${PS.plogo(p.platform, 15)}<b>${PS.esc(p.name)}</b></span></td>
+                  <td class="n mono">${PS.fmt(p.fans)} <span class="sub" style="font-size:11px">(${PS.sgn(p.d7Fans)})</span></td>
+                  <td class="n mono">${p.works}</td>
+                  <td class="n mono"><b>${PS.kfmt(p.views)}</b> <span class="sub" style="font-size:11px">${p.viewSharePct}%</span></td>
+                  <td class="n mono">${p.interRate}%</td>
+                  <td><span class="pill ${p.role === '核心主阵地' ? 'accent' : ''}" style="font-size:10.5px;padding:1px 6px">${PS.esc(p.role)}</span></td>
+                </tr>`).join('')}</tbody>
+              </table></div>
+            </section>
+
+            <section class="card stack tight">
+              <div class="card-h"><h3>红黑榜：Top 3 代表作 vs 需优化作品</h3></div>
+              <div class="stack tight" style="gap:8px">
+                <div class="sub" style="font-size:11.5px;font-weight:700;color:var(--good)">🏆 表现最好（值得做续集）</div>
+                ${(wb.winners || []).map(w => `<div class="row" style="padding:8px 10px;border-radius:9px;background:var(--sunk);gap:8px">
+                  <div class="grow min0">
+                    <b class="clip1" style="font-size:13px;display:block">${PS.esc(w.title)}</b>
+                    <div class="sub" style="font-size:11.5px">${PS.esc(w.published_at || '')} · ${PS.esc(w.reason || '')}</div>
+                  </div>
+                  <b class="mono" style="white-space:nowrap">${PS.kfmt(w.views)}</b>
+                </div>`).join('') || '<div class="sub">暂无数据</div>'}
+
+                ${(wb.watchouts && wb.watchouts.length) ? `
+                  <div class="sub" style="font-size:11.5px;font-weight:700;color:var(--warn);margin-top:6px">⚠️ 值得复盘改进（低播放 / 高跳出）</div>
+                  ${wb.watchouts.map(w => `<div class="row" style="padding:8px 10px;border-radius:9px;background:var(--sunk);gap:8px">
+                    <div class="grow min0">
+                      <b class="clip1" style="font-size:13px;display:block">${PS.esc(w.title)}</b>
+                      <div class="sub" style="font-size:11.5px">${PS.esc(w.published_at || '')} · ${PS.esc(w.reason || '')}</div>
+                    </div>
+                    <span class="mono sub" style="white-space:nowrap">${PS.kfmt(w.views)}</span>
+                  </div>`).join('')}
+                ` : ''}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <details class="card" style="padding:12px 16px">
+          <summary style="cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-2)">查看可粘贴到飞书 / 微信群的纯文本周报</summary>
+          <pre class="codebox" id="weeklyPre" style="margin-top:10px">${PS.esc(an.weeklyReport || '')}</pre>
+        </details>
+      `;
     }
 
     const main = PS.shell('review', [['复盘工作台', '#dashboard'], ['同龄复盘 · 抖音分析', '#review']], `
       <div class="ph">
-        <div><h1>复盘与作品分析</h1><p>100% 来自专用 Chrome 实测采集（已入库 ${an.totalWorks || 0} 条作品 · 跨平台归并 ${an.totalEpisodes || 0} 期）。</p></div>
+        <div><h1>复盘与作品分析</h1><p>100% 来自专用 Chrome 实测采集（已入库 ${an.totalWorks || 0} 条作品 · 跨平台归并 ${an.totalEpisodes || 0} 期${dy.hasRetention ? ' · 已同步抖音 2s 留存 / 5s 完播 / 封面点击 / 单条涨粉' : ''}）。</p></div>
         <div class="acts"><button class="btn primary" id="revCollectBtn">${PS.icon('refresh', 'sm')}立即采流量</button></div>
       </div>
       <div class="utabs">
         <button class="utab ${revTab === 'douyin' ? 'on' : ''}" onclick="location.hash='#review/douyin'">抖音作品分析 (${dy.count || 0})</button>
-        <button class="utab ${revTab === 'age' ? 'on' : ''}" onclick="location.hash='#review/age'">跨平台单期复盘 (${ageList.length})</button>
+        <button class="utab ${revTab === 'age' ? 'on' : ''}" onclick="location.hash='#review/age'">跨平台单期复盘 (${ageAll.length})</button>
         <button class="utab ${revTab === 'weekly' ? 'on' : ''}" onclick="location.hash='#review/weekly'">真实数据周报</button>
       </div>
       ${body}
-    `, 'mid');
-    if (revTab === 'douyin') PS.drawDouyinScatter(main.querySelector('#dyScatter'), dy.scatter, dy.medianViews);
+    `);
+    if (revTab === 'douyin') {
+      PS.drawDouyinRetention(main.querySelector('#dyRetentionChart'), dy.scatter, dy.median5sPct);
+      PS.drawDouyinScatter(main.querySelector('#dyScatter'), dy.scatter, dy.medianViews);
+      main.querySelectorAll('[data-dysort]').forEach(b => b.onclick = () => { dySort = b.dataset.dysort; PS.pages.review('douyin'); });
+    }
+    if (revTab === 'age') {
+      main.querySelectorAll('[data-af]').forEach(b => b.onclick = () => { ageFilter = b.dataset.af; ageSelIdx = 0; PS.pages.review('age'); });
+      main.querySelectorAll('[data-as]').forEach(b => b.onclick = () => { ageSort = b.dataset.as; ageSelIdx = 0; PS.pages.review('age'); });
+      main.querySelectorAll('[data-age-idx]').forEach(b => b.onclick = () => { ageSelIdx = +b.dataset.ageIdx; PS.pages.review('age'); });
+    }
     main.querySelector('#copyWeeklyBtn')?.addEventListener('click', () => {
       navigator.clipboard?.writeText(an.weeklyReport || '');
-      PS.toast('周报已复制到剪贴板', 'good');
+      PS.toast('飞书 / Markdown 周报已复制到剪贴板 ✓', 'good');
+    });
+    main.querySelector('#aiWeeklyBtn')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = 'AI 正在深度解读本周数据…';
+      try {
+        const res = await PS.api('POST', '/api/review/weekly-ai', {});
+        if (res.memo && PS.S.analytics?.weeklyBrief) {
+          PS.S.analytics.weeklyBrief.aiMemo = res.memo;
+          PS.save();
+        }
+        PS.toast('AI 深度周报解读已生成 ✓', 'good');
+        PS.pages.review('weekly');
+      } catch (err) {
+        PS.toast(err.message || 'AI 解读失败，请检查系统 AI 配置', 'warn');
+        btn.disabled = false; btn.innerHTML = old;
+      }
     });
 
     const openNextTopicsFlow = async (btn, payload) => {
@@ -785,7 +1130,7 @@
       }
     };
     main.querySelectorAll('[data-next-idx]').forEach(b => b.onclick = () => {
-      const w = dy.scatter?.[+b.dataset.nextIdx];
+      const w = sortedDy[+b.dataset.nextIdx];
       if (!w) return;
       openNextTopicsFlow(b, { title: w.title, views: w.views || 0, multiple: w.mult || 0, platform: 'douyin' });
     });
@@ -803,7 +1148,7 @@
         if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
         if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
         PS.save();
-        PS.toast(`已实测采集 ${res.collected || 0} 条作品流量并写入 SQLite`, res.collected ? 'good' : 'warn');
+        PS.toast(`已实测采集 ${res.collected || 0} 条作品流量与留存并写入 SQLite`, res.collected ? 'good' : 'warn');
         PS.pages.review(revTab);
       } catch (err) {
         PS.toast(err.message || '采集失败', 'warn');
