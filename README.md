@@ -134,12 +134,24 @@ bash scripts/install.sh
 
 启动后打开 `http://127.0.0.1:8792/`（首次启动可按界面引导配置本地目录与 AI 引擎）。
 
-### 方式 C：交给你的 AI Agent 自动安装
+### 方式 C：交给你的 Coding Agent 自动安装（推荐）
 
-把 [`agent-install.md`](agent-install.md) 或下面这句话直接发给 Gemini / Antigravity / Claude Code / Codex：
+把 [`agent-install.md`](agent-install.md) 或下面这句话直接发给 Claude Code / Codex / Gemini CLI / Antigravity / Cursor：
 
 ```text
-请帮我把 https://github.com/zinan92/park-studio 克隆到本地、安装依赖并启动在 http://127.0.0.1:8792，顺便检查本机 ffmpeg 和 mlx-whisper 是否就绪。
+请帮我把 https://github.com/zinan92/park-studio 克隆到本地，用 venv 执行 pip install -e .，跑一遍 `park-studio doctor` 检查所有依赖，并在 http://127.0.0.1:8792 启动服务。
+```
+
+### 跨电脑迁移登录态与数据（无需全平台重新扫码）
+
+macOS 上直接复制 Chrome Profile 会因 Keychain 密钥不同而失效。使用内置 CDP 命令一键迁移：
+
+```bash
+# 旧电脑导出（已解密 Cookies，600 权限）
+park-studio cookies export ~/Desktop/park-cookies.json
+
+# 新电脑导入 + 复制 ~/.park-studio/studio.db
+park-studio cookies import ~/Downloads/park-cookies.json
 ```
 
 ### 装完后的第一句话（验证闭环）

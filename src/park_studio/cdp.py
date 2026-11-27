@@ -391,3 +391,79 @@ class CDPClient:
         finally:
             if not keep_open:
                 await self.close_tab(target_id)
+
+
+async def export_cookies(out_path: Path, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """通过原生 CDP Storage.getCookies 导出当前专用 Chrome 里的已解密 Cookies（供跨 Mac 迁移登录态）。"""
+    cfg = cfg or config.load_config()
+    st = ensure_chrome(cfg, foreground=False)
+    async with CDPClient(st["ws_url"], cmd_timeout=20.0) as client:
+        res = await client.send("Storage.getCookies", {})
+        cookies = res.get("cookies") or []
+    target = Path(out_path).expanduser().resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema": "park-studio/cookies/v1",
+        "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "count": len(cookies),
+        "cookies": cookies,
+    }
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        os.chmod(target, 0o600)
+    except OSError:
+        pass
+    domains = sorted({str(c.get("domain") or "").lstrip(".") for c in cookies if c.get("domain")})
+    return {"ok": True, "path": str(target), "count": len(cookies), "domainsCount": len(domains)}
+
+
+async def import_cookies(in_path: Path, cfg: dict[str, Any] | None = None) -> dict[str, Any]:
+    """通过原生 CDP Storage.setCookies 将旧电脑导出的 Cookies 注入本机专用 Chrome Profile。"""
+    src = Path(in_path).expanduser().resolve()
+    if not src.is_file():
+        raise FileNotFoundError(f"找不到 Cookie 文件：{src}")
+    raw = json.loads(src.read_text(encoding="utf-8"))
+    raw_cookies = raw.get("cookies") if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
+    if not isinstance(raw_cookies, list) or not raw_cookies:
+        raise ValueError("Cookie 文件为空或格式不正确（需要 park-studio cookies export 导出的 JSON）")
+
+    allowed_keys = {
+        "name", "value", "domain", "path", "secure", "httpOnly",
+        "sameSite", "expires", "priority", "sameParty", "sourceScheme", "sourcePort",
+    }
+    cleaned: list[dict[str, Any]] = []
+    for c in raw_cookies:
+        if not isinstance(c, dict) or not c.get("name") or not c.get("domain"):
+            continue
+        item = {k: c[k] for k in allowed_keys if k in c and c[k] is not None}
+        if "expires" in item:
+            try:
+                exp = float(item["expires"])
+                if exp <= 0:
+                    item.pop("expires", None)
+                else:
+                    item["expires"] = exp
+            except (TypeError, ValueError):
+                item.pop("expires", None)
+        cleaned.append(item)
+
+    cfg = cfg or config.load_config()
+    st = ensure_chrome(cfg, foreground=False)
+    imported = 0
+    failed = 0
+    async with CDPClient(st["ws_url"], cmd_timeout=30.0) as client:
+        # 分批注入，避免单条坏 cookie 影响整批导入
+        batch_size = 100
+        for i in range(0, len(cleaned), batch_size):
+            chunk = cleaned[i : i + batch_size]
+            try:
+                await client.send("Storage.setCookies", {"cookies": chunk})
+                imported += len(chunk)
+            except Exception:
+                for one in chunk:
+                    try:
+                        await client.send("Storage.setCookies", {"cookies": [one]})
+                        imported += 1
+                    except Exception:
+                        failed += 1
+    return {"ok": True, "path": str(src), "imported": imported, "failed": failed}

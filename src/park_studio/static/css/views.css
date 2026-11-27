@@ -708,3 +708,13 @@ details.sp-panel > summary.sp-panel-h { cursor: pointer; }
 @media (max-width: 1040px) { .kb-grid { grid-template-columns: 210px minmax(0, 1fr); } }
 @media (max-width: 720px) { .kb-grid { grid-template-columns: 1fr; } }
 
+
+/* ==================== Empty-state Static Preview & Error/Sync Telemetry ==================== */
+.ps-preview-card { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.ps-preview-img-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line-soft); background: var(--sunk); }
+.ps-preview-img-wrap img { display: block; width: 100%; max-height: 360px; object-fit: cover; object-position: top center; opacity: .88; }
+.ps-preview-badge { position: absolute; top: 10px; right: 10px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; background: rgba(17, 18, 20, .82); color: #fff; border: 1px solid rgba(255, 255, 255, .18); backdrop-filter: blur(8px); }
+.ps-err-banner { padding: 12px 16px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--warn) 42%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); }
+.ps-err-banner.danger { border-color: color-mix(in srgb, #e5484d 48%, var(--line)); background: color-mix(in srgb, #e5484d 10%, var(--surface)); }
+.ps-sync-meta { font-size: 11px; color: var(--ink-3); line-height: 1.45; }
+.ps-sync-err { font-size: 11px; color: var(--warn); line-height: 1.45; }

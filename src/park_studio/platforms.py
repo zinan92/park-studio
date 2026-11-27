@@ -30,6 +30,21 @@ PLAT_ORDER = (
 )
 OPTIONAL_GLOBAL_PLATFORMS = {"tiktok", "instagram", "threads", "linkedin", "meta"}
 
+PLATFORM_CAPABILITIES: dict[str, dict[str, Any]] = {
+    "douyin":    {"publish": True, "followers": True, "followersTier": "stable",       "works": True,  "worksTier": "stable",       "retention": True,  "note": "支持 2s 留存 / 5s 完播 / 封面点击 / 单条涨粉"},
+    "channels":  {"publish": True, "followers": True, "followersTier": "stable",       "works": True,  "worksTier": "stable",       "retention": False, "note": "支持视频号助手采数与半自动填表"},
+    "bilibili":  {"publish": True, "followers": True, "followersTier": "stable",       "works": True,  "worksTier": "stable",       "retention": False, "note": "支持创作中心采数与半自动填表"},
+    "youtube":   {"publish": True, "followers": True, "followersTier": "stable",       "works": True,  "worksTier": "stable",       "retention": False, "note": "支持 YouTube Studio 采数与填表"},
+    "xhs":       {"publish": True, "followers": True, "followersTier": "stable",       "works": True,  "worksTier": "experimental", "retention": False, "note": "粉丝稳定；作品列表依赖创作者页结构"},
+    "x":         {"publish": True, "followers": True, "followersTier": "stable",       "works": False, "worksTier": "unsupported",  "retention": False, "note": "支持发帖与粉丝采集；暂不支持单条播放采数"},
+    "wechat":    {"publish": True, "followers": True, "followersTier": "stable",       "works": False, "worksTier": "unsupported",  "retention": False, "note": "支持草稿箱与粉丝采集；暂不支持文章明细采数"},
+    "meta":      {"publish": True, "followers": True, "followersTier": "experimental", "works": True,  "worksTier": "stable",       "retention": False, "note": "Meta Business Suite（IG + FB）图文发布与采数"},
+    "instagram": {"publish": True, "followers": True, "followersTier": "experimental", "works": True,  "worksTier": "experimental", "retention": False, "note": "网页结构抓取（平台改版可能波动）"},
+    "threads":   {"publish": True, "followers": True, "followersTier": "experimental", "works": True,  "worksTier": "experimental", "retention": False, "note": "网页结构抓取（平台改版可能波动）"},
+    "linkedin":  {"publish": True, "followers": True, "followersTier": "experimental", "works": True,  "worksTier": "experimental", "retention": False, "note": "网页结构抓取（平台改版可能波动）"},
+    "tiktok":    {"publish": True, "followers": True, "followersTier": "experimental", "works": True,  "worksTier": "experimental", "retention": False, "note": "网页结构抓取（需海外网络通畅）"},
+}
+
 PLATFORM_SPECS: dict[str, dict[str, str]] = {
     "douyin": {
         "name": "抖音",
@@ -148,7 +163,7 @@ def parse_cn_num(raw: Any) -> int | None:
 
 
 def _now_hm() -> str:
-    return datetime.now().strftime("%m-%d %H:%M")
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _today_str() -> str:
@@ -328,11 +343,12 @@ async def _probe_one(client: cdp.CDPClient, pid: str) -> dict[str, Any]:
         return {"state": "warn", "detail": f"检查出错：{err_msg[:90]}"}
 
 
-async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, Any] | None:
+async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, Any]:
+    """返回结构化结果：{"status": "ok"|"not_logged_in"|"error", "reading": dict|None, "error": str}。"""
     spec = PLATFORM_SPECS[pid]
     url = spec["home_url"]
 
-    async def grab(sid: str, _tid: str) -> dict[str, Any] | None:
+    async def grab(sid: str, _tid: str) -> dict[str, Any]:
         # 先等待真实页面离开 about:blank
         href = ""
         for _ in range(8):
@@ -340,31 +356,37 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
             href = str(await client.evaluate(sid, "location.href") or "").lower()
             if href and href != "about:blank" and not href.startswith("chrome://"):
                 break
-        if not href or "login" in href or "passport" in href or "accounts.google.com" in href:
-            return None
+        if not href or href == "about:blank":
+            return {"status": "error", "reading": None, "error": "页面加载超时（网络不通或需代理）"}
+        if "login" in href or "passport" in href or "accounts.google.com" in href or "/checkpoint" in href:
+            return {"status": "not_logged_in", "reading": None, "error": "未登录或登录态已过期，请点「去登录」重新扫码"}
+
+        reading: dict[str, Any] | None = None
 
         if pid == "bilibili":
             expr = (
                 f"Promise.all([{_fetch_json_js('/x/web/index/stat')},"
                 f"{_fetch_json_js('/x/web/data/v2/overview/stat/graph?period=2&s_locale=zh_CN&type=fan')}]).then(([a,b])=>("
-                "{total: a && a.data && a.data.total_fans, inc: a && a.data && a.data.incr_fans, tend: (b && b.data && b.data.tendency) || []}))"
+                "{code: a && a.code, total: a && a.data && a.data.total_fans, inc: a && a.data && a.data.incr_fans, tend: (b && b.data && b.data.tendency) || []}))"
             )
             r = await client.evaluate(sid, expr)
-            if not isinstance(r, dict) or r.get("total") is None:
-                return None
-            hist = []
-            for x in r.get("tend") or []:
-                day_s = _day_from_any(x.get("date_key"))
-                if day_s:
-                    hist.append({"day": day_s, "net": int(x.get("total_inc") or 0)})
-            return {"total": int(r["total"]), "today_net": int(r.get("inc") or 0), "history": hist}
+            if isinstance(r, dict) and r.get("code") in (-101, -111):
+                return {"status": "not_logged_in", "reading": None, "error": "B 站登录态已过期，请点「去登录」扫码"}
+            if isinstance(r, dict) and r.get("total") is not None:
+                hist = []
+                for x in r.get("tend") or []:
+                    day_s = _day_from_any(x.get("date_key"))
+                    if day_s:
+                        hist.append({"day": day_s, "net": int(x.get("total_inc") or 0)})
+                reading = {"total": int(r["total"]), "today_net": int(r.get("inc") or 0), "history": hist}
 
-        if pid == "douyin":
+        elif pid == "douyin":
             r = await client.evaluate(sid, f"{_fetch_json_js('/web/api/media/user/info/')}.then(x=>x&&x.user&&x.user.follower_count)")
             total = parse_cn_num(r)
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "xhs":
+        elif pid == "xhs":
             expr = (
                 f"{_fetch_json_js('/api/galaxy/creator/data/fans/overall_new')}.then(x=>{{if(!x||!x.data)return null;"
                 "const d=x.data.thirty||x.data.seven; if(!d) return null;"
@@ -373,22 +395,23 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                 "return {total:d.fans_count, list:(d.fans_list||[]).map(i=>({date:i.date,total:i.count,gain:g[String(i.date)],loss:l[String(i.date)]}))};})"
             )
             r = await client.evaluate(sid, expr)
-            if not isinstance(r, dict) or r.get("total") is None:
-                return None
-            hist = []
-            for x in r.get("list") or []:
-                ds = _day_from_any(x.get("date"))
-                if ds:
-                    hist.append({"day": ds, "total": parse_cn_num(x.get("total")), "gain": parse_cn_num(x.get("gain")), "loss": parse_cn_num(x.get("loss"))})
-            return {"total": int(r["total"]), "history": hist}
+            if isinstance(r, dict) and r.get("total") is not None:
+                hist = []
+                for x in r.get("list") or []:
+                    ds = _day_from_any(x.get("date"))
+                    if ds:
+                        hist.append({"day": ds, "total": parse_cn_num(x.get("total")), "gain": parse_cn_num(x.get("gain")), "loss": parse_cn_num(x.get("loss"))})
+                reading = {"total": int(r["total"]), "history": hist}
 
-        if pid == "channels":
+        elif pid == "channels":
             auth = await client.evaluate(
                 sid,
                 "fetch('/cgi-bin/mmfinderassistant-bin/auth/auth_data',"
                 "{method:'POST',headers:{'content-type':'application/json'},body:'{}',credentials:'include'})"
                 ".then(r=>r.json()).catch(()=>null)",
             )
+            if isinstance(auth, dict) and auth.get("errCode") not in (0, None):
+                return {"status": "not_logged_in", "reading": None, "error": "视频号登录已失效，请点「去登录」重新扫码"}
             total = None
             if isinstance(auth, dict) and auth.get("errCode") == 0:
                 total = parse_cn_num(((auth.get("data") or {}).get("finderUser") or {}).get("fansCount"))
@@ -404,9 +427,10 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                         hist.append({"day": day_s, "total": parse_cn_num(row.group(7)), "gain": parse_cn_num(row.group(5)), "loss": parse_cn_num(row.group(6))})
                     break
                 await asyncio.sleep(1.5)
-            return {"total": total, "history": hist} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": hist}
 
-        if pid == "youtube":
+        elif pid == "youtube":
             text = ""
             for _ in range(7):
                 text = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
@@ -415,9 +439,10 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                 await asyncio.sleep(1.8)
             m = re.search(r"(?:当前订阅人数|Current subscribers)\s*\n?\s*([\d,.]+\s*[万KM]?)", text)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "x":
+        elif pid == "x":
             prof = None
             for _ in range(6):
                 prof = await client.evaluate(
@@ -427,7 +452,7 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                     break
                 await asyncio.sleep(1.5)
             if not prof:
-                return None
+                return {"status": "not_logged_in", "reading": None, "error": "未检测到 X 登录态（可能未登录或代理受限）"}
             await client.evaluate(sid, f"(location.href={json.dumps(prof)}, 1)")
             for _ in range(6):
                 await asyncio.sleep(1.5)
@@ -440,19 +465,19 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                 )
                 total = parse_cn_num(txt.replace("\n", " "))
                 if total is not None:
-                    return {"total": total, "history": []}
-            return None
+                    reading = {"total": total, "history": []}
+                    break
 
-        if pid == "wechat":
+        elif pid == "wechat":
             if "token=" not in href:
-                return None
+                return {"status": "not_logged_in", "reading": None, "error": "公众号未登录（需微信扫码登录）"}
             txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
             m = re.search(r"(?:总用户数|总关注人数)\s*\n?\s*([\d,.万]+)", txt)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "instagram":
-            # 跳到当前登录用户的 Profile 页提取 followers 数
+        elif pid == "instagram":
             prof = await client.evaluate(
                 sid,
                 "(() => { const a = [...document.querySelectorAll('a[href]')].find(x => /^\\/[A-Za-z0-9._]+\\/?$/.test(new URL(x.href).pathname) && /profile|个人主页/i.test(x.innerText || x.getAttribute('aria-label') || '')); return a ? a.href : ''; })()",
@@ -463,9 +488,10 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
             txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
             m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|粉丝)", txt, re.I)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "threads":
+        elif pid == "threads":
             prof = await client.evaluate(
                 sid,
                 "(() => { const a = [...document.querySelectorAll('a[href*=\"/@\"]')].find(x => /profile|个人主页/i.test(x.innerText || x.getAttribute('aria-label') || '') || x.querySelector('svg')); return a ? a.href : ''; })()",
@@ -476,9 +502,10 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
             txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
             m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|粉丝)", txt, re.I)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "linkedin":
+        elif pid == "linkedin":
             await asyncio.sleep(2.5)
             txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
             m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|connections|关注者|好友)", txt, re.I)
@@ -488,32 +515,38 @@ async def _collect_follower_one(client: cdp.CDPClient, pid: str) -> dict[str, An
                 txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
                 m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|connections|关注者|位关注者)", txt, re.I)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "meta":
+        elif pid == "meta":
             await asyncio.sleep(3.0)
             txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
             m = re.search(r"(?:Followers|Facebook Page followers|Instagram followers|粉丝)\s*\n?\s*([\d,.]+\s*[KkMm万]?)", txt, re.I)
             if not m:
                 m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:followers|粉丝)", txt, re.I)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        if pid == "tiktok":
+        elif pid == "tiktok":
             await asyncio.sleep(3.0)
             txt = str(await client.evaluate(sid, "document.body ? document.body.innerText : ''") or "")
             m = re.search(r"(?:Followers|粉丝)\s*\n?\s*([\d,.]+\s*[KkMm万]?)", txt, re.I)
             if not m:
                 m = re.search(r"([\d,.]+\s*[KkMm万]?)\s*(?:Followers|粉丝)", txt, re.I)
             total = parse_cn_num(m.group(1)) if m else None
-            return {"total": total, "history": []} if total is not None else None
+            if total is not None:
+                reading = {"total": total, "history": []}
 
-        return None
+        if reading is not None:
+            return {"status": "ok", "reading": reading, "error": ""}
+        return {"status": "error", "reading": None, "error": f"页面已打开但未解析到粉丝数（可能页面结构改版或需重新登录：{href[:60]}）"}
 
     try:
         return await client.with_tab(url, grab, wait_s=0.0, active=False, keep_open=False)
-    except Exception:
-        return None
+    except Exception as exc:
+        err = str(exc).strip() or type(exc).__name__
+        return {"status": "error", "reading": None, "error": f"采集异常：{err[:140]}"}
 
 
 def save_follower_reading(conn: sqlite3.Connection, platform: str, reading: dict[str, Any]) -> int:
@@ -644,40 +677,78 @@ async def collect_followers(
     ]
 
     out: dict[str, Any] = {}
+    errors: list[dict[str, str]] = []
     ok_count = 0
+    now_str = _now_hm()
     async with cdp.CDPClient(st["ws_url"]) as client:
         for pid in ids:
-            reading = await _collect_follower_one(client, pid)
-            if reading is None:
-                out[pid] = {"ok": False, "reason": "未登录或暂未读到粉丝数"}
+            pname = PLATFORM_SPECS[pid]["name"]
+            res = await _collect_follower_one(client, pid)
+            status = res.get("status", "error")
+            reading = res.get("reading")
+            err_msg = res.get("error") or ""
+            if status != "ok" or not reading:
+                db.record_sync_state(conn, pid, "followers", status, count=0, error_msg=err_msg, at_str=now_str)
+                out[pid] = {"ok": False, "status": status, "reason": err_msg or "采集失败"}
+                errors.append({"platform": pid, "name": pname, "kind": "followers", "status": status, "error": err_msg})
+                db.log_event(conn, "采数", pname, "采集粉丝数", f"{'未登录' if status == 'not_logged_in' else '失败'}：{err_msg[:60]}")
                 continue
             backfilled = save_follower_reading(conn, pid, reading)
-            out[pid] = {"ok": True, "total": reading["total"], "backfilled": backfilled}
+            db.record_sync_state(conn, pid, "followers", "ok", count=int(reading["total"]), error_msg="", at_str=now_str)
+            out[pid] = {"ok": True, "status": "ok", "total": reading["total"], "backfilled": backfilled, "updatedAt": now_str}
             ok_count += 1
             db.log_event(
                 conn,
                 "采数",
-                PLATFORM_SPECS[pid]["name"],
+                pname,
                 "采集粉丝数",
                 f"实测 {reading['total']:,} 粉" + (f"（补齐 {backfilled} 天历史）" if backfilled else ""),
             )
 
-    conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('last_metrics_at', ?)", (_now_hm(),))
+    conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('last_metrics_at', ?)", (now_str,))
+    conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('last_followers_at', ?)", (now_str,))
     conn.commit()
-    return {"ok": True, "collected": ok_count, "results": out, "last_metrics_at": _now_hm()}
+    return {
+        "ok": True,
+        "collected": ok_count,
+        "results": out,
+        "errors": errors,
+        "last_metrics_at": now_str,
+        "syncState": db.get_sync_state_map(conn),
+        "platformStatus": get_platform_status_map(conn),
+    }
+
+
+def get_platform_capabilities() -> dict[str, dict[str, Any]]:
+    return {pid: dict(PLATFORM_CAPABILITIES.get(pid, {})) for pid in PLAT_ORDER}
 
 
 def get_platform_status_map(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     rows = {r["platform"]: r for r in conn.execute("SELECT * FROM platform_status").fetchall()}
+    sync_map = db.get_sync_state_map(conn)
     out: dict[str, dict[str, Any]] = {}
     for pid in PLAT_ORDER:
         r = rows.get(pid)
+        caps = dict(PLATFORM_CAPABILITIES.get(pid, {}))
+        psync = sync_map.get(pid, {})
+        default_works_status = "unsupported" if not caps.get("works") else "never"
+        default_works_err = caps.get("note", "") if not caps.get("works") else ""
+        fol_sync = psync.get("followers") or {
+            "status": "never", "count": 0, "error": "", "lastAttemptAt": "", "lastSuccessAt": "",
+        }
+        wrk_sync = psync.get("works") or {
+            "status": default_works_status, "count": 0, "error": default_works_err, "lastAttemptAt": "", "lastSuccessAt": "",
+        }
+        if not caps.get("works"):
+            wrk_sync = {**wrk_sync, "status": "unsupported", "error": default_works_err}
         if r:
             out[pid] = {
                 "state": r["state"],
                 "detail": r["detail"],
                 "disabled": bool(r["disabled"]),
                 "checkedAt": r["checked_at"] or "未检查",
+                "capabilities": caps,
+                "sync": {"followers": fol_sync, "works": wrk_sync},
             }
         else:
             out[pid] = {
@@ -685,6 +756,8 @@ def get_platform_status_map(conn: sqlite3.Connection) -> dict[str, dict[str, Any
                 "detail": "尚未体检，点「全部检查」检测专用 Chrome 登录态",
                 "disabled": False,
                 "checkedAt": "未检查",
+                "capabilities": caps,
+                "sync": {"followers": fol_sync, "works": wrk_sync},
             }
     return out
 

@@ -10,13 +10,28 @@
     const active = PS.activePlats();
     const okCount = active.filter(pid => PS.S.platformStatus[pid]?.state === 'ok').length;
     const warnPlats = active.filter(pid => PS.S.platformStatus[pid]?.state !== 'ok');
-    const curEp = PS.S.episodes[0];
+    const curEp = (PS.S.publishEpisodes && PS.S.publishEpisodes[0]) || (PS.S.episodes && PS.S.episodes[0]) || null;
 
-    const stChip = st => {
+    const stChip = (pid, st) => {
       if (st.disabled) return '<span class="pill">已停用</span>';
+      const wSync = PS.platSyncInfo(pid, 'works');
+      const fSync = PS.platSyncInfo(pid, 'followers');
+      if (wSync.status === 'error' || fSync.status === 'error') return '<span class="pill warn">⚠ 采集失败</span>';
       if (st.state === 'ok') return '<span class="pill good">✓ 已登录</span>';
       if (st.checkedAt === '未检查') return '<span class="pill">未检查</span>';
       return '<span class="pill wait">未登录</span>';
+    };
+
+    const capChips = st => {
+      const c = st.capabilities || {};
+      const tags = [];
+      if (c.publish !== false) tags.push('<span class="pill" style="font-size:10px;padding:0 5px">发布</span>');
+      if (c.followers !== false) tags.push('<span class="pill" style="font-size:10px;padding:0 5px">粉丝</span>');
+      if (c.works === false) tags.push('<span class="pill" style="font-size:10px;padding:0 5px;opacity:.65">暂不采作品</span>');
+      else if (c.worksTier === 'experimental') tags.push('<span class="pill wait" style="font-size:10px;padding:0 5px">作品(实验性)</span>');
+      else tags.push('<span class="pill good" style="font-size:10px;padding:0 5px">作品</span>');
+      if (c.retention) tags.push('<span class="pill accent" style="font-size:10px;padding:0 5px">2s·5s留存</span>');
+      return tags.join('');
     };
 
     const corePlats = PS.PLAT_ORDER.filter(pid => !['tiktok', 'instagram', 'threads', 'linkedin', 'meta'].includes(pid));
@@ -25,13 +40,22 @@
     const renderPlatRow = pid => {
       const p = PS.PLATFORMS[pid];
       const st = PS.S.platformStatus[pid] || { state: 'unknown', detail: '尚未检查', checkedAt: '未检查', disabled: false };
+      const wSync = PS.platSyncInfo(pid, 'works');
+      const fSync = PS.platSyncInfo(pid, 'followers');
+      const syncErr = wSync.status === 'error' ? wSync.detail : (fSync.status === 'error' ? fSync.detail : '');
+      const lastUpd = wSync.lastSuccessAt || fSync.lastSuccessAt || '';
+      const subTxt = st.disabled
+        ? '不体检、不发布、不采粉丝（点右侧可启用）'
+        : (syncErr
+          ? `⚠ ${syncErr}`
+          : `${st.detail} · 检查 ${PS.fmtRelTime(st.checkedAt)}${lastUpd ? ` · 数据更新 ${PS.fmtRelTime(lastUpd)}` : ' · 尚未采数'}`);
       return `<div class="prow ${st.disabled ? 'off' : ''}">
         ${PS.plogo(pid, 24)}
         <span class="pname">
-          ${p.name}
-          <span class="psub">${st.disabled ? '不体检、不发布、不采粉丝（点右侧可启用）' : `${PS.esc(st.detail)} · 上次检查 ${PS.esc(st.checkedAt)}`}</span>
+          <span class="row" style="gap:5px;flex-wrap:wrap"><b>${p.name}</b>${capChips(st)}</span>
+          <span class="psub" style="${syncErr ? 'color:var(--warn)' : ''}">${PS.esc(subTxt)}</span>
         </span>
-        ${stChip(st)}
+        ${stChip(pid, st)}
         ${st.disabled ? '' : `<button class="btn s" data-doc="${pid}">检查</button>`}
         ${st.disabled ? '' : `<button class="btn s" data-login="${pid}">${st.state === 'ok' ? '打开后台' : '去登录'}</button>`}
         <button class="btn s" data-tog="${pid}">${st.disabled ? '启用' : '停用'}</button>
@@ -84,11 +108,12 @@
           <button class="btn primary" id="btnDocAll">${PS.icon('check', 'sm')}全部检查</button>
           <button class="btn" id="btnLoginAll">${PS.icon('chrome', 'sm')}打开全部登录页</button>
           <button class="btn" id="btnOnboarding">${PS.icon('spark', 'sm')}按需重选平台</button>
-          <button class="btn" id="btnSyncCur">取「${PS.esc(curEp.nick)}」的链接</button>
+          ${curEp ? `<button class="btn" id="btnSyncCur">取「${PS.esc(curEp.nick)}」的链接</button>` : ''}
           <button class="btn" id="btnMetrics">采流量</button>
           <button class="btn" id="btnFollowers">采粉丝</button>
-          ${s.siteEnabled ? '<button class="btn" id="btnSyncSite">同步知识站数据</button>' : ''}
+          ${s.siteUrl ? '<a class="btn" href="#site">个人网站</a>' : ''}
         </div>
+        ${PS.syncAlertBanner(active)}
         <div>
           ${corePlats.map(renderPlatRow).join('')}
         </div>
@@ -226,10 +251,13 @@
               <dt>每天 10:00</dt><dd>采集全平台粉丝与已发作品流量，生成当日快照供同龄复盘</dd>
             </dl>
           </div>
-          <div class="row" style="border-top:1px solid var(--line-soft);padding-top:10px">
+          <div class="row" style="border-top:1px solid var(--line-soft);padding-top:10px;flex-wrap:wrap;gap:8px">
+            <button class="btn s" id="btnExportCookies">导出 Cookies（迁移到新电脑）</button>
+            <button class="btn s" id="btnImportCookies">导入旧电脑 Cookies</button>
+            <span class="grow"></span>
             <button class="btn danger s" id="resetDemo">重置本地浏览器缓存</button>
-            <span class="sub">不删除 SQLite 数据库与 Obsidian 文件</span>
           </div>
+          <div class="sub" style="font-size:11.5px">跨 Mac 迁移说明：直接复制 chrome-profile 文件夹会因 macOS Keychain 密钥不同导致 Cookies 失效；请用「导出 / 导入 Cookies」或命令行 <code class="mono">park-studio cookies export/import</code> 安全迁移。</div>
         </div>
       </section>
 
@@ -298,7 +326,7 @@
       PS.pages.settings();
     });
 
-    main.querySelector('#btnSyncCur').onclick = e => runBtn(e.currentTarget, '正在扫描后台链接…', async () => {
+    main.querySelector('#btnSyncCur')?.addEventListener('click', e => runBtn(e.currentTarget, '正在扫描后台链接…', async () => {
       const pe = (PS.S.publishEpisodes || [])[0];
       if (!pe) return PS.toast('暂无发布期次', 'warn');
       let hits = 0;
@@ -312,6 +340,37 @@
       }
       PS.toast(hits ? `已自动取回 ${hits} 个平台作品链接` : '扫描完毕，暂未发现新回填链接', hits ? 'good' : 'warn');
       PS.pages.settings();
+    }));
+    main.querySelector('#btnExportCookies')?.addEventListener('click', e => runBtn(e.currentTarget, '导出中…', async () => {
+      const res = await PS.api('POST', '/api/chrome/cookies/export', {});
+      applySysRes(res);
+      PS.toast(`已导出 ${res.count} 条 Cookies（${res.domainsCount} 域名）-> ${res.path}`, 'good');
+      PS.pages.settings();
+    }));
+    main.querySelector('#btnImportCookies')?.addEventListener('click', () => {
+      PS.modal({
+        title: '导入旧电脑导出的 Cookies JSON',
+        body: `<div class="stack">
+          <p class="sub m0">在旧电脑运行 <code class="mono">park-studio cookies export ~/Desktop/cookies.json</code>（或在旧电脑系统页点「导出 Cookies」），把文件 AirDrop 到这台电脑后填下面路径：</p>
+          <input type="text" id="ckPathIn" class="mono" placeholder="~/Desktop/cookies.json 或 ~/.park-studio/cookies-export.json">
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="ckImpGo">注入本机专用 Chrome</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#ckImpGo').onclick = async () => {
+            const p = mb.querySelector('#ckPathIn').value.trim();
+            if (!p) return PS.toast('请先填写 Cookie JSON 文件路径', 'warn');
+            try {
+              const res = await PS.api('POST', '/api/chrome/cookies/import', { path: p });
+              applySysRes(res);
+              close();
+              PS.toast(`已注入 ${res.imported} 条 Cookies（跳过 ${res.failed} 条），点「全部检查」验证登录态 ✓`, 'good');
+              PS.pages.settings();
+            } catch (err) {
+              PS.toast(err.message || '导入失败', 'warn');
+            }
+          };
+        },
+      });
     });
     main.querySelector('#btnLaunchd')?.addEventListener('click', e => runBtn(e.currentTarget, '生成中…', async () => {
       const res = await PS.api('POST', '/api/daemon/install-launchd', {});
@@ -665,11 +724,220 @@
       PS.toast('已从知识库加入「选题池」 ✓', 'good');
     });
   };
-  // 兼容旧链接重定向，彻底移除未定型边缘壳
+  // 知识树已彻底移除（旧链接静默重定向到知识库）
   PS.pages.said = PS.pages.kb;
   PS.pages.tree = PS.pages.kb;
-  PS.pages.clients = PS.pages.settings;
-  PS.pages.site = PS.pages.settings;
+
+  // ==================== 4. 咨询客户 CRM（#clients · SQLite 持久化，零虚构客户） ====================
+  PS.pages.clients = function () {
+    const list = PS.S.clients || [];
+    const STAGES = ['新线索', '已约时间', '已成交', '已暂停'];
+    const totalAmt = list.filter(c => c.stage === '已成交').reduce((a, c) => a + (Number(c.amount) || 0), 0);
+
+    const main = PS.shell('clients', [['系统', '#settings'], ['咨询客户', '#clients']], `
+      <div class="ph">
+        <div>
+          <h1>咨询客户 CRM</h1>
+          <p>记录从内容流量转化的 1v1 咨询与合作线索（SQLite 本地持久化，零虚构示例客户）。</p>
+        </div>
+        <div class="acts">
+          <button class="btn primary" id="addClientBtn">${PS.icon('plus', 'sm')}新增客户</button>
+        </div>
+      </div>
+
+      ${!list.length ? PS.previewCard({
+        badge: '空状态 · 零虚构客户数据',
+        title: '还没有录入咨询客户',
+        desc: '点击右上角「新增客户」开始追踪你的咨询线索、来源作品、阶段与成交金额。所有记录仅保存在本机 ~/.park-studio/studio.db。',
+        img: '',
+        primaryBtn: `<button class="btn primary s" id="addClientBtn2">${PS.icon('plus', 'sm')}录入第一位客户</button>`,
+      }) : `
+        <div class="kpi-row" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+          <div class="kpi-card"><div class="kpi-lab">客户总数</div><div class="kpi-val">${list.length}</div></div>
+          <div class="kpi-card"><div class="kpi-lab">已成交</div><div class="kpi-val" style="color:var(--good)">${list.filter(c => c.stage === '已成交').length}</div></div>
+          <div class="kpi-card"><div class="kpi-lab">累计成交金额</div><div class="kpi-val" style="color:var(--accent)">¥${PS.fmt(totalAmt)}</div></div>
+        </div>
+        <section class="card pad-0">
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>客户</th><th>领域</th><th>来源</th><th>阶段</th><th class="n">金额</th><th>下一步</th><th>备注</th><th class="n">操作</th></tr></thead>
+            <tbody>${list.map(c => `<tr>
+              <td><b>${PS.esc(c.name)}</b></td>
+              <td class="sub">${PS.esc(c.niche || '–')}</td>
+              <td class="sub">${PS.esc(c.source || '–')}</td>
+              <td>
+                <select data-cstage="${c.id}" style="width:105px;padding:3px 6px;font-size:12px">
+                  ${STAGES.map(st => `<option value="${st}" ${c.stage === st ? 'selected' : ''}>${st}</option>`).join('')}
+                </select>
+              </td>
+              <td class="n mono">¥${PS.fmt(c.amount || 0)}</td>
+              <td class="sub">${PS.esc(c.next || '–')}</td>
+              <td class="sub" style="max-width:220px">${PS.esc(c.note || '')}</td>
+              <td class="n"><button type="button" class="btn s" data-cdel="${c.id}">删除</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </section>
+      `}
+    `, 'mid');
+
+    const openAdd = () => {
+      PS.modal({
+        title: '新增咨询客户',
+        body: `<div class="stack tight">
+          <div class="sys-2col">
+            <div><label class="sub">客户姓名 *</label><input type="text" id="clName" placeholder="例如：张三"></div>
+            <div><label class="sub">所在领域</label><input type="text" id="clNiche" placeholder="如 AI 独立开发 / 知识IP"></div>
+          </div>
+          <div class="sys-2col">
+            <div><label class="sub">来源渠道 / 作品</label><input type="text" id="clSrc" placeholder="如 抖音 / YouTube / X"></div>
+            <div><label class="sub">预估或成交金额（元）</label><input type="number" id="clAmt" value="0" min="0"></div>
+          </div>
+          <div><label class="sub">下一步动作</label><input type="text" id="clNext" placeholder="如 预约本周五沟通"></div>
+          <div><label class="sub">备注</label><textarea id="clNote" rows="2" placeholder="需求痛点与背景…"></textarea></div>
+        </div>`,
+        foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="clSave">保存客户</button>`,
+        onOpen(mb, close) {
+          mb.querySelector('#clSave').onclick = async () => {
+            const name = mb.querySelector('#clName').value.trim();
+            if (!name) return PS.toast('请填写客户姓名', 'warn');
+            try {
+              const created = await PS.api('POST', '/api/clients', {
+                name,
+                niche: mb.querySelector('#clNiche').value.trim() || '知识IP',
+                source: mb.querySelector('#clSrc').value.trim() || '自然流量',
+                amount: Number(mb.querySelector('#clAmt').value) || 0,
+                next_step: mb.querySelector('#clNext').value.trim() || '待沟通',
+                note: mb.querySelector('#clNote').value.trim(),
+              });
+              PS.S.clients.unshift(created);
+              PS.save();
+              close();
+              PS.toast(`已录入客户：${created.name} ✓`, 'good');
+              PS.pages.clients();
+            } catch (err) {
+              PS.toast(err.message || '保存失败', 'warn');
+            }
+          };
+        },
+      });
+    };
+    main.querySelector('#addClientBtn')?.addEventListener('click', openAdd);
+    main.querySelector('#addClientBtn2')?.addEventListener('click', openAdd);
+    main.querySelectorAll('[data-cstage]').forEach(sel => sel.onchange = async () => {
+      const id = +sel.dataset.cstage;
+      const stage = sel.value;
+      try {
+        const upd = await PS.api('PATCH', `/api/clients/${id}`, { stage });
+        const hit = PS.S.clients.find(x => x.id === id);
+        if (hit) Object.assign(hit, upd);
+        PS.save();
+        PS.toast(`客户阶段已更新为「${stage}」 ✓`, 'good');
+        PS.pages.clients();
+      } catch (err) { PS.toast(err.message || '更新失败', 'warn'); }
+    });
+    main.querySelectorAll('[data-cdel]').forEach(b => b.onclick = async () => {
+      const id = +b.dataset.cdel;
+      try {
+        await PS.api('DELETE', `/api/clients/${id}`);
+        PS.S.clients = PS.S.clients.filter(x => x.id !== id);
+        PS.save();
+        PS.toast('客户记录已删除', 'good');
+        PS.pages.clients();
+      } catch (err) { PS.toast(err.message || '删除失败', 'warn'); }
+    });
+  };
+
+  // ==================== 5. 个人网站接入（#site · 零硬编码域名，支持连通性与转化接口体检） ====================
+  PS.pages.site = function () {
+    const s = PS.S.settings || {};
+    const main = PS.shell('site', [['系统', '#settings'], ['个人网站', '#site']], `
+      <div class="ph">
+        <div>
+          <h1>个人网站与转化接口</h1>
+          <p>配置你自己的个人主页、知识站或独立产品域名（零硬编码域名），联通「复盘 → 转化归因」的真实 UTM 数据。</p>
+        </div>
+        <div class="acts">
+          <a class="btn" href="#conversion">查看转化归因 ›</a>
+        </div>
+      </div>
+
+      <section class="card stack">
+        <div class="sys-2col">
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">站点名称</label>
+            <input type="text" id="siteNameIn" value="${PS.esc(s.siteName || '')}" placeholder="例如：我的个人站 / 产品名">
+          </div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">站点地址（URL）</label>
+            <input type="url" id="siteUrlIn" class="mono" value="${PS.esc(s.siteUrl || '')}" placeholder="https://your-domain.com">
+          </div>
+        </div>
+        <div class="sys-2col">
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">后台路径（可选）</label>
+            <input type="text" id="siteAdminIn" class="mono" value="${PS.esc(s.siteAdminPath || '/admin')}" placeholder="/admin">
+          </div>
+          <div>
+            <label class="sub" style="display:block;margin-bottom:4px">只读转化统计接口（返回 JSON { channels: [...] }）</label>
+            <input type="text" id="siteDashIn" class="mono" value="${PS.esc(s.siteDashApi || '/api/admin/dashboard')}" placeholder="/api/admin/dashboard">
+          </div>
+        </div>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button class="btn primary" id="siteSaveBtn">保存站点配置</button>
+          <button class="btn" id="siteTestBtn">${PS.icon('refresh', 'sm')}测试站点连通性</button>
+          ${s.siteUrl ? `<a class="btn" href="${PS.esc(s.siteUrl)}" target="_blank" rel="noopener">打开我的网站 ↗</a>` : ''}
+        </div>
+        <div id="siteTestRes" hidden></div>
+      </section>
+    `, 'narrow');
+
+    main.querySelector('#siteSaveBtn').onclick = async () => {
+      const patch = {
+        siteName: main.querySelector('#siteNameIn').value.trim(),
+        siteUrl: main.querySelector('#siteUrlIn').value.trim(),
+        siteAdminPath: main.querySelector('#siteAdminIn').value.trim() || '/admin',
+        siteDashApi: main.querySelector('#siteDashIn').value.trim() || '/api/admin/dashboard',
+        siteEnabled: !!main.querySelector('#siteUrlIn').value.trim(),
+      };
+      try {
+        await PS.api('PUT', '/api/settings', patch);
+        Object.assign(PS.S.settings, patch);
+        PS.save();
+        PS.toast('个人网站配置已写入 ~/.park-studio/config.yaml ✓', 'good');
+        PS.pages.site();
+      } catch (err) { PS.toast(err.message || '保存失败', 'warn'); }
+    };
+
+    main.querySelector('#siteTestBtn').onclick = async e => {
+      const btn = e.currentTarget;
+      const box = main.querySelector('#siteTestRes');
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = '探测站点中…';
+      box.hidden = true;
+      try {
+        const res = await PS.api('POST', '/api/site/test', {
+          siteUrl: main.querySelector('#siteUrlIn').value.trim(),
+          siteDashApi: main.querySelector('#siteDashIn').value.trim(),
+        });
+        if (res.channels?.length) {
+          PS.S.siteChannels = res.channels;
+          PS.save();
+        }
+        box.hidden = false;
+        box.className = res.ok ? 'callout-warm' : 'ps-err-banner danger';
+        box.innerHTML = res.ok
+          ? `<b>✓ 站点连通成功（HTTP ${res.statusCode}）</b><div class="sub">${PS.esc(res.url)} · ${res.channels?.length ? `已读到 ${res.channels.length} 个渠道转化数据` : '已连通（接口未返回 channels 字段）'}</div>`
+          : `<b>⚠ 站点返回异常（HTTP ${res.statusCode}）</b><div class="sub">${PS.esc(res.error || '')}</div>`;
+        PS.toast(res.ok ? '个人网站测试连通 ✓' : (res.error || '站点异常'), res.ok ? 'good' : 'warn');
+      } catch (err) {
+        box.hidden = false;
+        box.className = 'ps-err-banner danger';
+        box.innerHTML = `<b>⚠ 无法连接个人网站</b><div class="sub">${PS.esc(err.message || '连接失败')}</div>`;
+        PS.toast(err.message || '测试失败', 'warn');
+      } finally {
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    };
+  };
 
   // ==================== 我的定位（有本机定位正本 positioning.json 时原样呈现 7 页签完整定位系统；否则走简洁 5 格编辑卡） ====================
   const SP_TABS = [

@@ -203,11 +203,15 @@
       ['review', '6.复盘'],
     ];
 
+    const rawLastAt = an.lastMetricsAt || PS.S.daemon.lastMetricsAt || '未采集';
+    const lastAtDisp = PS.fmtRelTime(rawLastAt);
+    const alertBanner = PS.syncAlertBanner(active);
+
     const main = PS.shell('dashboard', [['中控', '#dashboard']], `
       <div class="ph">
         <div>
           <h1>中控大屏</h1>
-          <p>全盘真实数据总览（已采集 ${an.totalWorks || 0} 条真实作品 · 上次采数：${PS.esc(an.lastMetricsAt || PS.S.daemon.lastMetricsAt || '未采集')}）。</p>
+          <p>全盘真实数据总览（已入库 ${an.totalWorks || 0} 条真实作品 · <span title="${PS.esc(rawLastAt)}">数据更新时间：<b>${PS.esc(lastAtDisp)}</b></span>）。</p>
         </div>
         <div class="acts" style="flex-wrap:wrap">
           <button class="btn" id="autopilotBtn">${PS.icon('spark', 'sm')}⚡ 上来就拍 · 一键全自动</button>
@@ -215,6 +219,8 @@
           <button class="btn primary" id="dashCollect">${PS.icon('refresh', 'sm')}立即采数（粉丝+流量）</button>
         </div>
       </div>
+
+      ${alertBanner}
 
       <section class="working-strip" aria-label="当前推进">
         <div class="working-head">
@@ -306,14 +312,31 @@
         </div>
         <div class="plat-cards">
           ${pStats.map(ps => {
-            const p = PS.PLATFORMS[ps.id], st = PS.S.platformStatus[ps.id];
+            const p = PS.PLATFORMS[ps.id], st = PS.S.platformStatus[ps.id] || { state: 'warn' };
             const wc = an.platformCounts?.[ps.id] || 0;
             const hasFol = Object.keys(PS.S.followers[ps.id] || {}).length > 0;
-            return `<div class="pc">
-              <div class="row" style="gap:7px">${PS.plogo(ps.id, 22)}<b style="font-size:13.5px">${p.name}</b><span class="grow"></span>${wc ? `<span class="sub" style="font-size:11px">${wc} 作品</span>` : ''}<i class="dot ${st.state === 'ok' ? 'live' : 'warn'}"></i></div>
+            const fSync = PS.platSyncInfo(ps.id, 'followers');
+            const wSync = PS.platSyncInfo(ps.id, 'works');
+            const isBroken = fSync.status === 'error' || wSync.status === 'error';
+            const notLogged = fSync.status === 'not_logged_in' || wSync.status === 'not_logged_in';
+            const dotCls = isBroken ? 'bad' : (st.state === 'ok' ? 'live' : 'warn');
+            const wTag = wSync.status === 'unsupported'
+              ? '<span class="pill" style="font-size:10px;padding:0 5px" title="该平台支持辅助发布与粉丝采集，暂不支持作品明细">仅发布+粉</span>'
+              : wSync.status === 'error'
+                ? `<span class="pill warn" style="font-size:10px;padding:0 5px" title="${PS.esc(wSync.detail)}">⚠ 采数失败</span>`
+                : wSync.status === 'not_logged_in'
+                  ? '<span class="pill wait" style="font-size:10px;padding:0 5px">未登录</span>'
+                  : (wc ? `<span class="sub" style="font-size:11px">${wc} 作品</span>` : '<span class="sub" style="font-size:10.5px">未采作品</span>');
+            const tsText = fSync.lastSuccessAt || wSync.lastSuccessAt || fSync.lastTry || wSync.lastTry;
+            const errNote = isBroken ? (wSync.status === 'error' ? wSync.detail : fSync.detail) : (notLogged ? '未登录，点系统页扫码' : '');
+            return `<div class="pc" style="${isBroken ? 'border-color:color-mix(in srgb,#e5484d 45%,var(--line))' : ''}">
+              <div class="row" style="gap:7px">${PS.plogo(ps.id, 22)}<b style="font-size:13.5px">${p.name}</b><span class="grow"></span>${wTag}<i class="dot ${dotCls}"></i></div>
               <div class="pc-val">${hasFol ? PS.fmt(ps.total) : '–'}</div>
-              <div class="row" style="gap:5px">${hasFol ? `<span class="gpill">今<b>${PS.sgn(ps.today)}</b></span><span class="gpill">7日<b>${PS.sgn(ps.d7)}</b></span>` : '<span class="sub" style="font-size:11.5px">暂未采到粉丝数</span>'}</div>
+              <div class="row" style="gap:5px;flex-wrap:wrap">${hasFol ? `<span class="gpill">今<b>${PS.sgn(ps.today)}</b></span><span class="gpill">7日<b>${PS.sgn(ps.d7)}</b></span>` : `<span class="sub" style="font-size:11.5px">${fSync.status === 'never' ? '尚未采集粉丝' : fSync.status === 'not_logged_in' ? '未登录' : '粉丝采集失败'}</span>`}</div>
               <div class="pc-sp">${PS.sparklineSVG(ps.id, PS.S.followers[ps.id])}</div>
+              ${errNote
+                ? `<div class="ps-sync-err clip2" title="${PS.esc(errNote)}">${PS.esc(errNote)}</div>`
+                : `<div class="ps-sync-meta">${tsText ? `更新于 ${PS.esc(PS.fmtRelTime(tsText))}` : '尚未同步 · 点右上角立即采数'}</div>`}
             </div>`;
           }).join('')}
         </div>
@@ -323,11 +346,14 @@
     function renderHero() {
       const host = main.querySelector('#heroHost');
       if (!slides.length) {
-        host.innerHTML = `<div class="stack tight" style="width:100%;padding:8px 4px">
-          <div class="row"><span class="pill">真实作品数据待采集</span><span class="grow"></span><button class="btn primary s" id="heroEmptyCollect">${PS.icon('refresh', 'sm')}立即采集各平台作品</button></div>
-          <h3 class="m0">还没有采集到你的真实已发作品</h3>
-          <p class="sub m0">点右上角「立即采数」，专用 Chrome 会自动从抖音、视频号、B站、YouTube、小红书拉取你真实发过的每期作品播放、点赞、收藏与时长（绝不用演示假数据充数）。</p>
-        </div>`;
+        host.innerHTML = PS.previewCard({
+          badge: '示例预览 · 当前严格零假数据',
+          title: '还没有采集到你的真实已发作品',
+          desc: '接入专用 Chrome 登录各平台后，点击「立即采数」即可同步真实播放、互动、2s/5s 留存与跨平台归并。下方为接入真实数据后的效果预览图：',
+          img: '/img/previews/hub.png',
+          secondaryHtml: '<a class="btn s" href="#settings">去登录平台 ›</a>',
+          primaryBtn: `<button class="btn primary s" id="heroEmptyCollect">${PS.icon('refresh', 'sm')}立即采集各平台作品</button>`,
+        });
         host.querySelector('#heroEmptyCollect')?.addEventListener('click', () => main.querySelector('#dashCollect')?.click());
         return;
       }
@@ -398,19 +424,26 @@
             if (dayMap && Object.keys(dayMap).length) PS.S.followers[pid] = { ...dayMap };
           }
         }
+        if (resF.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...resF.platformStatus };
+        if (resF.syncState) PS.S.syncState = resF.syncState;
         const resM = await PS.api('POST', '/api/collect/metrics', {});
         if (resM.chromeStatus) {
           PS.S.chromeStatus = resM.chromeStatus;
           PS.S.daemon.chromeOnline = !!resM.chromeStatus.online;
         }
+        if (resM.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...resM.platformStatus };
+        if (resM.syncState) PS.S.syncState = resM.syncState;
         if (resM.daemonLogs) PS.S.daemonLogs = resM.daemonLogs;
         if (resM.last_metrics_at) PS.S.daemon.lastMetricsAt = resM.last_metrics_at;
         if (resM.analytics) PS.S.analytics = resM.analytics;
         PS.save();
-        PS.toast(
-          `采数完成：${resF.collected || 0} 家粉丝 + ${resM.collected || 0} 条真实作品已入库`,
-          (resF.collected || resM.collected) ? 'good' : 'warn'
-        );
+        const allErrs = [...(resF.errors || []), ...(resM.errors || [])];
+        if (allErrs.length) {
+          const names = [...new Set(allErrs.map(x => x.name))].join('、');
+          PS.toast(`采数完成（${resF.collected || 0} 家粉丝 + ${resM.collected || 0} 条作品），但 ${names} 存在异常或未登录，详见顶部提醒条`, 'warn');
+        } else {
+          PS.toast(`采数完成：${resF.collected || 0} 家粉丝 + ${resM.collected || 0} 条真实作品已入库 ✓`, (resF.collected || resM.collected) ? 'good' : 'warn');
+        }
         PS.pages.dashboard();
       } catch (err) {
         PS.toast(err.message || '采数失败', 'warn');

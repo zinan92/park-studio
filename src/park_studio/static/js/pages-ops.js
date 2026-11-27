@@ -671,7 +671,18 @@
       else if (dySort === 'stay2s') sortedDy.sort((a, b) => (b.stay2sPct ?? -1) - (a.stay2sPct ?? -1));
       else if (dySort === 'fans') sortedDy.sort((a, b) => (b.fansGained ?? -1) - (a.fansGained ?? -1));
 
-      body = `
+      if (!dy.count) {
+        body = PS.previewCard({
+          badge: '示例预览 · 接入真实数据后自动替换',
+          title: '尚未采集到抖音作品与留存数据',
+          desc: '在专用 Chrome 登录抖音创作者中心后点「立即采流量」，这里会自动生成 2 秒留存、5 秒完播、封面点击率、单条涨粉与 3× 爆款对比分析。下方为实测效果预览图：',
+          img: '/img/previews/review.png',
+          secondaryHtml: '<a class="btn s" href="#settings">去登录抖音 ›</a>',
+          primaryBtn: `<button class="btn primary s" onclick="document.getElementById('revCollectBtn')?.click()">${PS.icon('refresh', 'sm')}立即采流量</button>`,
+        });
+      } else {
+        const sampleBadge = `<span class="pill" style="font-size:11px">规则推断 · 基于 ${dy.count} 条实测作品</span>${dy.lowSample ? '<span class="pill wait" style="font-size:11px">样本不足 10 条，仅供参考</span>' : ''}`;
+        body = `
         <div class="kpi-row">
           <div class="kpi-card">
             <div class="kpi-lab">抖音粉丝</div>
@@ -707,7 +718,7 @@
 
         ${(dy.retentionInsights && dy.retentionInsights.length) ? `
           <section class="card stack tight" style="padding:14px 18px">
-            <div class="row" style="gap:8px"><b style="font-size:13.5px">抖音留存与爆款归因</b><span class="sub" style="font-size:12px">基于真实 2s 跳出 / 5s 完播 / 封面点击 / 单条涨粉自动计算</span></div>
+            <div class="row" style="gap:8px;flex-wrap:wrap"><b style="font-size:13.5px">抖音留存与爆款归因</b>${sampleBadge}<span class="sub" style="font-size:12px">基于真实 2s 跳出 / 5s 完播 / 封面点击 / 单条涨粉按中位数规则计算</span></div>
             <div class="rev-2col-eq" style="gap:10px">
               ${dy.retentionInsights.map(i => `<div class="ins-item" style="background:var(--sunk);padding:10px 12px;border-radius:10px"><em class="${i.cls}">${i.tag}</em><div>${i.html}</div></div>`).join('')}
             </div>
@@ -791,6 +802,7 @@
           </section>
         ` : ''}
       `;
+      }
     } else if (revTab === 'age') {
       if (ageFilter === 'multi') filteredAge = filteredAge.filter(e => (e.platformCount || Object.keys(e.platforms || {}).length) >= 2);
       if (ageSort === 'views') filteredAge.sort((a, b) => (b.views || 0) - (a.views || 0));
@@ -799,7 +811,14 @@
 
       const multiCount = ageAll.filter(e => (e.platformCount || Object.keys(e.platforms || {}).length) >= 2).length;
       if (!ageAll.length) {
-        body = `<div class="card stack"><b>暂无跨平台单期复盘数据</b><p class="sub m0">点击右上角「立即采流量」，系统会自动归并你在抖音、视频号、B站、YouTube、小红书发过的每一期真实作品，并持续按天记录快照生成 1/3/7 天同龄对比。</p></div>`;
+        body = PS.previewCard({
+          badge: '示例预览 · 接入真实数据后自动替换',
+          title: '暂无跨平台单期复盘数据',
+          desc: '点击「立即采流量」，系统会自动归并各平台发过的同一期作品，支持手动合并/拆开，并持续按天记录快照生成 1/3/7 天同龄对比。下方为效果预览图：',
+          img: '/img/previews/review.png',
+          secondaryHtml: '<a class="btn s" href="#settings">去登录平台 ›</a>',
+          primaryBtn: `<button class="btn primary s" onclick="document.getElementById('revCollectBtn')?.click()">${PS.icon('refresh', 'sm')}立即采流量</button>`,
+        });
       } else {
         const cur = filteredAge[ageSelIdx] || filteredAge[0];
         const bdown = cur ? (cur.platformBreakdown || Object.entries(cur.platforms || {}).map(([pid, pw]) => ({
@@ -857,11 +876,15 @@
                   </div>
                   <h2 class="m0" style="font-size:19px;line-height:1.35">${PS.esc(cur.title)}</h2>
                 </div>
-                <button type="button" class="btn primary s" data-next-ep="${PS.esc(cur.title)}" data-next-views="${cur.views || 0}">${PS.icon('spark', 'sm')}爆款反推下期 3 选题</button>
+                <div class="row" style="gap:6px;flex-wrap:wrap">
+                  <button type="button" class="btn s" id="mergeEpBtn">合并其他期次到此期</button>
+                  ${an.hasManualOverrides ? '<button type="button" class="btn s" id="resetMergeBtn">恢复自动归并</button>' : ''}
+                  <button type="button" class="btn primary s" data-next-ep="${PS.esc(cur.title)}" data-next-views="${cur.views || 0}">${PS.icon('spark', 'sm')}爆款反推下期 3 选题</button>
+                </div>
               </div>
 
               <div class="wb-story ${cur.multVsAccount >= 2.5 ? 'good' : (cur.multVsAccount <= 0.5 ? 'warn' : '')}">
-                <b style="font-size:12.5px">单期跨平台诊断</b>
+                <div class="row" style="gap:6px;flex-wrap:wrap"><b style="font-size:12.5px">单期跨平台诊断</b><span class="pill" style="font-size:10.5px;padding:0 6px">规则推断 · 基于 ${cur.diagMeta?.sampleCount || ageAll.length} 期样本</span>${cur.diagMeta?.lowSample ? '<span class="pill wait" style="font-size:10.5px;padding:0 6px">样本偏少仅供参考</span>' : ''}</div>
                 <div style="font-size:13px">${PS.esc(cur.verdict || '')}${cur.prevViews ? `（对比上期《${PS.esc(cur.prevTitle)}》${PS.fmt(cur.prevViews)} 播放）` : ''}</div>
               </div>
 
@@ -901,8 +924,11 @@
               ` : ''}
 
               <div class="tbl-wrap"><table class="tbl">
-                <thead><tr><th>平台</th><th class="n">播放</th><th class="n">流量占比</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">互动率</th><th class="n">原作品</th></tr></thead>
-                <tbody>${bdown.map(p => `<tr>
+                <thead><tr><th>平台</th><th class="n">播放</th><th class="n">流量占比</th><th class="n">点赞</th><th class="n">收藏</th><th class="n">评论</th><th class="n">互动率</th><th class="n">操作</th></tr></thead>
+                <tbody>${bdown.map(p => {
+                  const wid = cur.platforms?.[p.platform]?.work_id || '';
+                  const wkey = wid ? `${p.platform}:${wid}` : '';
+                  return `<tr>
                   <td><span class="row" style="gap:6px">${PS.plogo(p.platform, 15)}<b>${PS.esc(p.name)}</b></span></td>
                   <td class="n"><b>${PS.fmt(p.views)}</b></td>
                   <td class="n mono sub">${p.sharePct}%</td>
@@ -910,8 +936,12 @@
                   <td class="n mono">${PS.fmt(p.favorites)}</td>
                   <td class="n mono">${PS.fmt(p.comments)}</td>
                   <td class="n mono">${p.interRate}%</td>
-                  <td class="n">${p.url ? `<a class="btn s" href="${PS.esc(p.url)}" target="_blank" rel="noopener">查看 ↗</a>` : '–'}</td>
-                </tr>`).join('')}</tbody>
+                  <td class="n" style="white-space:nowrap">
+                    ${p.url ? `<a class="btn s" href="${PS.esc(p.url)}" target="_blank" rel="noopener">查看 ↗</a>` : ''}
+                    ${(bdown.length >= 2 && wkey) ? `<button type="button" class="btn s" data-split-wk="${PS.esc(wkey)}" title="若归并错误，可将此平台拆出为独立一期">拆开</button>` : ''}
+                  </td>
+                </tr>`;
+                }).join('')}</tbody>
               </table></div>
 
               <div class="row" style="flex-wrap:wrap;gap:8px;padding-top:6px;border-top:1px solid var(--line-soft)">
@@ -927,14 +957,23 @@
       }
     } else {
       const memo = wb?.aiMemo || null;
-      body = !wb ? `<div class="card stack"><b>暂无周报数据</b><p class="sub m0">点击右上角「立即采流量」后自动生成经营周报。</p></div>` : `
+      body = (!wb || !an.hasLiveWorks) ? PS.previewCard({
+        badge: '示例预览 · 接入真实数据后自动替换',
+        title: '暂无真实经营周报数据',
+        desc: '点击右上角「立即采流量」拉取真实作品与粉丝数据后，这里会自动生成可视化经营周报与 AI 深度操盘手解读。下方为效果预览图：',
+        img: '/img/previews/review.png',
+        secondaryHtml: '<a class="btn s" href="#settings">去配置 AI 与平台 ›</a>',
+        primaryBtn: `<button class="btn primary s" onclick="document.getElementById('revCollectBtn')?.click()">${PS.icon('refresh', 'sm')}立即采流量</button>`,
+      }) : `
         <section class="wb-hero">
           <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
             <span class="pill accent">经营周报 · ${PS.esc(wb.generatedAt || '')}</span>
+            <span class="pill">规则汇总 · 基于 ${an.totalWorks || 0} 条实测作品</span>
             <span class="grow"></span>
             <button type="button" class="btn primary s" id="aiWeeklyBtn">${PS.icon('spark', 'sm')}✨ AI 深度解读本周</button>
             <button type="button" class="btn s" id="copyWeeklyBtn">复制飞书 / Markdown 周报</button>
           </div>
+          <div id="aiWeeklyErr" hidden class="ps-err-banner danger"></div>
           <h2 class="m0" style="font-size:18px;line-height:1.45">${PS.esc(wb.headline || '')}</h2>
           ${memo ? `
             <div class="card stack tight" style="background:var(--surface);border-color:color-mix(in srgb,var(--accent) 30%,var(--line-soft));padding:14px 16px">
@@ -1037,11 +1076,13 @@
       `;
     }
 
+    const revLastAt = an.lastMetricsAt || PS.S.daemon.lastMetricsAt || '未采集';
     const main = PS.shell('review', [['复盘工作台', '#dashboard'], ['同龄复盘 · 抖音分析', '#review']], `
       <div class="ph">
-        <div><h1>复盘与作品分析</h1><p>100% 来自专用 Chrome 实测采集（已入库 ${an.totalWorks || 0} 条作品 · 跨平台归并 ${an.totalEpisodes || 0} 期${dy.hasRetention ? ' · 已同步抖音 2s 留存 / 5s 完播 / 封面点击 / 单条涨粉' : ''}）。</p></div>
+        <div><h1>复盘与作品分析</h1><p>100% 来自专用 Chrome 实测采集（已入库 ${an.totalWorks || 0} 条作品 · 跨平台归并 ${an.totalEpisodes || 0} 期 · <span title="${PS.esc(revLastAt)}">数据更新时间：<b>${PS.esc(PS.fmtRelTime(revLastAt))}</b></span>${dy.hasRetention ? ' · 已同步抖音 2s 留存 / 5s 完播 / 封面点击 / 单条涨粉' : ''}）。</p></div>
         <div class="acts"><button class="btn primary" id="revCollectBtn">${PS.icon('refresh', 'sm')}立即采流量</button></div>
       </div>
+      ${PS.syncAlertBanner()}
       <div class="utabs">
         <button class="utab ${revTab === 'douyin' ? 'on' : ''}" onclick="location.hash='#review/douyin'">抖音作品分析 (${dy.count || 0})</button>
         <button class="utab ${revTab === 'age' ? 'on' : ''}" onclick="location.hash='#review/age'">跨平台单期复盘 (${ageAll.length})</button>
@@ -1049,7 +1090,7 @@
       </div>
       ${body}
     `);
-    if (revTab === 'douyin') {
+    if (revTab === 'douyin' && dy.count) {
       PS.drawDouyinRetention(main.querySelector('#dyRetentionChart'), dy.scatter, dy.median5sPct);
       PS.drawDouyinScatter(main.querySelector('#dyScatter'), dy.scatter, dy.medianViews);
       main.querySelectorAll('[data-dysort]').forEach(b => b.onclick = () => { dySort = b.dataset.dysort; PS.pages.review('douyin'); });
@@ -1058,6 +1099,68 @@
       main.querySelectorAll('[data-af]').forEach(b => b.onclick = () => { ageFilter = b.dataset.af; ageSelIdx = 0; PS.pages.review('age'); });
       main.querySelectorAll('[data-as]').forEach(b => b.onclick = () => { ageSort = b.dataset.as; ageSelIdx = 0; PS.pages.review('age'); });
       main.querySelectorAll('[data-age-idx]').forEach(b => b.onclick = () => { ageSelIdx = +b.dataset.ageIdx; PS.pages.review('age'); });
+      main.querySelectorAll('[data-split-wk]').forEach(b => b.onclick = async () => {
+        const wk = b.dataset.splitWk;
+        try {
+          const res = await PS.api('POST', '/api/review/episodes/split', { work_key: wk });
+          if (res.analytics) PS.S.analytics = res.analytics;
+          PS.save();
+          PS.toast('已将该平台作品拆出为独立一期 ✓', 'good');
+          PS.pages.review('age');
+        } catch (err) {
+          PS.toast(err.message || '拆开失败', 'warn');
+        }
+      });
+      main.querySelector('#resetMergeBtn')?.addEventListener('click', async () => {
+        try {
+          const res = await PS.api('POST', '/api/review/episodes/reset-overrides', {});
+          if (res.analytics) PS.S.analytics = res.analytics;
+          PS.save();
+          PS.toast('已恢复自动跨平台归并规则 ✓', 'good');
+          PS.pages.review('age');
+        } catch (err) { PS.toast(err.message || '重置失败', 'warn'); }
+      });
+      main.querySelector('#mergeEpBtn')?.addEventListener('click', () => {
+        const cur = filteredAge[ageSelIdx] || filteredAge[0];
+        if (!cur) return;
+        const others = ageAll.filter(e => e.id !== cur.id);
+        if (!others.length) return PS.toast('没有其他可合并的期次', 'warn');
+        PS.modal({
+          title: `合并其他期次到《${cur.nick}》`,
+          wide: true,
+          body: `<div class="stack tight">
+            <p class="sub m0">勾选实际属于同一期、但因各平台标题不同未被自动归并的作品：</p>
+            <div class="stack tight" style="max-height:360px;overflow:auto">
+              ${others.map((ep, i) => `<label class="row" style="padding:8px 10px;border-radius:9px;background:var(--sunk);gap:10px;cursor:pointer">
+                <input type="checkbox" data-merge-idx="${i}" style="accent-color:var(--accent)">
+                <div class="min0 grow">
+                  <b class="clip1" style="font-size:13px">${PS.esc(ep.title)}</b>
+                  <div class="sub" style="font-size:11.5px">${PS.esc(ep.published_at || '')} · ${ep.platformCount} 平台 · ${PS.kfmt(ep.views)} 播放</div>
+                </div>
+              </label>`).join('')}
+            </div>
+          </div>`,
+          foot: `<button class="btn" data-close>取消</button><button class="btn primary" id="confirmMergeBtn">确认合并为同一期</button>`,
+          onOpen(mb, close) {
+            mb.querySelector('#confirmMergeBtn').onclick = async () => {
+              const picked = [...mb.querySelectorAll('[data-merge-idx]:checked')].map(el => others[+el.dataset.mergeIdx]).filter(Boolean);
+              if (!picked.length) return PS.toast('请先勾选至少一个要合并的期次', 'warn');
+              const keys = [...(cur.workKeys || [])];
+              for (const ep of picked) keys.push(...(ep.workKeys || []));
+              try {
+                const res = await PS.api('POST', '/api/review/episodes/merge', { work_keys: keys });
+                if (res.analytics) PS.S.analytics = res.analytics;
+                PS.save();
+                close();
+                PS.toast(`已合并为同一期（覆盖 ${keys.length} 条跨平台作品）✓`, 'good');
+                PS.pages.review('age');
+              } catch (err) {
+                PS.toast(err.message || '合并失败', 'warn');
+              }
+            };
+          },
+        });
+      });
     }
     main.querySelector('#copyWeeklyBtn')?.addEventListener('click', () => {
       navigator.clipboard?.writeText(an.weeklyReport || '');
@@ -1065,6 +1168,8 @@
     });
     main.querySelector('#aiWeeklyBtn')?.addEventListener('click', async e => {
       const btn = e.currentTarget;
+      const errBox = main.querySelector('#aiWeeklyErr');
+      if (errBox) { errBox.hidden = true; errBox.innerHTML = ''; }
       const old = btn.innerHTML;
       btn.disabled = true; btn.textContent = 'AI 正在深度解读本周数据…';
       try {
@@ -1076,7 +1181,12 @@
         PS.toast('AI 深度周报解读已生成 ✓', 'good');
         PS.pages.review('weekly');
       } catch (err) {
-        PS.toast(err.message || 'AI 解读失败，请检查系统 AI 配置', 'warn');
+        const msg = err.message || 'AI 解读失败，请检查系统 AI 配置或 API Key';
+        PS.toast(msg, 'warn');
+        if (errBox) {
+          errBox.hidden = false;
+          errBox.innerHTML = `<div class="row" style="gap:8px;flex-wrap:wrap"><b>⚠ AI 深度解读失败</b><span class="sub">${PS.esc(msg)}</span><span class="grow"></span><a class="btn s" href="#settings">去系统页配置 AI / 测试连通性 ›</a></div>`;
+        }
         btn.disabled = false; btn.innerHTML = old;
       }
     });
@@ -1145,10 +1255,18 @@
       try {
         const res = await PS.api('POST', '/api/collect/metrics', {});
         if (res.analytics) PS.S.analytics = res.analytics;
+        if (res.platformStatus) PS.S.platformStatus = { ...PS.S.platformStatus, ...res.platformStatus };
+        if (res.syncState) PS.S.syncState = res.syncState;
         if (res.daemonLogs) PS.S.daemonLogs = res.daemonLogs;
         if (res.last_metrics_at) PS.S.daemon.lastMetricsAt = res.last_metrics_at;
         PS.save();
-        PS.toast(`已实测采集 ${res.collected || 0} 条作品流量与留存并写入 SQLite`, res.collected ? 'good' : 'warn');
+        const errs = res.errors || [];
+        if (errs.length) {
+          const names = [...new Set(errs.map(x => x.name))].join('、');
+          PS.toast(`已采 ${res.collected || 0} 条作品，但 ${names} 采集失败或未登录（详见顶部提醒）`, 'warn');
+        } else {
+          PS.toast(`已实测采集 ${res.collected || 0} 条作品流量与留存并写入 SQLite ✓`, res.collected ? 'good' : 'warn');
+        }
         PS.pages.review(revTab);
       } catch (err) {
         PS.toast(err.message || '采集失败', 'warn');
@@ -1158,33 +1276,82 @@
     });
   };
 
-  // ==================== 复盘 · 转化归因（#conversion） ====================
+  // ==================== 复盘 · 转化归因（#conversion · 零假数据，直连用户配置的个人网站） ====================
   PS.pages.conversion = function () {
-    const totReg = PS.S.siteChannels.reduce((s, x) => s + x.reg, 0);
-    const totVip = PS.S.siteChannels.reduce((s, x) => s + x.vip, 0);
-    const totRev = PS.S.siteChannels.reduce((s, x) => s + x.revenue, 0);
+    const s = PS.S.settings || {};
+    const channels = PS.S.siteChannels || [];
+    const realEps = PS.S.analytics?.episodes || [];
+    const recent3Views = realEps.slice(0, 3).reduce((acc, e) => acc + (e.views || 0), 0);
+    const hasSite = !!(s.siteUrl && s.siteUrl.trim());
+    const totReg = channels.reduce((acc, x) => acc + (x.reg || 0), 0);
+    const totVip = channels.reduce((acc, x) => acc + (x.vip || 0), 0);
+    const totRev = channels.reduce((acc, x) => acc + (x.revenue || 0), 0);
 
-    PS.shell('conversion', [['复盘工作台', '#dashboard'], ['转化归因', '#conversion']], `
+    const main = PS.shell('conversion', [['复盘工作台', '#dashboard'], ['转化归因', '#conversion']], `
       <div class="ph">
-        <div><h1>转化归因 · ${PS.esc(PS.S.settings.siteName)}</h1><p>接入自有站点只读接口与 UTM 参数，看清哪一期、哪个平台真正带来注册与收入。</p></div>
+        <div>
+          <h1>转化归因${s.siteName ? ` · ${PS.esc(s.siteName)}` : ''}</h1>
+          <p>严格零假数据：接入你自己的站点只读接口与 UTM 参数后，实时关联作品播放、站点注册与付费收入。</p>
+        </div>
+        <div class="acts">
+          ${hasSite ? `<button class="btn primary" id="convSyncBtn">${PS.icon('refresh', 'sm')}实时拉取站点转化</button>` : ''}
+          <a class="btn ${hasSite ? '' : 'primary'}" href="#site">配置个人网站 ›</a>
+        </div>
       </div>
-      <div class="funnel-steps">
-        <div class="fstep"><div class="kpi-lab">近 3 期播放</div><div class="kpi-val">538,780</div><div class="fstep-bar"><i style="width:100%"></i></div></div>
-        <div class="fstep"><div class="kpi-lab">站点注册</div><div class="kpi-val">${PS.fmt(totReg)}</div><div class="fstep-bar"><i style="width:60%"></i></div></div>
-        <div class="fstep"><div class="kpi-lab">付费会员</div><div class="kpi-val">${PS.fmt(totVip)}</div><div class="fstep-bar"><i style="width:34%"></i></div></div>
-        <div class="fstep"><div class="kpi-lab">归因收入</div><div class="kpi-val" style="color:var(--good)">¥${PS.fmt(totRev)}</div><div class="fstep-bar"><i style="width:24%"></i></div></div>
-      </div>
-      <section class="card pad-0">
-        <div class="tbl-wrap"><table class="tbl">
-          <thead><tr><th>来源平台</th><th class="n">注册</th><th class="n">会员</th><th class="n">转化率</th><th class="n">归因收入</th></tr></thead>
-          <tbody>${PS.S.siteChannels.map(c => `<tr>
-            <td><span class="plat-tag">${PS.plogo(c.source, 18)}${c.label}</span></td>
-            <td class="n">${PS.fmt(c.reg)}</td><td class="n">${PS.fmt(c.vip)}</td>
-            <td class="n"><b>${PS.pct(c.vip, c.reg, 1)}</b></td>
-            <td class="n" style="color:var(--good)"><b>¥${PS.fmt(c.revenue)}</b></td>
-          </tr>`).join('')}</tbody>
-        </table></div>
-      </section>
+      <div id="convErrBox" hidden class="ps-err-banner danger"></div>
+      ${(!hasSite || !channels.length) ? PS.previewCard({
+        badge: '示例预览 · 当前严格零假数据',
+        title: hasSite ? `已配置站点 ${s.siteName || s.siteUrl}，尚未拉取到转化渠道数据` : '尚未接入你的个人网站 / 知识站',
+        desc: hasSite
+          ? `点击右上角「实时拉取站点转化」从 ${s.siteUrl}${s.siteDashApi || '/api/admin/dashboard'} 读取真实 UTM 渠道注册与收入数据（绝不用写死数字充数）。`
+          : '在「个人网站」页填写你的站点 URL 与只读转化接口后，这里会自动展示「近 3 期真实播放 → 注册 → 付费 → 归因收入」完整漏斗。',
+        img: '/img/previews/hub.png',
+        secondaryHtml: '<a class="btn s" href="#site">前往配置个人网站 ›</a>',
+        primaryBtn: hasSite ? `<button class="btn primary s" id="convSyncBtn2">${PS.icon('refresh', 'sm')}立即拉取真实数据</button>` : '',
+      }) : `
+        <div class="funnel-steps">
+          <div class="fstep"><div class="kpi-lab">近 3 期实测播放</div><div class="kpi-val">${PS.fmt(recent3Views)}</div><div class="fstep-bar"><i style="width:100%"></i></div></div>
+          <div class="fstep"><div class="kpi-lab">站点注册</div><div class="kpi-val">${PS.fmt(totReg)}</div><div class="fstep-bar"><i style="width:${recent3Views ? Math.min(100, Math.max(8, Math.round((totReg / Math.max(1, recent3Views)) * 10000))) : 50}%"></i></div></div>
+          <div class="fstep"><div class="kpi-lab">付费会员</div><div class="kpi-val">${PS.fmt(totVip)}</div><div class="fstep-bar"><i style="width:${totReg ? Math.min(100, Math.max(8, Math.round((totVip / totReg) * 100))) : 30}%"></i></div></div>
+          <div class="fstep"><div class="kpi-lab">归因收入</div><div class="kpi-val" style="color:var(--good)">¥${PS.fmt(totRev)}</div><div class="fstep-bar"><i style="width:24%"></i></div></div>
+        </div>
+        <section class="card pad-0">
+          <div class="tbl-wrap"><table class="tbl">
+            <thead><tr><th>来源平台</th><th class="n">注册</th><th class="n">会员</th><th class="n">转化率</th><th class="n">归因收入</th></tr></thead>
+            <tbody>${channels.map(c => `<tr>
+              <td><span class="plat-tag">${PS.plogo(c.source, 18)}${PS.esc(c.label || c.source)}</span></td>
+              <td class="n">${PS.fmt(c.reg)}</td><td class="n">${PS.fmt(c.vip)}</td>
+              <td class="n"><b>${PS.pct(c.vip, c.reg, 1)}</b></td>
+              <td class="n" style="color:var(--good)"><b>¥${PS.fmt(c.revenue)}</b></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </section>
+      `}
     `, 'mid');
+
+    const doSync = async btn => {
+      const errBox = main.querySelector('#convErrBox');
+      if (errBox) { errBox.hidden = true; errBox.innerHTML = ''; }
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = '拉取站点转化中…';
+      try {
+        const res = await PS.api('POST', '/api/site/test', { siteUrl: s.siteUrl, siteDashApi: s.siteDashApi });
+        if (!res.ok) throw new Error(res.error || '站点返回异常状态码');
+        PS.S.siteChannels = res.channels || [];
+        PS.save();
+        PS.toast(PS.S.siteChannels.length ? `已同步 ${PS.S.siteChannels.length} 个渠道真实转化数据 ✓` : '站点已连通，但接口暂未返回 channels 数组', PS.S.siteChannels.length ? 'good' : 'warn');
+        PS.pages.conversion();
+      } catch (err) {
+        const msg = err.message || '拉取站点转化数据失败';
+        PS.toast(msg, 'warn');
+        if (errBox) {
+          errBox.hidden = false;
+          errBox.innerHTML = `<div class="row" style="gap:8px;flex-wrap:wrap"><b>⚠ 站点转化接口异常</b><span class="sub">${PS.esc(msg)}</span><span class="grow"></span><a class="btn s" href="#site">检查站点配置 ›</a></div>`;
+        }
+        btn.disabled = false; btn.innerHTML = old;
+      }
+    };
+    main.querySelector('#convSyncBtn')?.addEventListener('click', e => doSync(e.currentTarget));
+    main.querySelector('#convSyncBtn2')?.addEventListener('click', e => doSync(e.currentTarget));
   };
 })();

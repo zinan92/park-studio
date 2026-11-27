@@ -691,20 +691,33 @@ async def collect_all_works(
     cfg: dict[str, Any] | None = None,
     target_platforms: list[str] | None = None,
 ) -> dict[str, Any]:
-    """通过专用 Chrome CDP 依次采集各已启用平台的真实已发作品与播放/互动数据。"""
+    """通过专用 Chrome CDP 依次采集各已启用平台的真实已发作品与播放/互动数据，记录精确状态与报错原因。"""
     cfg = cfg or config.load_config()
     st = cdp.chrome_status(cfg)
     if not st["online"]:
         st = cdp.ensure_chrome(cfg, foreground=False)
 
-    disabled = {
-        r["platform"]
-        for r in conn.execute("SELECT platform FROM platform_status WHERE disabled=1").fetchall()
+    ps_rows = {
+        r["platform"]: {"state": r["state"], "disabled": bool(r["disabled"])}
+        for r in conn.execute("SELECT platform, state, disabled FROM platform_status").fetchall()
     }
-    wanted = [p for p in (target_platforms or list(COLLECTORS.keys())) if p in COLLECTORS and p not in disabled]
+    disabled = {pid for pid, info in ps_rows.items() if info["disabled"]}
+    enabled_all = [p for p in (target_platforms or list(platforms.PLAT_ORDER)) if p in platforms.PLATFORM_SPECS and p not in disabled]
 
     per_plat: dict[str, dict[str, Any]] = {}
+    errors: list[dict[str, str]] = []
     total_saved = 0
+    now_str = datetime.now(CN).strftime("%Y-%m-%d %H:%M:%S")
+
+    # 先把不支持作品采集的已启用平台显式标记为 unsupported，避免界面显示误导性的 0 条
+    for pid in enabled_all:
+        if pid not in COLLECTORS:
+            pname = platforms.PLATFORM_SPECS[pid]["name"]
+            note = platforms.PLATFORM_CAPABILITIES.get(pid, {}).get("note") or "暂不支持作品明细自动采集"
+            db.record_sync_state(conn, pid, "works", "unsupported", count=0, error_msg=note, at_str=now_str)
+            per_plat[pid] = {"ok": False, "status": "unsupported", "count": 0, "error": note}
+
+    wanted = [p for p in enabled_all if p in COLLECTORS]
 
     async with cdp.CDPClient(st["ws_url"], cmd_timeout=18.0) as client:
         for pid in wanted:
@@ -714,37 +727,150 @@ async def collect_all_works(
                 n = upsert_works(conn, rows)
                 total_saved += n
                 tot_v = sum(int(r.get("views") or 0) for r in rows)
-                per_plat[pid] = {"ok": True, "count": n, "views": tot_v}
                 if n > 0:
+                    db.record_sync_state(conn, pid, "works", "ok", count=n, error_msg="", at_str=now_str)
+                    per_plat[pid] = {"ok": True, "status": "ok", "count": n, "views": tot_v, "updatedAt": now_str}
                     db.log_event(conn, "采流量", pname, "采集作品流量", f"实测 {n} 条作品 · 累计 {tot_v:,} 播放")
                 else:
-                    db.log_event(conn, "采流量", pname, "采集作品流量", "未读到作品列表（可能未登录或网络超时）")
+                    # 区分“未登录”与“已登录但未读到作品（可能是页面改版或确实未发布）”
+                    pstate = (ps_rows.get(pid) or {}).get("state", "warn")
+                    if pstate != "ok":
+                        reason = f"{pname} 尚未登录或登录态过期，请先去「系统」点登录"
+                        db.record_sync_state(conn, pid, "works", "not_logged_in", count=0, error_msg=reason, at_str=now_str)
+                        per_plat[pid] = {"ok": False, "status": "not_logged_in", "count": 0, "error": reason}
+                        errors.append({"platform": pid, "name": pname, "kind": "works", "status": "not_logged_in", "error": reason})
+                        db.log_event(conn, "采流量", pname, "采集作品流量", "未登录（跳过）")
+                    else:
+                        reason = f"{pname} 已登录但本次未解析到作品（可能暂无作品或页面结构已改版）"
+                        db.record_sync_state(conn, pid, "works", "error", count=0, error_msg=reason, at_str=now_str)
+                        per_plat[pid] = {"ok": False, "status": "error", "count": 0, "error": reason}
+                        errors.append({"platform": pid, "name": pname, "kind": "works", "status": "error", "error": reason})
+                        db.log_event(conn, "采流量", pname, "采集作品流量", "未解析到作品（可能改版）")
             except Exception as exc:
-                per_plat[pid] = {"ok": False, "count": 0, "error": str(exc)[:120]}
+                err_txt = f"{pname} 采集异常：{str(exc)[:140]}"
+                db.record_sync_state(conn, pid, "works", "error", count=0, error_msg=err_txt, at_str=now_str)
+                per_plat[pid] = {"ok": False, "status": "error", "count": 0, "error": err_txt}
+                errors.append({"platform": pid, "name": pname, "kind": "works", "status": "error", "error": err_txt})
                 db.log_event(conn, "采流量", pname, "采集作品流量", f"采集异常：{str(exc)[:50]}")
 
-    last_at = datetime.now(CN).strftime("今天 %H:%M")
-    conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('last_metrics_at', ?)", (last_at,))
+    conn.execute("INSERT OR REPLACE INTO kv(k, v) VALUES ('last_metrics_at', ?)", (now_str,))
     conn.commit()
 
     return {
         "ok": True,
         "collected": total_saved,
         "platforms": per_plat,
-        "last_metrics_at": last_at,
+        "errors": errors,
+        "last_metrics_at": now_str,
+        "syncState": db.get_sync_state_map(conn),
+        "platformStatus": platforms.get_platform_status_map(conn),
         "analytics": build_analytics(conn),
         "daemonLogs": [dict(r) for r in conn.execute("SELECT ts, episode AS ep, platform AS plat, action, result FROM daemon_logs ORDER BY id DESC LIMIT 30").fetchall()],
     }
 
 
-def _group_episodes(works: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """把多平台发布的同一期视频按标题相似度 + 发布时间自动归并为跨平台单期卡片。"""
+def _load_episode_overrides(conn: sqlite3.Connection) -> dict[str, str]:
+    rows = conn.execute("SELECT work_key, group_id FROM episode_merges").fetchall()
+    return {str(r["work_key"]): str(r["group_id"]) for r in rows}
+
+
+def merge_episode_works(conn: sqlite3.Connection, work_keys: list[str]) -> dict[str, Any]:
+    """手动将多个跨平台作品（格式 'platform:work_id'）归并为同一期。"""
+    cleaned = [str(k).strip() for k in work_keys if ":" in str(k).strip()]
+    if len(cleaned) < 2:
+        raise ValueError("至少需要选择 2 条作品才能合并为同一期")
+    existing = _load_episode_overrides(conn)
+    # 若其中已有手动合并组，优先复用该 group_id
+    gid = next((existing[k] for k in cleaned if k in existing and not existing[k].startswith("split:")), "")
+    if not gid:
+        gid = f"manual:{int(datetime.now(CN).timestamp() * 1000)}"
+    ts = db.now_iso()
+    for wk in cleaned:
+        conn.execute(
+            "INSERT OR REPLACE INTO episode_merges(work_key, group_id, updated_at) VALUES (?,?,?)",
+            (wk, gid, ts),
+        )
+    conn.commit()
+    db.log_event(conn, "复盘", "跨平台归并", "手动合并期次", f"已将 {len(cleaned)} 条作品合并为同一期")
+    return {"ok": True, "groupId": gid, "count": len(cleaned)}
+
+
+def split_episode_work(conn: sqlite3.Connection, work_key: str) -> dict[str, Any]:
+    """将某条作品从当前跨平台归并组中手动拆出为独立一期。"""
+    wk = str(work_key or "").strip()
+    if ":" not in wk:
+        raise ValueError("work_key 格式应为 platform:work_id")
+    ts = db.now_iso()
+    conn.execute(
+        "INSERT OR REPLACE INTO episode_merges(work_key, group_id, updated_at) VALUES (?,?,?)",
+        (wk, f"split:{wk}", ts),
+    )
+    conn.commit()
+    db.log_event(conn, "复盘", "跨平台归并", "手动拆出作品", wk)
+    return {"ok": True, "workKey": wk}
+
+
+def reset_episode_merges(conn: sqlite3.Connection) -> dict[str, Any]:
+    conn.execute("DELETE FROM episode_merges")
+    conn.commit()
+    db.log_event(conn, "复盘", "跨平台归并", "重置手动归并", "已恢复自动归并规则")
+    return {"ok": True}
+
+
+def _group_episodes(works: list[dict[str, Any]], overrides: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """把多平台发布的同一期视频按手动归并覆盖 + 标题相似度/发布时间自动归并为跨平台单期卡片。"""
+    overrides = overrides or {}
     groups: list[dict[str, Any]] = []
-    # 按发布时间倒序处理，同平台重复取播放更高的
+    manual_groups: dict[str, dict[str, Any]] = {}
     ordered = sorted(works, key=lambda x: (int(x.get("published_ts") or 0), int(x.get("views") or 0)), reverse=True)
+
+    def _add_to_group(g: dict[str, Any], w: dict[str, Any]) -> None:
+        g["platforms"][w["platform"]] = w
+        if int(w.get("published_ts") or 0) > g["published_ts"]:
+            g["published_ts"] = int(w.get("published_ts") or 0)
+            if w.get("published_at"):
+                g["published_at"] = w["published_at"]
+        if not g["duration_sec"] and w.get("duration_sec"):
+            g["duration_sec"] = int(w["duration_sec"])
+        if w["platform"] in ("bilibili", "youtube") and 6 <= len(w["title"]) <= 36:
+            g["title"] = w["title"]
+
+    auto_works: list[dict[str, Any]] = []
     for w in ordered:
+        wk = f"{w['platform']}:{w['work_id']}"
+        ov = overrides.get(wk)
+        if ov and ov.startswith("split:"):
+            groups.append({
+                "title": w["title"],
+                "published_at": w["published_at"],
+                "published_ts": int(w.get("published_ts") or 0),
+                "duration_sec": int(w.get("duration_sec") or 0),
+                "platforms": {w["platform"]: w},
+                "manual": True,
+            })
+        elif ov:
+            if ov not in manual_groups:
+                g = {
+                    "title": w["title"],
+                    "published_at": w["published_at"],
+                    "published_ts": int(w.get("published_ts") or 0),
+                    "duration_sec": int(w.get("duration_sec") or 0),
+                    "platforms": {w["platform"]: w},
+                    "manual": True,
+                }
+                manual_groups[ov] = g
+                groups.append(g)
+            else:
+                if w["platform"] not in manual_groups[ov]["platforms"]:
+                    _add_to_group(manual_groups[ov], w)
+        else:
+            auto_works.append(w)
+
+    for w in auto_works:
         matched = None
         for g in groups:
+            if g.get("manual"):
+                continue
             if w["platform"] in g["platforms"]:
                 continue
             if _titles_match(w["title"], g["title"], int(w.get("published_ts") or 0), int(g["published_ts"])):
@@ -757,18 +883,10 @@ def _group_episodes(works: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "published_ts": int(w.get("published_ts") or 0),
                 "duration_sec": int(w.get("duration_sec") or 0),
                 "platforms": {w["platform"]: w},
+                "manual": False,
             })
         else:
-            matched["platforms"][w["platform"]] = w
-            if int(w.get("published_ts") or 0) > matched["published_ts"]:
-                matched["published_ts"] = int(w.get("published_ts") or 0)
-                if w.get("published_at"):
-                    matched["published_at"] = w["published_at"]
-            if not matched["duration_sec"] and w.get("duration_sec"):
-                matched["duration_sec"] = int(w["duration_sec"])
-            # 优先选用更干净简洁的标题（如 B 站 / YouTube 标题通常不带正文）
-            if w["platform"] in ("bilibili", "youtube") and 6 <= len(w["title"]) <= 36:
-                matched["title"] = w["title"]
+            _add_to_group(matched, w)
 
     groups.sort(key=lambda g: (g["published_ts"], sum(x["views"] for x in g["platforms"].values())), reverse=True)
 
@@ -793,6 +911,8 @@ def _group_episodes(works: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "published_ts": g["published_ts"],
             "duration_sec": g["duration_sec"],
             "platformCount": len(g["platforms"]),
+            "manualMerged": bool(g.get("manual")),
+            "workKeys": [f"{pid}:{w['work_id']}" for pid, w in g["platforms"].items()],
             "views": views,
             "likes": likes,
             "comments": comments,
@@ -853,7 +973,8 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
         d = dict(r)
         d["raw"] = _safe_raw(d.pop("raw_json", None))
         works.append(d)
-    episodes = _group_episodes(works)
+    overrides = _load_episode_overrides(conn)
+    episodes = _group_episodes(works, overrides=overrides)
 
     # 1. 抖音作品分析（含 2秒跳出/留存、5秒完播、全片完播、均看时长、封面点击率、单条涨粉、主页访问）
     dy_works = [w for w in works if w["platform"] == "douyin"]
@@ -1090,6 +1211,13 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
             "published_at": ep["published_at"],
             "duration_sec": ep["duration_sec"],
             "platformCount": ep["platformCount"],
+            "manualMerged": bool(ep.get("manualMerged")),
+            "workKeys": ep.get("workKeys") or [],
+            "diagMeta": {
+                "method": "规则推断",
+                "sampleCount": len(ep_views_all),
+                "lowSample": len(ep_views_all) < 10,
+            },
             "views": ep["views"],
             "likes": ep["likes"],
             "favorites": ep["favorites"],
@@ -1402,6 +1530,8 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
         "totalWorks": len(works),
         "totalEpisodes": len(episodes),
         "lastMetricsAt": last_at_row["v"] if last_at_row else "未采集",
+        "hasManualOverrides": bool(overrides),
+        "syncState": db.get_sync_state_map(conn),
         "platformCounts": {
             pid: sum(1 for w in works if w["platform"] == pid)
             for pid in platforms.PLAT_ORDER
@@ -1410,6 +1540,9 @@ def build_analytics(conn: sqlite3.Connection) -> dict[str, Any]:
         "works": works[:60],
         "douyin": {
             "count": len(dy_works),
+            "sampleCount": len(dy_works),
+            "lowSample": 0 < len(dy_works) < 10,
+            "diagMethod": "基于账号中位数规则推断",
             "medianViews": med_views,
             "medianLikes": med_likes,
             "favLikePct": fav_like_pct,

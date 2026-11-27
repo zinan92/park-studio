@@ -260,7 +260,7 @@
       };
 
       body = `
-        <p class="sub m0" style="margin-top:-8px">Park 亲手收藏、剪下、star 的，和 Pete 从里面挑出来的赚钱机会，一天一期。</p>
+        <p class="sub m0" style="margin-top:-8px">个人收藏、剪藏与商业机会卡，一天一期（来自本地 Obsidian 只读目录）。</p>
         <div class="src-split" id="srcSplit">
           <div class="card flush src-list" id="srcList">
             <div class="src-issue-h">
@@ -283,7 +283,16 @@
       const list = srcTab === 'obsidian' ? (PS.S.obsidianNotes || []) : (PS.S.sources[srcTab] || []);
       const cur = list[srcIdx] || list[0];
       const headTitle = srcTab === 'saved' ? '搞钱日报' : srcTab === 'obsidian' ? 'Obsidian 原始输出' : 'AI 日报';
-      body = `<div class="src-split" id="srcSplit">
+      if (!list.length) {
+        body = PS.previewCard({
+          badge: '示例预览 · 当前严格零假数据',
+          title: `本地暂未扫描到「${headTitle}」内容`,
+          desc: `请前往「系统」确认你的 Obsidian 目录（当前：${PS.S.settings.obsidianPath}）已正确挂载。接入后会自动按天聚合 AI 日报、搞钱机会卡与个人收藏。下方为接入后的效果预览图：`,
+          img: '/img/previews/topic.png',
+          primaryBtn: '<a class="btn primary s" href="#settings">去配置 Obsidian 目录 ›</a>',
+        });
+      } else {
+        body = `<div class="src-split" id="srcSplit">
         <div class="card flush src-list" id="srcList">
           <div class="src-issue-h">
             <div class="min0">
@@ -297,10 +306,11 @@
             </div>
             <div><button class="src-t" type="button" data-si="${i}">${PS.esc(it.title)}</button>${origLink(it.url)}</div>
             ${it.excerpt ? `<p class="src-x">${PS.esc(it.excerpt)}</p>` : ''}
-          </div>`).join('') || '<div style="padding:24px" class="sub">暂无内容</div>'}
+          </div>`).join('')}
         </div>
         <div class="card src-read" id="srcRead">${renderNoteReader(cur)}</div>
       </div>`;
+      }
     } else if (srcTab === 'materials') {
       body = `<div class="grid-3">${PS.S.sources.materials.map(m => `<div class="card stack tight">
         <span class="pill info" style="width:fit-content">${PS.esc(m.cat)}</span>

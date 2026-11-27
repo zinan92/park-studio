@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const PS = (window.PS = window.PS || {});
-  const STORE_KEY = 'park-studio:state:v3';
+  const STORE_KEY = 'park-studio:state:v4';
 
   PS.esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   PS.md = function (src) {
@@ -69,10 +69,107 @@
   };
   PS.resetDemo = function () {
     localStorage.removeItem(STORE_KEY);
+    localStorage.removeItem('park-studio:state:v3');
     PS.S = PS.defaultState();
     PS.save();
-    PS.toast('已重置为初始演示数据', 'good');
-    PS.route();
+    PS.syncFromBackend().then(() => {
+      PS.toast('已清空浏览器本地缓存并重新从 SQLite 同步', 'good');
+      PS.route();
+    });
+  };
+
+  // 人性化更新时间展示（精确时间 + 相对时间）
+  PS.fmtRelTime = function (raw) {
+    const s = String(raw || '').trim();
+    if (!s || s === '未采集' || s === '未检查' || s === '未启用') return s || '未采集';
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (!m) return s;
+    const dt = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+    if (isNaN(dt.getTime())) return s;
+    const diffSec = Math.floor((Date.now() - dt.getTime()) / 1000);
+    const hm = `${m[4]}:${m[5]}`;
+    if (diffSec < 0) return `${m[2]}-${m[3]} ${hm}`;
+    if (diffSec < 60) return `刚刚 (${hm})`;
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前 (${hm})`;
+    const now = new Date();
+    const sameDay = dt.getFullYear() === now.getFullYear() && dt.getMonth() === now.getMonth() && dt.getDate() === now.getDate();
+    if (sameDay) return `今天 ${hm}`;
+    return `${m[2]}-${m[3]} ${hm}`;
+  };
+
+  // 静态效果预览卡（严格零假数据，用清晰角标静态图告诉新用户接入真实数据后的样子）
+  PS.previewCard = function ({ badge = '示例预览 · 接入你的真实数据后自动替换', title, desc, img, primaryBtn = '', secondaryHtml = '' }) {
+    return `<section class="card ps-preview-card stack">
+      <div class="row" style="flex-wrap:wrap;gap:10px;align-items:center">
+        <span class="pill accent">${PS.esc(badge)}</span>
+        <span class="grow"></span>
+        ${secondaryHtml || ''}
+        ${primaryBtn || ''}
+      </div>
+      <div>
+        <h3 class="m0" style="font-size:16.5px">${PS.esc(title)}</h3>
+        <p class="sub m0" style="margin-top:4px;line-height:1.6">${PS.esc(desc)}</p>
+      </div>
+      ${img ? `<div class="ps-preview-img-wrap">
+        <span class="ps-preview-badge">示例效果预览图 · 非当前账号真实数据</span>
+        <img src="${PS.esc(img)}" alt="${PS.esc(title)}" loading="lazy">
+      </div>` : ''}
+    </section>`;
+  };
+
+  // 单平台精确同步状态（严格区分：已同步 / 未采集 / 未登录 / 采集失败 / 暂不支持）
+  PS.platSyncInfo = function (pid, kind = 'works') {
+    const st = PS.S.platformStatus?.[pid] || {};
+    const s = st.sync?.[kind] || PS.S.syncState?.[pid]?.[kind] || null;
+    const status = s?.status || (kind === 'works' && st.capabilities && st.capabilities.works === false ? 'unsupported' : 'never');
+    const err = s?.error || '';
+    const lastTry = s?.lastAttemptAt || '';
+    const lastOk = s?.lastSuccessAt || '';
+    const count = s?.count ?? 0;
+    if (status === 'unsupported') return { status, label: '仅辅助发布', cls: '', detail: err || '该平台暂不支持此项自动采数', lastTry, lastOk, count };
+    if (status === 'not_logged_in') return { status, label: '未登录', cls: 'wait', detail: err || '登录态未就绪或已过期，请去系统页扫码', lastTry, lastOk, count };
+    if (status === 'error') return { status, label: '采集失败', cls: 'warn', detail: err || '采集异常（可能页面改版或超时）', lastTry, lastOk, count };
+    if (status === 'ok') return { status, label: lastOk ? `已更新 · ${PS.fmtRelTime(lastOk)}` : '已同步', cls: 'good', detail: '', lastTry, lastOk, count };
+    return { status: 'never', label: '未采集', cls: '', detail: '尚未执行过采集，点击「立即采数」开始', lastTry, lastOk, count };
+  };
+
+  // 全局异常与登录态提醒条（有错误 / 掉线 / 采集失败时显式展示，绝不静默吞掉）
+  PS.syncAlertBanner = function (activePlats) {
+    const plats = activePlats || PS.activePlats();
+    const broken = [];
+    const needLogin = [];
+    for (const pid of plats) {
+      const name = PS.PLATFORMS[pid]?.name || pid;
+      const wInfo = PS.platSyncInfo(pid, 'works');
+      const fInfo = PS.platSyncInfo(pid, 'followers');
+      if (wInfo.status === 'error' || fInfo.status === 'error') {
+        const hit = wInfo.status === 'error' ? wInfo : fInfo;
+        broken.push({ pid, name, kind: wInfo.status === 'error' ? '作品' : '粉丝', err: hit.detail, at: hit.lastTry, lastOk: hit.lastOk });
+      } else if (wInfo.status === 'not_logged_in' || fInfo.status === 'not_logged_in') {
+        const hit = wInfo.status === 'not_logged_in' ? wInfo : fInfo;
+        needLogin.push({ pid, name, err: hit.detail, at: hit.lastTry });
+      }
+    }
+    if (!broken.length && !needLogin.length) return '';
+    return `<section class="ps-err-banner ${broken.length ? 'danger' : 'warn'}">
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <b>${broken.length ? `⚠ ${broken.length} 个平台采集异常` : `🔐 ${needLogin.length} 个平台尚未登录`}</b>
+        <span class="sub" style="font-size:12px">${broken.length ? '已区分「采集失败」与「未采集/未登录」，避免误导' : '登录专用 Chrome 后即可同步真实数据'}</span>
+        <span class="grow"></span>
+        <a class="btn s" href="#settings">去系统页处理 ›</a>
+      </div>
+      <div class="stack tight" style="gap:4px;margin-top:6px">
+        ${broken.map(b => `<div class="row" style="gap:8px;font-size:12.5px;flex-wrap:wrap">
+          <span class="pill warn" style="font-size:11px;padding:1px 6px">${PS.esc(b.name)} · ${b.kind}采集失败</span>
+          <span>${PS.esc(b.err)}</span>
+          <span class="sub" style="font-size:11.5px;margin-left:auto">${b.at ? `失败于 ${PS.fmtRelTime(b.at)}` : ''}${b.lastOk ? ` · 上次成功 ${PS.fmtRelTime(b.lastOk)}` : ' · 从未成功'}</span>
+        </div>`).join('')}
+        ${needLogin.map(n => `<div class="row" style="gap:8px;font-size:12.5px;flex-wrap:wrap">
+          <span class="pill wait" style="font-size:11px;padding:1px 6px">${PS.esc(n.name)} · 未登录</span>
+          <span class="sub">${PS.esc(n.err)}</span>
+        </div>`).join('')}
+      </div>
+    </section>`;
   };
 
   PS.fanStats = function (p) {
@@ -91,9 +188,13 @@
     const host = document.getElementById('toasts');
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
+    el.title = '点击关闭';
+    el.style.cursor = 'pointer';
     el.textContent = PS.tr ? PS.tr(msg) : msg;
+    el.onclick = () => el.remove();
     host.appendChild(el);
-    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 220); }, 2800);
+    const ms = (kind === 'warn' || kind === 'bad' || kind === 'error') ? 5500 : 3000;
+    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 220); }, ms);
   };
 
   PS.modal = function ({ title, body, foot = '', wide = false, onOpen }) {
@@ -146,16 +247,27 @@
     if (['source', 'feed', 'chai', 'pool', 'write', 'audit', 'scripts', 'done'].includes(active)) return 'topic';
     if (['cut-todo', 'cut', 'cut-done', 'materials'].includes(active)) return 'cut';
     if (['pub-todo', 'pub-pack', 'pub-confirm', 'pub-sent'].includes(active)) return 'publish';
-    if (['review'].includes(active)) return 'review';
+    if (['review', 'conversion'].includes(active)) return 'review';
     return 'more';
   }
 
+  function countAwaitingUser() {
+    const list = (PS.S.publishEpisodes && PS.S.publishEpisodes.length) ? PS.S.publishEpisodes : (PS.S.episodes || []);
+    let n = 0;
+    for (const ep of list) {
+      for (const [pid, t] of Object.entries(ep.tasks || {})) {
+        if (!PS.S.platformStatus?.[pid]?.disabled && t?.state === 'awaiting_user') n++;
+      }
+    }
+    return n;
+  }
+
   function subTabsFor(ws, active) {
-    const ep41 = PS.S.episodes.find(e => e.episode === 41);
-    const waitN = ep41 ? Object.values(ep41.tasks).filter(t => t.state === 'awaiting_user').length : 0;
-    const poolN = PS.S.topics.filter(t => !t.trash && ['找', '写', '审'].includes(t.stage)).length;
-    const doneN = PS.S.episodes.filter(e => e.finalAt).length;
+    const waitN = countAwaitingUser();
+    const poolN = (PS.S.topics || []).filter(t => !t.trash && ['找', '写', '审'].includes(t.stage)).length;
+    const doneN = (PS.S.topics || []).filter(t => !t.trash && t.final_at).length;
     const kbN = PS.S.kb?.folders?.length || 0;
+    const clientN = (PS.S.clients || []).length;
 
     if (ws === 'hub') return [];
     if (ws === 'topic') {
@@ -167,15 +279,15 @@
     }
     if (ws === 'cut') {
       return [
-        { id: 'cut-todo',  label: '待剪',            href: '#cut-todo',  on: active === 'cut-todo', count: 1 },
-        { id: 'cut',       label: '剪辑中 · 镜头表', href: '#cut',       on: active === 'cut',      count: `EP${PS.S.cutProject.episode}`, hot: true },
-        { id: 'cut-done',  label: '剪好了',          href: '#cut-done',  on: active === 'cut-done', count: 3 },
+        { id: 'cut-todo',  label: '待剪',            href: '#cut-todo',  on: active === 'cut-todo', count: doneN || '' },
+        { id: 'cut',       label: '剪辑中 · 镜头表', href: '#cut',       on: active === 'cut',      count: PS.S.cutProject?.episode ? `EP${PS.S.cutProject.episode}` : '', hot: true },
+        { id: 'cut-done',  label: '剪好了',          href: '#cut-done',  on: active === 'cut-done' },
         { id: 'materials', label: '视觉素材库',      href: '#materials', on: active === 'materials' },
       ];
     }
     if (ws === 'publish') {
       return [
-        { id: 'pub-todo',    label: '待发', href: '#pub-todo',    on: active === 'pub-todo', count: 1 },
+        { id: 'pub-todo',    label: '待发', href: '#pub-todo',    on: active === 'pub-todo', count: (PS.S.publishEpisodes || []).length || '' },
         { id: 'pub-pack',    label: '打包', href: '#pub-pack',    on: active === 'pub-pack' },
         { id: 'pub-confirm', label: '确认', href: '#pub-confirm', on: active === 'pub-confirm', count: waitN ? `${waitN} 待点发` : '', hot: !!waitN },
         { id: 'pub-sent',    label: '已发', href: '#pub-sent',    on: active === 'pub-sent', count: PS.S.analytics?.totalEpisodes || 0 },
@@ -183,13 +295,15 @@
     }
     if (ws === 'review') {
       return [
-        { id: 'review', label: '同龄复盘 · 抖音分析', href: '#review', on: active === 'review' },
+        { id: 'review',     label: '同龄复盘 · 抖音分析', href: '#review',     on: active === 'review' },
+        { id: 'conversion', label: '转化归因',            href: '#conversion', on: active === 'conversion' },
       ];
     }
-    // 系统、我的定位、Obsidian 知识库与版本动态
     return [
       { id: 'settings', label: '系统',     href: '#settings', on: active === 'settings' },
       { id: 'position', label: '我的定位', href: '#position', on: active === 'position' },
+      { id: 'clients',  label: '咨询客户', href: '#clients',  on: active === 'clients', count: clientN || '' },
+      { id: 'site',     label: '个人网站', href: '#site',     on: active === 'site' },
       { id: 'kb',       label: '知识库',   href: '#kb',       on: active === 'kb', count: kbN || '' },
       { id: 'releases', label: '上新',     href: '#releases', on: active === 'releases' },
     ];
@@ -213,9 +327,12 @@
       { label: '确认 · 专用 Chrome 自动填表', kind: '发布', hash: '#pub-confirm' },
       { label: '已发 · 全平台真实矩阵与日历', kind: '发布', hash: '#pub-sent' },
       { label: '复盘与抖音作品分析', kind: '复盘', hash: '#review' },
+      { label: '转化归因 · 自有站 UTM 漏斗', kind: '复盘', hash: '#conversion' },
+      { label: '咨询客户 CRM', kind: '系统', hash: '#clients' },
+      { label: '个人网站接入与连通性检查', kind: '系统', hash: '#site' },
       { label: '知识库 · Obsidian 接入文件夹与笔记检索', kind: '系统', hash: '#kb' },
-      { label: '我的定位（7 页签完整定位卡）', kind: '系统', hash: '#position' },
-      { label: '系统 · 守护进程 / 7 平台体检 / 全局与独立剪辑 Agent', kind: '系统', hash: '#settings' },
+      { label: '我的定位（完整定位卡）', kind: '系统', hash: '#position' },
+      { label: '系统 · 守护进程 / 12 平台体检 / 全局与独立剪辑 Agent', kind: '系统', hash: '#settings' },
       { label: '上新 · 版本更新与开源动态', kind: '系统', hash: '#releases' },
     ];
     const bg = document.createElement('div');
@@ -408,9 +525,11 @@
         <div class="rp-lbl">系统与创作者中枢</div>
         <a href="#settings">${PS.icon('sliders', 'sm')}系统与体检 <span class="sub" style="margin-left:auto;font-size:11px">${onlineN}/${activeN}</span></a>
         <a href="#position">${PS.icon('star', 'sm')}我的定位</a>
+        <a href="#clients">${PS.icon('users', 'sm')}咨询客户 ${(PS.S.clients || []).length ? `<span class="sub" style="margin-left:auto;font-size:11px">${PS.S.clients.length}</span>` : ''}</a>
+        <a href="#site">${PS.icon('globe', 'sm')}个人网站</a>
         <a href="#kb">${PS.icon('book', 'sm')}知识库（Obsidian）</a>
         <a href="#materials">${PS.icon('layers', 'sm')}视觉素材库</a>
-        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.5.0</span></a>
+        <a href="#releases">${PS.icon('spark', 'sm')}上新 · 版本动态 <span class="pill accent" style="margin-left:auto">v0.5.1</span></a>
         <button type="button" id="openNotifBtn">${PS.icon('bell', 'sm')}通知中心 ${unread ? `<span class="pill warn" style="margin-left:auto">${unread}</span>` : ''}</button>
         <div class="rp-sep"></div>
         <button type="button" id="langToggleMenu">🌐 ${PS.lang === 'en' ? '切换为简体中文' : 'Switch to English'}</button>
@@ -447,21 +566,20 @@
   }
 
   function updateChromeBadges() {
-    const ep41 = PS.S.episodes.find(e => e.episode === 41);
-    const waitN = ep41 ? Object.values(ep41.tasks).filter(t => t.state === 'awaiting_user').length : 0;
+    const waitN = countAwaitingUser();
     const pubBadge = document.querySelector('#mainPill [data-badge="publish"]');
     if (pubBadge) {
       pubBadge.hidden = !waitN;
       pubBadge.textContent = waitN ? String(waitN) : '';
     }
-    const unread = PS.S.notifications.filter(n => !n.read).length;
+    const unread = (PS.S.notifications || []).filter(n => !n.read).length;
     const bellBadge = document.getElementById('bellBadge');
     if (bellBadge) {
       bellBadge.hidden = !unread;
       bellBadge.textContent = unread ? String(unread) : '';
     }
     const sysDot = document.getElementById('sysDot');
-    if (sysDot) sysDot.className = `dot ${PS.S.daemon.running ? 'live' : 'bad'}`;
+    if (sysDot) sysDot.className = `dot ${PS.backendOnline === false ? 'bad' : (PS.S.daemon.running ? 'live' : 'bad')}`;
   }
 
   function syncTopNav(ws, active) {
@@ -473,7 +591,7 @@
       el.classList.toggle('on', isOn);
       el.setAttribute('aria-selected', isOn ? 'true' : 'false');
     });
-    document.getElementById('sysNavBtn')?.classList.toggle('on', ['settings', 'position', 'kb', 'releases'].includes(active));
+    document.getElementById('sysNavBtn')?.classList.toggle('on', ['settings', 'position', 'clients', 'site', 'kb', 'releases'].includes(active));
     document.getElementById('moreMenuBtn')?.classList.toggle('on', false);
     updateChromeBadges();
     requestAnimationFrame(() => moveThumb(mainPill, mainThumb, '.lg-tab.on', firstRender));
@@ -519,7 +637,10 @@
     const main = document.getElementById('main');
     if (mainObs) { mainObs.disconnect(); mainObs = null; }
     main.className = `page ${widthMode}`.trim();
-    main.innerHTML = inner;
+    const offlineBar = PS.backendOnline === false
+      ? `<div class="ps-err-banner danger" style="margin-bottom:14px"><div class="row" style="gap:8px;flex-wrap:wrap"><b>⚠ 本地后端服务未连接</b><span class="sub">当前无法访问本机 FastAPI 服务（${PS.esc(PS.lastSyncError || '请运行 park-studio serve')}）。所有读取与保存操作暂不可用。</span><span class="grow"></span><button type="button" class="btn s" onclick="PS.syncFromBackend().then(()=>PS.route())">重新连接</button></div></div>`
+      : '';
+    main.innerHTML = offlineBar + inner;
     PS.localizeDom?.(main);
     if (PS.lang === 'en' && window.MutationObserver) {
       let busy = false;
@@ -636,8 +757,8 @@
         }
       }
       if (b.said) PS.S.said = b.said;
-      if (b.tree?.length) PS.S.tree = b.tree;
       if (b.clients) PS.S.clients = b.clients;
+      if (b.syncState) PS.S.syncState = b.syncState;
       if (b.daemonLogs?.length) PS.S.daemonLogs = b.daemonLogs;
       if (b.positioning && Object.keys(b.positioning).length) PS.S.positioning = b.positioning;
       PS.S.studioPositioning = b.studioPositioning || null;
@@ -648,9 +769,11 @@
       if (b.deps) PS.S.deps = b.deps;
       if (b.lifecycle) PS.S.lifecycle = b.lifecycle;
       PS.S.needsOnboarding = !!b.needsOnboarding;
+      PS.lastSyncError = '';
       PS.save();
     } catch (e) {
       PS.backendOnline = false;
+      PS.lastSyncError = e?.message || '无法连接本机后端';
     }
   };
 

@@ -76,11 +76,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "learnLinks": True,
     "modules": {
         "source": True,
-        "tree": False,
-        "clients": False,
-        "site": False,
+        "clients": True,
+        "site": True,
         "kline": False,
-        "conversion": False,
+        "conversion": True,
     },
 }
 

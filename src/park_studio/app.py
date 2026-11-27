@@ -76,8 +76,38 @@ class SaidCreate(BaseModel):
 class ClientCreate(BaseModel):
     name: str
     niche: str = "知识IP"
+    stage: str = "新线索"
+    amount: int = 0
     source: str = "自然流量"
+    next_step: str = "待沟通"
     note: str = ""
+
+
+class ClientUpdate(BaseModel):
+    name: str | None = None
+    niche: str | None = None
+    stage: str | None = None
+    amount: int | None = None
+    source: str | None = None
+    next_step: str | None = None
+    note: str | None = None
+
+
+class SiteTestReq(BaseModel):
+    siteUrl: str = ""
+    siteDashApi: str = "/api/admin/dashboard"
+
+
+class CookiesPathReq(BaseModel):
+    path: str = ""
+
+
+class EpisodeMergeReq(BaseModel):
+    work_keys: list[str]
+
+
+class EpisodeSplitReq(BaseModel):
+    work_key: str
 
 
 class AIRequest(BaseModel):
@@ -338,16 +368,6 @@ def create_app(db_file: Path | None = None) -> FastAPI:
             {"id": r["id"], "topic": r["topic"], "text": r["text"], "from": r["source"], "muted": bool(r["muted"])}
             for r in conn.execute("SELECT * FROM said ORDER BY id DESC").fetchall()
         ]
-        tree = [
-            {
-                "slug": r["slug"], "name": r["name"], "trunk": r["trunk"],
-                "questions": json.loads(r["questions_json"]),
-                "standards": json.loads(r["standards_json"]),
-                "pitfalls": json.loads(r["pitfalls_json"]),
-                "sources": json.loads(r["sources_json"]),
-            }
-            for r in conn.execute("SELECT * FROM tree_branches ORDER BY slug").fetchall()
-        ]
         clients = [
             {"id": r["id"], "name": r["name"], "niche": r["niche"], "stage": r["stage"],
              "amount": r["amount"], "source": r["source"], "next": r["next_step"], "note": r["note"]}
@@ -405,8 +425,8 @@ def create_app(db_file: Path | None = None) -> FastAPI:
                 else None
             ),
             "said": said,
-            "tree": tree,
             "clients": clients,
+            "syncState": db.get_sync_state_map(conn),
             "daemonLogs": logs,
             "positioning": positioning,
             "studioPositioning": studiopos.load_studio_positioning(conn, cfg),
@@ -1472,11 +1492,129 @@ def create_app(db_file: Path | None = None) -> FastAPI:
 
     @app.post("/api/clients")
     def add_client(req: ClientCreate) -> dict[str, Any]:
+        if not req.name.strip():
+            raise HTTPException(400, "客户姓名不能为空")
         ts = db.now_iso()
-        cur = conn.execute("INSERT INTO clients(name, niche, stage, amount, source, next_step, note, created_at) VALUES (?,?,'新线索',0,?,'待沟通',?,?)",
-                           (req.name.strip(), req.niche, req.source, req.note, ts))
+        cur = conn.execute(
+            "INSERT INTO clients(name, niche, stage, amount, source, next_step, note, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (req.name.strip(), req.niche, req.stage or "新线索", int(req.amount or 0), req.source, req.next_step or "待沟通", req.note, ts),
+        )
         conn.commit()
-        return {"id": cur.lastrowid, "name": req.name.strip(), "niche": req.niche, "stage": "新线索", "amount": 0, "source": req.source, "next": "待沟通", "note": req.note}
+        db.log_event(conn, "咨询", "CRM", "新增客户", req.name.strip()[:24])
+        return {
+            "id": cur.lastrowid,
+            "name": req.name.strip(),
+            "niche": req.niche,
+            "stage": req.stage or "新线索",
+            "amount": int(req.amount or 0),
+            "source": req.source,
+            "next": req.next_step or "待沟通",
+            "note": req.note,
+        }
+
+    @app.patch("/api/clients/{client_id}")
+    def update_client(client_id: int, req: ClientUpdate) -> dict[str, Any]:
+        row = conn.execute("SELECT * FROM clients WHERE id=?", (client_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "客户不存在")
+        name = req.name.strip() if req.name is not None else row["name"]
+        niche = req.niche if req.niche is not None else row["niche"]
+        stage = req.stage if req.stage is not None else row["stage"]
+        amount = int(req.amount) if req.amount is not None else int(row["amount"] or 0)
+        source = req.source if req.source is not None else row["source"]
+        next_step = req.next_step if req.next_step is not None else row["next_step"]
+        note = req.note if req.note is not None else row["note"]
+        conn.execute(
+            "UPDATE clients SET name=?, niche=?, stage=?, amount=?, source=?, next_step=?, note=? WHERE id=?",
+            (name, niche, stage, amount, source, next_step, note, client_id),
+        )
+        conn.commit()
+        return {"id": client_id, "name": name, "niche": niche, "stage": stage, "amount": amount, "source": source, "next": next_step, "note": note}
+
+    @app.delete("/api/clients/{client_id}")
+    def delete_client(client_id: int) -> dict[str, Any]:
+        cur = conn.execute("DELETE FROM clients WHERE id=?", (client_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(404, "客户不存在")
+        return {"ok": True, "id": client_id}
+
+    @app.post("/api/site/test")
+    def api_site_test(req: SiteTestReq | None = None) -> dict[str, Any]:
+        import httpx
+
+        cfg = config.load_config()
+        base_url = (req.siteUrl if req and req.siteUrl else str(cfg.get("siteUrl") or "")).strip().rstrip("/")
+        dash_api = (req.siteDashApi if req and req.siteDashApi else str(cfg.get("siteDashApi") or "/api/admin/dashboard")).strip()
+        if not base_url or not base_url.startswith(("http://", "https://")):
+            raise HTTPException(400, "请先填写有效的个人网站地址（以 https:// 或 http:// 开头）")
+        target = base_url + (dash_api if dash_api.startswith("/") else "/" + dash_api)
+        try:
+            resp = httpx.get(target, timeout=6.0, follow_redirects=True)
+            data = None
+            if "application/json" in (resp.headers.get("content-type") or "").lower():
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = None
+            ok = 200 <= resp.status_code < 400
+            return {
+                "ok": ok,
+                "url": target,
+                "statusCode": resp.status_code,
+                "hasJson": isinstance(data, (dict, list)),
+                "channels": data.get("channels", []) if isinstance(data, dict) and isinstance(data.get("channels"), list) else [],
+                "error": "" if ok else f"站点返回 HTTP {resp.status_code}，请确认只读接口路径与权限配置",
+            }
+        except Exception as exc:
+            raise HTTPException(502, f"无法连接个人网站（{target}）：{exc}") from exc
+
+    @app.post("/api/chrome/cookies/export")
+    async def api_chrome_cookies_export(req: CookiesPathReq | None = None) -> dict[str, Any]:
+        cfg = config.load_config()
+        raw = (req.path if req and req.path else "").strip() or str(config.data_dir() / "cookies-export.json")
+        try:
+            res = await cdp.export_cookies(Path(raw), cfg=cfg)
+        except Exception as exc:
+            raise HTTPException(502, f"导出 Cookies 失败：{exc}") from exc
+        db.log_event(conn, "系统", "Chrome", "导出 Cookies", f"{res['count']} 条 -> {res['path']}")
+        return {**res, "daemonLogs": _recent_logs()}
+
+    @app.post("/api/chrome/cookies/import")
+    async def api_chrome_cookies_import(req: CookiesPathReq) -> dict[str, Any]:
+        cfg = config.load_config()
+        raw = (req.path or "").strip()
+        if not raw:
+            raise HTTPException(400, "请填写旧电脑导出的 Cookie JSON 文件路径")
+        try:
+            res = await cdp.import_cookies(Path(raw), cfg=cfg)
+        except (FileNotFoundError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(502, f"导入 Cookies 失败：{exc}") from exc
+        db.log_event(conn, "系统", "Chrome", "导入 Cookies", f"已注入 {res['imported']} 条")
+        return {**res, "chromeStatus": cdp.chrome_status(cfg), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/review/episodes/merge")
+    def api_review_episodes_merge(req: EpisodeMergeReq) -> dict[str, Any]:
+        try:
+            res = metrics.merge_episode_works(conn, req.work_keys)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**res, "analytics": metrics.build_analytics(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/review/episodes/split")
+    def api_review_episodes_split(req: EpisodeSplitReq) -> dict[str, Any]:
+        try:
+            res = metrics.split_episode_work(conn, req.work_key)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {**res, "analytics": metrics.build_analytics(conn), "daemonLogs": _recent_logs()}
+
+    @app.post("/api/review/episodes/reset-overrides")
+    def api_review_episodes_reset() -> dict[str, Any]:
+        res = metrics.reset_episode_merges(conn)
+        return {**res, "analytics": metrics.build_analytics(conn), "daemonLogs": _recent_logs()}
 
     @app.put("/api/positioning")
     def save_positioning(body: dict[str, Any]) -> dict[str, Any]:

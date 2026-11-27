@@ -304,7 +304,7 @@ final class ParkStudioDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     private func pythonHasDeps(_ pyBin: String) -> Bool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: pyBin)
-        p.arguments = ["-c", "import fastapi, uvicorn, yaml, httpx"]
+        p.arguments = ["-c", "import fastapi, uvicorn, yaml, httpx, websockets"]
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         do {
@@ -351,14 +351,17 @@ final class ParkStudioDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     private func startEmbeddedBackend(pyBin: String) {
         let fm = FileManager.default
         let resSrc = Bundle.main.resourcePath.map { "\($0)/backend" } ?? ""
-        let homeRepo = (NSHomeDirectory() as NSString).appendingPathComponent("work/park-studio/src")
-        let pythonPath = fm.fileExists(atPath: resSrc) ? resSrc : homeRepo
+        let envSrc = ProcessInfo.processInfo.environment["PARK_STUDIO_SRC"] ?? ""
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: pyBin)
         proc.arguments = ["-m", "park_studio.server", "serve", "--host", "127.0.0.1", "--port", "\(activePort)"]
         var env = ProcessInfo.processInfo.environment
-        env["PYTHONPATH"] = pythonPath
+        if fm.fileExists(atPath: resSrc) {
+            env["PYTHONPATH"] = resSrc
+        } else if !envSrc.isEmpty && fm.fileExists(atPath: envSrc) {
+            env["PYTHONPATH"] = envSrc
+        }
         env["PYTHONUNBUFFERED"] = "1"
         env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
         proc.environment = env
@@ -417,7 +420,7 @@ final class ParkStudioDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
 
             let rc1 = runStep(py, ["-m", "venv", venvDir])
             let pipBin = self.dataDirURL.appendingPathComponent("venv/bin/pip").path
-            let rc2 = (rc1 == 0) ? runStep(pipBin, ["install", "--quiet", "fastapi>=0.110", "uvicorn>=0.29", "pyyaml>=6.0", "httpx>=0.27"]) : rc1
+            let rc2 = (rc1 == 0) ? runStep(pipBin, ["install", "--quiet", "fastapi>=0.110", "uvicorn>=0.29", "pyyaml>=6.0", "httpx>=0.27", "websockets>=12.0"]) : rc1
 
             DispatchQueue.main.async {
                 self.isBootstrappingVenv = false

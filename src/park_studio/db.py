@@ -211,6 +211,23 @@ CREATE TABLE IF NOT EXISTS kv (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS platform_sync_state (
+    platform TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'never',
+    count INTEGER NOT NULL DEFAULT 0,
+    error_msg TEXT NOT NULL DEFAULT '',
+    last_attempt_at TEXT NOT NULL DEFAULT '',
+    last_success_at TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (platform, kind)
+);
+
+CREATE TABLE IF NOT EXISTS episode_merges (
+    work_key TEXT PRIMARY KEY,
+    group_id TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -291,44 +308,14 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
         ]:
             conn.execute("INSERT INTO said(topic, text, source, muted, created_at) VALUES (?,?,?,0,?)", (topic, text, src, ts))
 
-    if conn.execute("SELECT COUNT(*) FROM tree_branches").fetchone()[0] == 0:
-        branches = [
-            ("content-ops", "多平台内容运营与发布闭环",
-             "内容生产是“选题→剪辑→发布→复盘”的单一流水线，任何一环靠手工记忆都会掉链子。",
-             ["这条内容的单一核心痛点是什么？", "发完 1/3/7 天拿什么指标判断赢了还是输了？"],
-             ["国内四家坚持“填完不代发”，零封号红线", "每期发布前强制过 faststart 与封面比例校验", "复盘只看同龄对比（第 N 天对第 N 天）"],
-             ["在多平台重复上传同一文件触发风控", "只看总粉丝数，不看日净增和发布日放大倍数"],
-             ["mdldm-maitian 实战总结", "Topic Studio 线上观察（贴链接 ≈ 0）"]),
-            ("script-writing", "知识型口播写作与三路审稿",
-             "好口播不是 AI 堆辞藻，而是用你的真实经历和数字，装进经过验证的节奏骨架里。",
-             ["前 5 秒有没有给观众停下来的理由？", "整篇稿子里有几个不可替代的真实数字？"],
-             ["原话占比 > 75%，绝不编造经历", "单段口播不超过 80 字，每 20 秒一个小钩子"],
-             ["开头先自我介绍 15 秒", "堆砌抽象方法论却没有具体画面"],
-             ["park-writing 清单", "dbskill · dbs-script-flow"]),
-        ]
-        for slug, name, trunk, qs, st, pf, sr in branches:
-            conn.execute(
-                "INSERT INTO tree_branches VALUES (?,?,?,?,?,?,?,?)",
-                (slug, name, trunk, json.dumps(qs, ensure_ascii=False), json.dumps(st, ensure_ascii=False),
-                 json.dumps(pf, ensure_ascii=False), json.dumps(sr, ensure_ascii=False), ts),
-            )
-
-    if conn.execute("SELECT COUNT(*) FROM clients").fetchone()[0] == 0:
-        for name, niche, stage, amt, src, nxt, note in [
-            ("周洋帆", "情感 / 知识IP", "已成交", 2000, "抖音 EP39", "本周五定位复盘会", "已跑通对标爆款流"),
-            ("林晨", "AI 独立开发", "已约时间", 2000, "X EP41", "明天 15:00 腾讯会议", "关注知识树内化与转化归因"),
-            ("陈思远", "财经科普", "新线索", 0, "B站 EP40", "待发定位诊断表", "想把 Obsidian 笔记库接进 Park Studio"),
-        ]:
-            conn.execute("INSERT INTO clients(name, niche, stage, amount, source, next_step, note, created_at) VALUES (?,?,?,?,?,?,?,?)",
-                         (name, niche, stage, amt, src, nxt, note, ts))
-
+    # 知识树已移除；咨询客户不再写入虚构演示数据，保持真实 0 条空态
     if conn.execute("SELECT COUNT(*) FROM kv WHERE k='positioning'").fetchone()[0] == 0:
         pos = {
-            "who": "Park · AI 实战派创作者与开源工具作者（Topic Studio & Park Studio 发起人）",
-            "money": "开源免费工具（Park Studio）建立信任 → 线上 SaaS + 1v1 定位咨询 + 知识站会员",
-            "diff": "不讲空泛提示词，只晒每天真实在跑的生产线、真实数据大屏与可一键部署的开源代码",
-            "rules": "不编造案例、不碰客户平台密码、国内四家坚持人点最后一下、所有数据可追溯",
-            "bio": "把一个人的内容团队做成开源软件：选题、剪辑、7 平台填表发布与运营复盘合一。",
+            "who": "",
+            "money": "",
+            "diff": "",
+            "rules": "",
+            "bio": "",
         }
         conn.execute("INSERT INTO kv(k, v) VALUES ('positioning', ?)", (json.dumps(pos, ensure_ascii=False),))
 
@@ -413,13 +400,13 @@ def _seed_if_empty(conn: sqlite3.Connection) -> None:
                     "platforms": {},
                 },
                 {
-                    "douyin": ("published", "已发 · 已自动取链", "https://www.douyin.com/"),
-                    "xhs": ("awaiting_user", "已填好文案并截图留档，等你点最后一下发布", ""),
-                    "bilibili": ("published", "已发 · 已自动取链", "https://www.bilibili.com/"),
-                    "channels": ("awaiting_user", "已填好文案并截图留档，等你点最后一下发布", ""),
-                    "youtube": ("published", "已发 · 已自动取链", "https://studio.youtube.com/"),
-                    "x": ("published", "已发 · 已自动取链", "https://x.com/"),
-                    "wechat": ("scheduled", "已排期定时推送", ""),
+                    "douyin": ("planned", "待开跑 · 导入成片后开始填表", ""),
+                    "xhs": ("planned", "待开跑 · 导入成片后开始填表", ""),
+                    "bilibili": ("planned", "待开跑 · 导入成片后开始填表", ""),
+                    "channels": ("planned", "待开跑 · 导入成片后开始填表", ""),
+                    "youtube": ("planned", "待开跑 · 导入成片后开始填表", ""),
+                    "x": ("planned", "待开跑 · 导入成片后开始填表", ""),
+                    "wechat": ("planned", "待开跑 · 导入成片后开始填表", ""),
                 },
             ),
         ]
@@ -447,3 +434,49 @@ def log_event(conn: sqlite3.Connection, episode: str, platform: str, action: str
     conn.execute("INSERT INTO daemon_logs(ts, episode, platform, action, result) VALUES (?,?,?,?,?)",
                  (ts, episode, platform, action, result))
     conn.commit()
+
+
+def record_sync_state(
+    conn: sqlite3.Connection,
+    platform: str,
+    kind: str,
+    status: str,
+    *,
+    count: int = 0,
+    error_msg: str = "",
+    at_str: str | None = None,
+) -> None:
+    """持久化单平台单类型（followers / works）的真实同步状态、报错原因与更新时间。"""
+    now_str = at_str or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    existing = conn.execute(
+        "SELECT last_success_at FROM platform_sync_state WHERE platform=? AND kind=?",
+        (platform, kind),
+    ).fetchone()
+    prev_ok = existing["last_success_at"] if existing else ""
+    last_ok = now_str if status == "ok" else prev_ok
+    conn.execute(
+        """INSERT INTO platform_sync_state(platform, kind, status, count, error_msg, last_attempt_at, last_success_at)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(platform, kind) DO UPDATE SET
+             status=excluded.status,
+             count=excluded.count,
+             error_msg=excluded.error_msg,
+             last_attempt_at=excluded.last_attempt_at,
+             last_success_at=excluded.last_success_at""",
+        (platform, kind, status, int(count or 0), str(error_msg or "")[:300], now_str, last_ok),
+    )
+    conn.commit()
+
+
+def get_sync_state_map(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    rows = conn.execute("SELECT * FROM platform_sync_state").fetchall()
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        out.setdefault(r["platform"], {})[r["kind"]] = {
+            "status": r["status"],
+            "count": int(r["count"] or 0),
+            "error": r["error_msg"] or "",
+            "lastAttemptAt": r["last_attempt_at"] or "",
+            "lastSuccessAt": r["last_success_at"] or "",
+        }
+    return out
